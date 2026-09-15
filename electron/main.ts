@@ -9,8 +9,29 @@ const REPO = "ArdaEkiz0/finansal-hesaplayici";
 const CURRENT_VERSION = app.getVersion();
 
 let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
 
-function createWindow(): void {
+function createSplash(): void {
+  splashWindow = new BrowserWindow({
+    width: 380,
+    height: 460,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true },
+  });
+
+  splashWindow.setMenu(null);
+  splashWindow.loadFile(path.join(__dirname, "splash.html"));
+
+  splashWindow.once("closed", () => {
+    splashWindow = null;
+  });
+}
+
+function createMainWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -37,7 +58,10 @@ function createWindow(): void {
   }
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow?.show();
+    setTimeout(() => {
+      if (splashWindow) splashWindow.close();
+      mainWindow?.show();
+    }, 2200);
   });
 
   mainWindow.on("closed", () => {
@@ -169,7 +193,11 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
-    createWindow();
+    createSplash();
+
+    setTimeout(() => {
+      createMainWindow();
+    }, 500);
 
     setTimeout(async () => {
       const update = await checkForUpdates();
@@ -191,10 +219,10 @@ if (!gotTheLock) {
           }
         }
       }
-    }, 3000);
+    }, 5000);
 
     app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     });
   });
 }
