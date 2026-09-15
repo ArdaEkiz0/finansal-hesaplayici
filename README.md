@@ -1,47 +1,86 @@
-# Finansal Hesaplaci
+<p align="center">
+  <h1 align="center">Finansal Hesaplaci</h1>
+  <p align="center">
+    Electron ile yazilmis profesyonel Turk mali hesaplayici masaustu uygulamasi
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/Electron-36.9.5-47848F?logo=electron" alt="Electron">
+    <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React">
+    <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript" alt="TypeScript">
+    <img src="https://img.shields.io/badge/Tailwind_CSS-4.3-06B6D4?logo=tailwindcss" alt="Tailwind">
+    <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+  </p>
+</p>
 
-Electron ile yazilmis profesyonel Turk mali hesaplayici masaustu uygulamasi.
+---
 
-## Ozellikler
+### Gerekli
+- Internet baglantisi yok — tamamen offline calisir
+- Windows 10/11
 
-- **KDV Hesaplama** (1%, 10%, 20%)
-- **Stopaj Hesaplama** (1/3/5/7/10/15/20%)
-- **Kar Marji** ve **Kar Orani**
-- **Zincirli Indirim**
-- **Yuzde Hesaplama**
-- **Bileşik Faiz**
-- **KDV Karsilastirma**
+### Ozellikler
 
-### Teknik
+| Mod | Aciklama |
+|-----|----------|
+| **KDV** | %1, %10, %20 oranlarinda KDV hesaplama |
+| **Stopaj** | %1, %3, %5, %7, %10, %15, %20 oranlarinda stopaj |
+| **Kar Marji** | Kar marjindan satis fiyati hesaplama |
+| **Kar Orani** | Kar oranindan satis fiyati hesaplama |
+| **Zincirli Indirim** | Ust uste indirim hesaplama |
+| **Yuzde** | Yuzde orani ile islemler |
+| **Bilesik Faiz** | Yillik bilesek faiz hesaplama |
+| **KDV Karsilastirma** | Farkli KDV oranlarini karsilastirma |
 
-- Electron + React + TypeScript
-- Tailwind CSS v4 (glassmorphism dark tema)
-- Zustand (durum yonetimi)
-- decimal.js (hassasiyet)
-- Turk sayi formati: `1.234.567,89`
-- Offline calisir (sunucu gerekmez)
+### Kurulum
 
-## Kurulum
+**Kolay kurulum** — `kur.bat` dosyasini calistirin, her sey otomatik yuklenir:
+
+```
+1. Repositoryyi indirin
+2. kur.bat dosyasini calistirin
+3. Masaustunde olusan kisayol ile acin
+```
+
+`kur.bat` su islemleri otomatik yapar:
+- Node.js yukler (yoksa)
+- Electron indirir (yoksa)
+- Bagimliliklari yukler
+- Build alir
+- Masaustu kisayolu olusturur
+
+### Gelendirme
 
 ```bash
 # Bagimliliklari yukle
 npm install
 
-# Uygulamayi baslat
+# Gelistirme modunda baslat
 npm run dev
 
 # Build al
 npm run build
 ```
 
-## Masaustu Kisayolu
+### Kullanim
 
-`kur.bat` dosyasini calistirin — otomatik build alir ve masaustune kisayol olusturur.
+| Tus | Islev |
+|-----|-------|
+| **Sayi tuslari** | Deger girme |
+| **Tab** | Bir sonraki alana gec |
+| **Enter** | Kaydet |
+| **F1** | Yardim |
+| **F2** | Ayarlar |
 
-## Kullanim
+### Teknik Detaylar
 
-- **Sayi tuslari**: Deger girme
-- **Tab**: Bir sonraki alana gec
-- **Enter**: Kaydet
-- **F1**: Yardim
-- **F2**: Ayarlar
+- **decimal.js** — hassasiyetli matematik islemleri
+- **Zustand** — durum yonetimi
+- **Turk sayi formati** — `1.234.567,89`
+- **Yerel fontlar** — internet bagimsiz calisir
+- **Glassmorphism** — karanlik tema, animasyonlu gecisler
+- **Tek instance** — ayni anda birden fazla pencere acilmaz
+- **Gecmis** — islemler LocalStorage'da saklanir
+
+### Lisans
+
+MIT License
