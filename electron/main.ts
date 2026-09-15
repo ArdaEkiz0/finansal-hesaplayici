@@ -88,6 +88,14 @@ function createMainWindow(): void {
     mainWindow = null;
   });
 
+  mainWindow.on("maximize", () => {
+    mainWindow?.webContents.send("win-maximize-change", true);
+  });
+
+  mainWindow.on("unmaximize", () => {
+    mainWindow?.webContents.send("win-maximize-change", false);
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: "deny" };
@@ -295,4 +303,24 @@ ipcMain.handle("get-app-name", () => app.getName());
 ipcMain.handle("check-update", async () => {
   const update = await checkForUpdates();
   return update;
+});
+
+ipcMain.handle("win-minimize", () => {
+  mainWindow?.minimize();
+});
+
+ipcMain.handle("win-maximize", () => {
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow?.maximize();
+  }
+});
+
+ipcMain.handle("win-close", () => {
+  mainWindow?.close();
+});
+
+ipcMain.handle("win-is-maximized", () => {
+  return mainWindow?.isMaximized() ?? false;
 });

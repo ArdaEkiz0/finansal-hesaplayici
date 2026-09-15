@@ -1,16 +1,6 @@
 import { useStore } from "../store/useStore";
-import { X, RefreshCw, Sun, Moon, Cloud, Monitor } from "lucide-react";
+import { X, RefreshCw, Sun, Moon, Cloud } from "lucide-react";
 import { useState } from "react";
-
-declare global {
-  interface Window {
-    electronAPI?: {
-      checkUpdate: () => Promise<any>;
-      getGistToken: () => Promise<string>;
-      setGistToken: (t: string) => void;
-    };
-  }
-}
 
 export function Settings() {
   const settings = useStore((s) => s.settings);
