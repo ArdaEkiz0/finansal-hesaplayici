@@ -1,86 +1,85 @@
-<p align="center">
-  <h1 align="center">Finansal Hesaplaci</h1>
-  <p align="center">
-    Electron ile yazilmis profesyonel Turk mali hesaplayici masaustu uygulamasi
-  </p>
-  <p align="center">
-    <img src="https://img.shields.io/badge/Electron-36.9.5-47848F?logo=electron" alt="Electron">
-    <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react" alt="React">
-    <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript" alt="TypeScript">
-    <img src="https://img.shields.io/badge/Tailwind_CSS-4.3-06B6D4?logo=tailwindcss" alt="Tailwind">
-    <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
-  </p>
-</p>
+# Finansal Hesaplaci
 
----
+Turk mali hesaplamalari icin masaustu uygulamasi. Electron + React + TypeScript ile yazildi.
 
-### Gerekli
-- Internet baglantisi yok — tamamen offline calisir
-- Windows 10/11
+## Ne Yapar?
 
-### Ozellikler
+KDV, stopaj, kar marji, bilesek faiz gibi gunluk mali hesaplamalari kolaylastirir.
+Ozellikle Turk vergi sistemindeki oranlari (KDV %1/%10/%20, stopaj %1-%20) destekler.
+Tum hesaplamalar offline calisir, internet gerekmez.
 
-| Mod | Aciklama |
-|-----|----------|
-| **KDV** | %1, %10, %20 oranlarinda KDV hesaplama |
-| **Stopaj** | %1, %3, %5, %7, %10, %15, %20 oranlarinda stopaj |
-| **Kar Marji** | Kar marjindan satis fiyati hesaplama |
-| **Kar Orani** | Kar oranindan satis fiyati hesaplama |
-| **Zincirli Indirim** | Ust uste indirim hesaplama |
-| **Yuzde** | Yuzde orani ile islemler |
-| **Bilesik Faiz** | Yillik bilesek faiz hesaplama |
-| **KDV Karsilastirma** | Farkli KDV oranlarini karsilastirma |
+## Modlar
 
-### Kurulum
+- **KDV** — KDV ekleme / dahil etme
+- **Stopaj** — Vergi kesintisi hesaplama
+- **Kar Marji** — Marjdan satis fiyati bulma
+- **Kar Orani** — Kardan satis fiyati bulma
+- **Zincirli Indirim** — Ust uste yuzde indirim
+- **Yuzde** — Yuzde bazli islemler
+- **Bilesik Faiz** — Yillik faiz hesaplama
+- **KDV Karsilastirma** — Dahil mi / haric mi karsilastir
 
-**Kolay kurulum** — `kur.bat` dosyasini calistirin, her sey otomatik yuklenir:
+## Kurulum
 
-```
-1. Repositoryyi indirin
-2. kur.bat dosyasini calistirin
-3. Masaustunde olusan kisayol ile acin
-```
+`kur.bat` dosyasini calistirin:
 
-`kur.bat` su islemleri otomatik yapar:
-- Node.js yukler (yoksa)
-- Electron indirir (yoksa)
-- Bagimliliklari yukler
-- Build alir
-- Masaustu kisayolu olusturur
+- Node.js yoksa otomatik yukler
+- Electron'u indirir
+- npm install + build yapar
+- Masaustune kisayol birakir
 
-### Gelendirme
+Tek yapman gereken bu. Nodes yoksa bile otomatik kuruyor.
+
+## Gelistirme
 
 ```bash
-# Bagimliliklari yukle
 npm install
-
-# Gelistirme modunda baslat
 npm run dev
-
-# Build al
-npm run build
 ```
 
-### Kullanim
+Vite ile hot-reload calisir.
 
-| Tus | Islev |
-|-----|-------|
-| **Sayi tuslari** | Deger girme |
-| **Tab** | Bir sonraki alana gec |
-| **Enter** | Kaydet |
-| **F1** | Yardim |
-| **F2** | Ayarlar |
+## Yapi
 
-### Teknik Detaylar
+```
+src/
+  App.tsx              # Ana layout
+  main.tsx             # Entry point
+  index.css            # Tailwind tema
+  core/
+    engine.ts          # Matematik fonksiyonlari
+  store/
+    useStore.ts        # Zustand state
+  hooks/
+    useKeyboard.ts     # Klavye kisayollari
+  lib/
+    persist.ts         # LocalStorage kayit
+  components/
+    Display.tsx        # Giris alani + sonuc
+    Keypad.tsx         # Sayi tuslari
+    ModeSelector.tsx   # Mod secici
+    History.tsx        # Gecmis sidebar
+    Settings.tsx       # Ayarlar paneli
+    Help.tsx           # Klavye kisayollari
+    TitleBar.tsx       # Electron baslik cubugu
+    Notification.tsx   # Toast bildirim
+    ErrorBoundary.tsx  # Hata yakalama
 
-- **decimal.js** — hassasiyetli matematik islemleri
-- **Zustand** — durum yonetimi
-- **Turk sayi formati** — `1.234.567,89`
-- **Yerel fontlar** — internet bagimsiz calisir
-- **Glassmorphism** — karanlik tema, animasyonlu gecisler
-- **Tek instance** — ayni anda birden fazla pencere acilmaz
-- **Gecmis** — islemler LocalStorage'da saklanir
+electron/
+  main.ts             # Electron main process
+  preload.ts          # IPC guvenli kopru
+```
 
-### Lisans
+## Teknik
 
-MIT License
+- **decimal.js** — virgullu sayilarda hassasiyet kaybi olmamasi icin
+- **Zustand** — state yonetimi (context kullanimi gerekmedi)
+- **Turk sayi formati** — `1.234.567,89` (nokta ayirici, virgul ondalik)
+- **Yerel fontlar** — Inter ve JetBrains Mono dosyayla birlikte geliyor
+- **Glassmorphism** — koyu tema, cam efektli kartlar
+- **Tek instance** — ayni anda iki pencere acilmaz
+- **Gecmis** — LocalStorage'da saklanir, silinmez
+
+## Lisans
+
+MIT

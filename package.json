@@ -1,9 +1,9 @@
 {
   "name": "finansal-hesaplayici",
   "version": "2.0.0",
-  "description": "Profesyonel Türk Mali Hesaplayıcı - Masaüstü Uygulaması",
+  "description": "Turk mali hesaplamalari icin masaustu uygulamasi",
   "main": "dist-electron/main.js",
-  "author": "Finansal Hesaplayıcı",
+  "author": "ArdaEkiz0",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
