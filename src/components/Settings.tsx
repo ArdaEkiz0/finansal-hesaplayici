@@ -185,7 +185,7 @@ export function Settings() {
 
         <div className="px-5 py-3 border-t border-glass-border">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] text-text-ghost">Surum 2.2.0</span>
+            <span className="text-[10px] text-text-ghost">Surum 2.2.2</span>
             <button onClick={handleCheckUpdate} disabled={checking}
               className="flex items-center gap-1 text-[10px] text-brand-400 hover:text-brand-300 transition-colors disabled:opacity-50">
               <RefreshCw size={10} className={checking ? "animate-spin" : ""} />
