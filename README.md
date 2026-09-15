@@ -1,6 +1,13 @@
-# Finansal Hesaplaci
+<p align="center">
+  <img src="public/logo.svg" alt="Finansal Hesaplaci" width="120">
+</p>
 
-Turk mali hesaplamalari icin masaustu uygulamasi. Electron + React + TypeScript ile yazildi.
+<h1 align="center">Finansal Hesaplaci</h1>
+
+<p align="center">
+  Turk mali hesaplamalari icin masaustu uygulamasi<br>
+  Electron + React + TypeScript ile yazildi.
+</p>
 
 ## Ne Yapar?
 
