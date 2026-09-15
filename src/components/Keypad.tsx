@@ -29,13 +29,13 @@ export function Keypad() {
     [".", "0", "⌫"],
   ];
 
-  const btnBase = "h-12 rounded-lg flex items-center justify-center font-semibold text-sm transition-all duration-100 active:scale-95 active:duration-75 touch-manipulation";
+  const btnBase = "h-12 rounded-xl flex items-center justify-center font-semibold text-sm transition-all duration-100 active:scale-95 active:duration-75 touch-manipulation hover-lift press-scale";
 
   function ActionBtn() {
     if (isDiscount) {
       return (
         <button onClick={addDiscount} className={`${btnBase} gap-1.5`}
-          style={{ background: "var(--color-glass)", color: "#10b981", border: "1px solid var(--color-glass-border)" }}>
+          style={{ background: "var(--color-glass)", color: "var(--color-success)", border: "1px solid var(--color-glass-border)" }}>
           <Plus size={13} /> Ekle
         </button>
       );
@@ -44,7 +44,7 @@ export function Keypad() {
       if (activeField === "first" && firstFilled) {
         return (
           <button onClick={switchField} className={`${btnBase} gap-1.5`}
-            style={{ background: "var(--color-glass)", color: "#06b6d4", border: "1px solid var(--color-glass-border)" }}>
+            style={{ background: "var(--color-glass)", color: "var(--color-accent)", border: "1px solid var(--color-glass-border)" }}>
             <ArrowRight size={13} /> Sonraki
           </button>
         );
@@ -52,7 +52,7 @@ export function Keypad() {
       if (activeField === "second" && firstFilled && secondFilled) {
         return (
           <button onClick={confirmInput} className={`${btnBase} gap-1.5`}
-            style={{ background: "var(--color-glass)", color: "#8b5cf6", border: "1px solid var(--color-glass-border)" }}>
+            style={{ background: "var(--color-glass)", color: "var(--color-primary)", border: "1px solid var(--color-glass-border)" }}>
             <CornerDownLeft size={13} /> Kaydet
           </button>
         );
@@ -68,7 +68,7 @@ export function Keypad() {
       <button onClick={confirmInput} disabled={!hasResult} className={`${btnBase} gap-1.5`}
         style={{
           background: hasResult ? "var(--color-glass)" : "var(--color-glass)",
-          color: hasResult ? "#8b5cf6" : "var(--color-text-ghost)",
+          color: hasResult ? "var(--color-primary)" : "var(--color-text-ghost)",
           opacity: hasResult ? 1 : 0.3,
           border: "1px solid var(--color-glass-border)",
         }}>
@@ -82,7 +82,7 @@ export function Keypad() {
       {/* Top Row */}
       <div className={`grid gap-1.5 ${isDiscount ? "grid-cols-4" : "grid-cols-3"}`}>
         <button onClick={clearAll} className={`${btnBase} gap-1.5`}
-          style={{ background: "var(--color-glass)", color: "#f43f5e", border: "1px solid var(--color-glass-border)" }}>
+          style={{ background: "var(--color-glass)", color: "var(--color-error)", border: "1px solid var(--color-glass-border)" }}>
           <RotateCcw size={13} /> Sıfırla
         </button>
         <button onClick={deleteLast} className={btnBase}
@@ -94,7 +94,7 @@ export function Keypad() {
           <button onClick={confirmInput} disabled={!hasResult} className={`${btnBase} gap-1.5`}
             style={{
               background: "var(--color-glass)",
-              color: hasResult ? "#8b5cf6" : "var(--color-text-ghost)",
+              color: hasResult ? "var(--color-primary)" : "var(--color-text-ghost)",
               opacity: hasResult ? 1 : 0.3,
               border: "1px solid var(--color-glass-border)",
             }}>
@@ -108,18 +108,18 @@ export function Keypad() {
         <div className="flex items-center justify-center gap-2 py-0.5">
           <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all"
             style={{
-              background: activeField === "first" ? "#06b6d415" : "transparent",
-              color: activeField === "first" ? "#06b6d4" : "var(--color-text-ghost)",
-              border: activeField === "first" ? "1px solid #06b6d425" : "1px solid transparent",
+              background: activeField === "first" ? "var(--color-accent)10" : "transparent",
+              color: activeField === "first" ? "var(--color-accent)" : "var(--color-text-ghost)",
+              border: activeField === "first" ? "1px solid var(--color-accent)20" : "1px solid transparent",
             }}>
             1. Alan
           </div>
           <div className="w-4 h-px" style={{ background: "var(--color-glass-border)" }} />
           <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all"
             style={{
-              background: activeField === "second" ? "#06b6d415" : "transparent",
-              color: activeField === "second" ? "#06b6d4" : "var(--color-text-ghost)",
-              border: activeField === "second" ? "1px solid #06b6d425" : "1px solid transparent",
+              background: activeField === "second" ? "var(--color-accent)10" : "transparent",
+              color: activeField === "second" ? "var(--color-accent)" : "var(--color-text-ghost)",
+              border: activeField === "second" ? "1px solid var(--color-accent)20" : "1px solid transparent",
             }}>
             2. Alan
           </div>
@@ -133,7 +133,7 @@ export function Keypad() {
             const isDel = d === "⌫";
             return (
               <button key={d} onClick={() => isDel ? deleteLast() : appendDigit(d)}
-                className="group h-14 rounded-lg flex items-center justify-center font-bold text-lg transition-all duration-100 active:scale-90 active:duration-75 num-display touch-manipulation relative overflow-hidden"
+                className="group h-14 rounded-xl flex items-center justify-center font-bold text-lg transition-all duration-100 active:scale-90 active:duration-75 num-display touch-manipulation relative overflow-hidden hover-lift press-scale"
                 style={{
                   background: "var(--color-bg-elevated)",
                   color: "var(--color-text-primary)",

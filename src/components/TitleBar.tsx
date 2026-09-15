@@ -20,44 +20,48 @@ export function TitleBar() {
 
   return (
     <div className="drag-region flex items-center h-9 px-3 shrink-0" style={{ background: "var(--color-bg-base)", borderBottom: "1px solid var(--color-glass-border)" }}>
+      {/* App Icon and Title */}
       <div className="flex items-center gap-2.5">
-        <div className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
-          <Calculator size={11} className="text-white" />
+        <div className="w-6 h-6 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-light))" }}>
+          <Calculator size={12} className="text-white" />
         </div>
-        <span className="text-xs font-semibold tracking-tight" style={{ color: "var(--color-text-primary)" }}>Finansal Hesaplayici</span>
+        <span className="text-xs font-semibold tracking-tight gradient-text" style={{ background: "linear-gradient(135deg, var(--color-primary), var(--color-primary-light))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+          Finansal Hesaplayici
+        </span>
       </div>
 
+      {/* Right Controls */}
       <div className="ml-auto flex items-center gap-0.5">
-        <button onClick={toggleWidget} className="no-drag p-1.5 rounded-md transition-colors" style={{ color: "var(--color-text-tertiary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-glass-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+        <button onClick={toggleWidget} className="no-drag p-1.5 rounded-xl hover-lift press-scale transition-all duration-150" style={{ color: "var(--color-text-tertiary)", background: "transparent" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-glass)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <Calculator size={14} />
         </button>
-        <button onClick={toggleHelp} className="no-drag p-1.5 rounded-md transition-colors" style={{ color: "var(--color-text-tertiary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-glass-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+        <button onClick={toggleHelp} className="no-drag p-1.5 rounded-xl hover-lift press-scale transition-all duration-150" style={{ color: "var(--color-text-tertiary)", background: "transparent" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-glass)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <HelpCircle size={14} />
         </button>
-        <button onClick={toggleSettings} className="no-drag p-1.5 rounded-md transition-colors" style={{ color: "var(--color-text-tertiary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-glass-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+        <button onClick={toggleSettings} className="no-drag p-1.5 rounded-xl hover-lift press-scale transition-all duration-150" style={{ color: "var(--color-text-tertiary)", background: "transparent" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-glass)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <Settings size={14} />
         </button>
 
         <div className="w-px h-3.5 mx-1" style={{ background: "var(--color-glass-border)" }} />
 
-        <button onClick={minimize} className="no-drag p-1.5 rounded-md transition-colors" style={{ color: "var(--color-text-tertiary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-glass-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+        <button onClick={minimize} className="no-drag p-1.5 rounded-xl hover-lift press-scale transition-all duration-150" style={{ color: "var(--color-text-tertiary)", background: "transparent" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-glass)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <Minus size={12} />
         </button>
-        <button onClick={maximize} className="no-drag p-1.5 rounded-md transition-colors" style={{ color: "var(--color-text-tertiary)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-glass-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+        <button onClick={maximize} className="no-drag p-1.5 rounded-xl hover-lift press-scale transition-all duration-150" style={{ color: "var(--color-text-tertiary)", background: "transparent" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-glass)"; e.currentTarget.style.color = "var(--color-text-secondary)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <Square size={11} />
         </button>
-        <button onClick={close} className="no-drag p-1.5 rounded-md transition-colors" style={{ color: "var(--color-text-tertiary)" }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#ef4444"; e.currentTarget.style.color = "#fff"; }}
+        <button onClick={close} className="no-drag p-1.5 rounded-xl hover-lift press-scale transition-all duration-150" style={{ color: "var(--color-text-tertiary)", background: "transparent" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-error)"; e.currentTarget.style.color = "#fff"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-tertiary)"; }}>
           <X size={12} />
         </button>

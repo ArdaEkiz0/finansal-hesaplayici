@@ -25,26 +25,29 @@ export default function App() {
       <TitleBar />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
+        {/* Sidebar - History */}
         <aside className="hidden lg:flex w-64 flex-col" style={{ borderRight: "1px solid var(--color-glass-border)" }}>
           <div className="flex-1 overflow-y-auto p-2">
             <History />
           </div>
         </aside>
 
-        {/* Main */}
+        {/* Main Content */}
         <main className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+          {/* Mode Selector */}
           <div className="px-4 sm:px-6 py-3" style={{ borderBottom: "1px solid var(--color-glass-border)" }}>
             <ModeSelector />
           </div>
 
+          {/* Calculator Area */}
           <div className="flex-1 px-4 sm:px-6 py-5">
-            <div className="max-w-lg mx-auto space-y-5">
+            <div className="max-w-lg mx-auto space-y-6">
               <Display />
               <Keypad />
             </div>
           </div>
 
+          {/* Footer */}
           <footer className="py-2 px-4 text-center" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
             <p className="text-[10px]" style={{ color: "var(--color-text-ghost)" }}>
               <kbd className="px-1 py-0.5 rounded text-[9px] font-mono font-bold" style={{ background: "var(--color-glass)", color: "var(--color-text-tertiary)" }}>0-9</kbd> rakamlar

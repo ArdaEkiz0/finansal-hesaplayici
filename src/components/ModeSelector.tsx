@@ -2,13 +2,13 @@ import { useStore, type CalcMode } from "../store/useStore";
 import { Receipt, TrendingDown, BarChart3, TrendingUp, Tag, Percent, Landmark, GitCompareArrows } from "lucide-react";
 
 const modes: { key: CalcMode; label: string; icon: React.ReactNode; color: string }[] = [
-  { key: "kdv", label: "KDV", icon: <Receipt size={14} />, color: "#3b82f6" },
-  { key: "stopaj", label: "Stopaj", icon: <TrendingDown size={14} />, color: "#10b981" },
-  { key: "margin", label: "Marj", icon: <BarChart3 size={14} />, color: "#8b5cf6" },
-  { key: "markup", label: "Kâr Oranı", icon: <TrendingUp size={14} />, color: "#f59e0b" },
-  { key: "discount", label: "İndirim", icon: <Tag size={14} />, color: "#06b6d4" },
-  { key: "percent", label: "Yüzde", icon: <Percent size={14} />, color: "#f43f5e" },
-  { key: "compound", label: "Bileşik", icon: <Landmark size={14} />, color: "#10b981" },
+  { key: "kdv", label: "KDV", icon: <Receipt size={14} />, color: "var(--color-primary)" },
+  { key: "stopaj", label: "Stopaj", icon: <TrendingDown size={14} />, color: "var(--color-success)" },
+  { key: "margin", label: "Marj", icon: <BarChart3 size={14} />, color: "var(--color-accent)" },
+  { key: "markup", label: "Kâr Oranı", icon: <TrendingUp size={14} />, color: "var(--color-accent)" },
+  { key: "discount", label: "İndirim", icon: <Tag size={14} />, color: "#8b5cf6" },
+  { key: "percent", label: "Yüzde", icon: <Percent size={14} />, color: "#ec4899" },
+  { key: "compound", label: "Bileşik", icon: <Landmark size={14} />, color: "var(--color-success)" },
   { key: "kdvCompare", label: "KDV Karşıl.", icon: <GitCompareArrows size={14} />, color: "#8b5cf6" },
 ];
 
@@ -22,14 +22,15 @@ export function ModeSelector() {
         const active = mode === m.key;
         return (
           <button key={m.key} onClick={() => setMode(m.key)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all duration-150 shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-all duration-150 hover-lift press-scale shrink-0"
             style={{
-              background: active ? `${m.color}15` : "transparent",
+              background: active ? `${m.color}10` : "transparent",
               color: active ? m.color : "var(--color-text-tertiary)",
-              border: active ? `1px solid ${m.color}25` : "1px solid transparent",
+              border: active ? `1px solid ${m.color}20` : "1px solid transparent",
+              boxShadow: active ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
             }}>
             {m.icon}
-            {m.label}
+            <span className="ml-1">{m.label}</span>
           </button>
         );
       })}
