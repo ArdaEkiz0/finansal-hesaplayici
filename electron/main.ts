@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
 import path from "path";
 import https from "https";
+import http from "http";
 import fs from "fs";
 import { execSync } from "child_process";
 
@@ -10,6 +11,14 @@ const CURRENT_VERSION = app.getVersion();
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
+
+function log(msg: string) {
+  const line = `[${new Date().toLocaleTimeString("tr-TR")}] ${msg}\n`;
+  try {
+    const logPath = path.join(app.getPath("userData"), "updater.log");
+    fs.appendFileSync(logPath, line);
+  } catch {}
+}
 
 function createSplash(): void {
   splashWindow = new BrowserWindow({
@@ -74,8 +83,27 @@ function createMainWindow(): void {
   });
 }
 
+function httpGet(url: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith("https") ? https : http;
+    client
+      .get(url, { headers: { "User-Agent": "FinansalHesaplaci" } }, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          httpGet(res.headers.location!).then(resolve).catch(reject);
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => resolve(Buffer.concat(chunks)));
+        res.on("error", reject);
+      })
+      .on("error", reject);
+  });
+}
+
 function checkForUpdates(): Promise<{ hasUpdate: boolean; version: string; notes: string; url: string } | null> {
   return new Promise((resolve) => {
+    log("Guncelleme kontrol ediliyor...");
     const options = {
       hostname: "api.github.com",
       path: `/repos/${REPO}/releases/latest`,
@@ -94,77 +122,68 @@ function checkForUpdates(): Promise<{ hasUpdate: boolean; version: string; notes
             const asset = release.assets?.find((a: any) => a.name.endsWith(".zip"));
             const downloadUrl = asset?.browser_download_url || "";
 
-            if (latestVersion && latestVersion !== CURRENT_VERSION) {
+            log(`Mevcut: v${CURRENT_VERSION}, Son: v${latestVersion}, URL: ${downloadUrl}`);
+
+            if (latestVersion && latestVersion !== CURRENT_VERSION && downloadUrl) {
               resolve({ hasUpdate: true, version: latestVersion, notes, url: downloadUrl });
             } else {
               resolve(null);
             }
-          } catch {
+          } catch (e) {
+            log(`Parse hatasi: ${e}`);
             resolve(null);
           }
         });
       })
-      .on("error", () => resolve(null));
+      .on("error", (e) => {
+        log(`API hatasi: ${e}`);
+        resolve(null);
+      });
   });
 }
 
 function downloadAndInstall(updateUrl: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const zipPath = path.join(app.getPath("temp"), "finansal-hesaplaci-update.zip");
-    const extractPath = path.join(app.getPath("temp"), "finansal-hesaplaci-extract");
+  return new Promise(async (resolve) => {
+    const zipPath = path.join(app.getPath("temp"), "fh-update.zip");
+    const extractPath = path.join(app.getPath("temp"), "fh-extract");
     const appDir = app.isPackaged ? path.dirname(app.getPath("exe")) : path.join(__dirname, "..");
 
-    https
-      .get(updateUrl, (res) => {
-        if (res.statusCode === 302 || res.statusCode === 301) {
-          https.get(res.headers.location!, (res2) => {
-            const file = fs.createWriteStream(zipPath);
-            res2.pipe(file);
-            file.on("finish", () => {
-              file.close();
-              try {
-                if (fs.existsSync(extractPath)) fs.rmSync(extractPath, { recursive: true });
-                fs.mkdirSync(extractPath, { recursive: true });
-                execSync(`tar -xf "${zipPath}" -C "${extractPath}"`, { stdio: "ignore" });
+    log(`Indiriliyor: ${updateUrl}`);
+    log(`Hedef klasor: ${appDir}`);
 
-                const srcDir = path.join(extractPath, "package");
-                if (fs.existsSync(srcDir)) {
-                  copyDirSync(srcDir, appDir);
-                }
+    try {
+      const data = await httpGet(updateUrl);
+      fs.writeFileSync(zipPath, data);
+      log(`Indirildi: ${(data.length / 1024).toFixed(0)} KB`);
 
-                fs.rmSync(zipPath, { force: true });
-                fs.rmSync(extractPath, { recursive: true, force: true });
-                resolve(true);
-              } catch {
-                resolve(false);
-              }
-            });
-          });
-        } else {
-          const file = fs.createWriteStream(zipPath);
-          res.pipe(file);
-          file.on("finish", () => {
-            file.close();
-            try {
-              if (fs.existsSync(extractPath)) fs.rmSync(extractPath, { recursive: true });
-              fs.mkdirSync(extractPath, { recursive: true });
-              execSync(`tar -xf "${zipPath}" -C "${extractPath}"`, { stdio: "ignore" });
+      if (fs.existsSync(extractPath)) fs.rmSync(extractPath, { recursive: true, force: true });
+      fs.mkdirSync(extractPath, { recursive: true });
 
-              const srcDir = path.join(extractPath, "package");
-              if (fs.existsSync(srcDir)) {
-                copyDirSync(srcDir, appDir);
-              }
+      log("Zip aciliyor...");
+      execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractPath}' -Force"`, { stdio: "pipe" });
 
-              fs.rmSync(zipPath, { force: true });
-              fs.rmSync(extractPath, { recursive: true, force: true });
-              resolve(true);
-            } catch {
-              resolve(false);
-            }
-          });
-        }
-      })
-      .on("error", () => resolve(false));
+      const srcDir = path.join(extractPath, "package");
+      if (!fs.existsSync(srcDir)) {
+        log("HATA: package klasoru bulunamadi");
+        resolve(false);
+        return;
+      }
+
+      log("Dosyalar kopyalanıyor...");
+      copyDirSync(srcDir, appDir);
+
+      log("Temizleniyor...");
+      try { fs.rmSync(zipPath, { force: true }); } catch {}
+      try { fs.rmSync(extractPath, { recursive: true, force: true }); } catch {}
+
+      log("Guncelleme tamamlandi!");
+      resolve(true);
+    } catch (e) {
+      log(`Guncelleme hatasi: ${e}`);
+      try { fs.rmSync(zipPath, { force: true }); } catch {}
+      try { fs.rmSync(extractPath, { recursive: true, force: true }); } catch {}
+      resolve(false);
+    }
   });
 }
 
@@ -176,7 +195,17 @@ function copyDirSync(src: string, dest: string) {
     if (entry.isDirectory()) {
       copyDirSync(srcPath, destPath);
     } else {
-      fs.copyFileSync(srcPath, destPath);
+      try {
+        fs.copyFileSync(srcPath, destPath);
+      } catch {
+        try {
+          const tmpPath = destPath + ".new";
+          fs.copyFileSync(srcPath, tmpPath);
+          fs.renameSync(tmpPath, destPath);
+        } catch (e) {
+          log(`Kopyalama hatasi: ${destPath} - ${e}`);
+        }
+      }
     }
   }
 }
@@ -202,22 +231,30 @@ if (!gotTheLock) {
     setTimeout(async () => {
       const update = await checkForUpdates();
       if (update && mainWindow) {
+        log(`Guncelleme mevcut: v${update.version}`);
         const result = await dialog.showMessageBox(mainWindow, {
           type: "info",
           title: "Guncelleme Mevcut",
           message: `Yeni surum: v${update.version}`,
-          detail: update.notes || "Guncellemeyi yuklemek ister misiniz?",
+          detail: `Mevcut: v${CURRENT_VERSION}\nYeni: v${update.version}\n\nGuncellemeyi yuklemek ister misiniz?`,
           buttons: ["Guncelle", "Atla"],
           defaultId: 0,
         });
 
         if (result.response === 0) {
+          log("Kullanici guncellemeyi onayladi");
           const success = await downloadAndInstall(update.url);
           if (success) {
+            log("Uygulama yeniden baslatiliyor...");
             app.relaunch();
             app.exit(0);
+          } else {
+            log("Guncelleme basarisiz");
+            dialog.showErrorBox("Guncelleme HATASI", "Guncelleme yuklenemedi. Lutfen tekrar deneyin veya GitHub'dan manuel indirin.");
           }
         }
+      } else {
+        log("Guncelleme yok veya kontrol edilemedi");
       }
     }, 5000);
 
