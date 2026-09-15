@@ -7,7 +7,16 @@ import { execSync } from "child_process";
 
 const isDev = !app.isPackaged;
 const REPO = "ArdaEkiz0/finansal-hesaplayici";
-const CURRENT_VERSION = app.getVersion();
+
+let CURRENT_VERSION = "0.0.0";
+try {
+  const pkgPath = app.isPackaged
+    ? path.join(path.dirname(app.getPath("exe")), "package.json")
+    : path.join(__dirname, "../package.json");
+  CURRENT_VERSION = JSON.parse(fs.readFileSync(pkgPath, "utf-8")).version;
+} catch {
+  CURRENT_VERSION = app.getVersion();
+}
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
@@ -279,7 +288,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-ipcMain.handle("get-app-version", () => app.getVersion());
+ipcMain.handle("get-app-version", () => CURRENT_VERSION);
 ipcMain.handle("get-app-name", () => app.getName());
 ipcMain.handle("check-update", async () => {
   const update = await checkForUpdates();
