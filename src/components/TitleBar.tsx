@@ -1,12 +1,14 @@
-import { Calculator, Settings, HelpCircle } from "lucide-react";
+import { Calculator, Settings, HelpCircle, AppWindow } from "lucide-react";
 import { useStore } from "../store/useStore";
 
 export function TitleBar() {
   const toggleSettings = useStore((s) => s.toggleSettings);
   const toggleHelp = useStore((s) => s.toggleHelp);
+  const toggleWidget = useStore((s) => s.toggleWidget);
+  const showWidget = useStore((s) => s.showWidget);
 
   return (
-    <header className="h-10 glass-strong border-b border-white/[0.06] flex items-center justify-between px-4 drag-region">
+    <header className="h-10 glass-strong border-b border-glass-border flex items-center justify-between px-4 drag-region">
       <div className="flex items-center gap-2 no-drag">
         <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 via-violet-500 to-emerald-500 flex items-center justify-center">
           <Calculator size={12} className="text-white" />
@@ -18,6 +20,13 @@ export function TitleBar() {
       </div>
 
       <div className="flex items-center gap-1 no-drag">
+        <button
+          onClick={toggleWidget}
+          className={`p-1.5 rounded-lg transition-all ${showWidget ? "text-brand-400 bg-brand-500/10" : "text-text-ghost hover:text-brand-400 hover:bg-brand-500/10"}`}
+          title="Widget"
+        >
+          <AppWindow size={14} />
+        </button>
         <button
           onClick={toggleHelp}
           className="p-1.5 rounded-lg text-text-ghost hover:text-violet-400 hover:bg-violet-500/10 transition-all"

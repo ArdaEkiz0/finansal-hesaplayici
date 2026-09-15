@@ -7,11 +7,18 @@ import { History } from "./components/History";
 import { Settings } from "./components/Settings";
 import { Help } from "./components/Help";
 import { Notification } from "./components/Notification";
+import { Widget } from "./components/Widget";
 import { useStore } from "./store/useStore";
+import { useEffect } from "react";
 
 export default function App() {
   useKeyboard();
   const showSettings = useStore((s) => s.showSettings);
+  const theme = useStore((s) => s.theme);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   return (
     <div className="h-screen bg-bg-deep flex flex-col overflow-hidden select-none">
@@ -57,6 +64,7 @@ export default function App() {
       {showSettings && <Settings />}
       <Help />
       <Notification />
+      <Widget />
     </div>
   );
 }

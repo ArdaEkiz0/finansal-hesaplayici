@@ -40,6 +40,8 @@ export interface CalcResult {
 
 const TWO_INPUT_MODES: CalcMode[] = ["margin", "markup", "percent", "compound"];
 
+export type Theme = "dark" | "light";
+
 interface State {
   input: string;
   secondInput: string;
@@ -56,6 +58,8 @@ interface State {
   compoundFrequency: number;
   showSettings: boolean;
   showHelp: boolean;
+  showWidget: boolean;
+  theme: Theme;
   settings: { showCurrencySymbol: boolean; precision: number };
   notification: { message: string; type: "success" | "error" | "info" } | null;
 
@@ -75,6 +79,8 @@ interface State {
   setCompoundFrequency: (f: number) => void;
   toggleSettings: () => void;
   toggleHelp: () => void;
+  toggleWidget: () => void;
+  setTheme: (t: Theme) => void;
   updateSettings: (p: Partial<State["settings"]>) => void;
   togglePinHistory: (id: string) => void;
   deleteHistoryEntry: (id: string) => void;
@@ -241,6 +247,8 @@ const INIT: State = {
   compoundFrequency: 12,
   showSettings: false,
   showHelp: false,
+  showWidget: false,
+  theme: (persisted?.theme as Theme) ?? "dark",
   settings: persisted?.settings ?? { showCurrencySymbol: true, precision: 2 },
   notification: null,
   setMode: () => {},
@@ -259,6 +267,8 @@ const INIT: State = {
   setCompoundFrequency: () => {},
   toggleSettings: () => {},
   toggleHelp: () => {},
+  toggleWidget: () => {},
+  setTheme: () => {},
   updateSettings: () => {},
   togglePinHistory: () => {},
   deleteHistoryEntry: () => {},
@@ -374,6 +384,8 @@ export const useStore = create<State>((set, get) => ({
 
   toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
   toggleHelp: () => set((s) => ({ showHelp: !s.showHelp })),
+  toggleWidget: () => set((s) => ({ showWidget: !s.showWidget })),
+  setTheme: (theme) => { set({ theme }); document.documentElement.setAttribute("data-theme", theme); },
 
   updateSettings: (p) => {
     const s = get();
@@ -424,4 +436,4 @@ export const useStore = create<State>((set, get) => ({
   },
 }));
 
-useStore.subscribe((s) => saveState({ history: s.history, settings: s.settings }));
+useStore.subscribe((s) => saveState({ history: s.history, settings: s.settings, theme: s.theme }));
