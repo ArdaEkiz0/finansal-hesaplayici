@@ -31,13 +31,14 @@ function log(msg: string) {
 
 function createSplash(): void {
   splashWindow = new BrowserWindow({
-    width: 380,
-    height: 460,
+    width: 400,
+    height: 480,
     frame: false,
-    transparent: true,
+    transparent: false,
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
+    backgroundColor: "#0a0f1a",
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
 
