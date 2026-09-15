@@ -162,11 +162,22 @@ function downloadAndInstall(updateUrl: string): Promise<boolean> {
       log("Zip aciliyor...");
       execSync(`powershell -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractPath}' -Force"`, { stdio: "pipe" });
 
-      const srcDir = path.join(extractPath, "package");
+      // Zip icindeki dosyalari kontrol et
+      const extractedItems = fs.readdirSync(extractPath);
+      log(`Zip icerigi: ${extractedItems.join(", ")}`);
+
+      // package/ klasoru varsa onu kullan, yoksa root'u kullan
+      let srcDir = path.join(extractPath, "package");
       if (!fs.existsSync(srcDir)) {
-        log("HATA: package klasoru bulunamadi");
-        resolve(false);
-        return;
+        // Zip root'ta dist/ varsa direkt root'u kullan
+        if (fs.existsSync(path.join(extractPath, "dist"))) {
+          srcDir = extractPath;
+          log("Root'tan kopyalanacak (package/ yok)");
+        } else {
+          log(`HATA: Gecerli guncelleme icerigi bulunamadi. Icerik: ${extractedItems.join(", ")}`);
+          resolve(false);
+          return;
+        }
       }
 
       log("Dosyalar kopyalanıyor...");
