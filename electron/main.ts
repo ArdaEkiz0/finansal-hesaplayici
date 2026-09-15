@@ -80,7 +80,7 @@ function createMainWindow(): void {
     setTimeout(() => {
       if (splashWindow) splashWindow.close();
       mainWindow?.show();
-    }, 2200);
+    }, 3500);
   });
 
   mainWindow.on("closed", () => {

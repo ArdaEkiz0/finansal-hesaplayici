@@ -1,6 +1,6 @@
 {
   "name": "finansal-hesaplayici",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Turk mali hesaplamalari icin masaustu uygulamasi",
   "main": "dist-electron/main.js",
   "author": "Arda M. Ekiz",
