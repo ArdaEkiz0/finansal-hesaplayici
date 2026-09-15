@@ -1,25 +1,22 @@
 import { useStore } from "../store/useStore";
-import { CheckCircle, AlertCircle, Info, X } from "lucide-react";
-
-const icons = {
-  success: <CheckCircle size={16} className="text-emerald-400" />,
-  error: <AlertCircle size={16} className="text-rose-400" />,
-  info: <Info size={16} className="text-blue-400" />,
-};
+import { useEffect } from "react";
 
 export function Notification() {
-  const n = useStore((s) => s.notification);
-  if (!n) return null;
+  const notification = useStore((s) => s.notification);
+
+  if (!notification) return null;
+
+  const colors: Record<string, string> = {
+    success: "#10b981",
+    error: "#f43f5e",
+    info: "#3b82f6",
+  };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 anim-fade-up">
-      <div className="glass-strong rounded-2xl shadow-2xl flex items-center gap-3 px-4 py-3 max-w-xs">
-        {icons[n.type]}
-        <span className="text-sm text-text-primary font-medium flex-1">{n.message}</span>
-        <button onClick={() => useStore.setState({ notification: null })}
-          className="p-1 rounded-lg text-text-ghost hover:text-text-primary transition-colors">
-          <X size={14} />
-        </button>
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] anim-fade-up">
+      <div className="px-4 py-2 rounded-lg text-xs font-semibold shadow-lg"
+        style={{ background: colors[notification.type] || "#3b82f6", color: "#fff" }}>
+        {notification.message}
       </div>
     </div>
   );

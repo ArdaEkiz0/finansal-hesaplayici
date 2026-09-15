@@ -29,91 +29,119 @@ export function Keypad() {
     [".", "0", "⌫"],
   ];
 
-  function actionBtn() {
+  const btnBase = "h-12 rounded-lg flex items-center justify-center font-semibold text-sm transition-all duration-100 active:scale-95 active:duration-75 touch-manipulation";
+
+  function ActionBtn() {
     if (isDiscount) {
       return (
-        <button onClick={addDiscount}
-          className="h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center gap-1.5 text-emerald-400 font-bold text-xs uppercase tracking-wider hover:bg-emerald-500/10 active:scale-95 transition-all touch-manipulation">
-          <Plus size={14} /> Ekle
+        <button onClick={addDiscount} className={`${btnBase} gap-1.5`}
+          style={{ background: "var(--color-glass)", color: "#10b981", border: "1px solid var(--color-glass-border)" }}>
+          <Plus size={13} /> Ekle
         </button>
       );
     }
     if (isTwo) {
       if (activeField === "first" && firstFilled) {
         return (
-          <button onClick={switchField}
-            className="h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center gap-1.5 text-cyan-400 font-bold text-xs uppercase tracking-wider hover:bg-cyan-500/10 active:scale-95 transition-all touch-manipulation">
-            <ArrowRight size={14} /> Sonraki
+          <button onClick={switchField} className={`${btnBase} gap-1.5`}
+            style={{ background: "var(--color-glass)", color: "#06b6d4", border: "1px solid var(--color-glass-border)" }}>
+            <ArrowRight size={13} /> Sonraki
           </button>
         );
       }
       if (activeField === "second" && firstFilled && secondFilled) {
         return (
-          <button onClick={confirmInput}
-            className="h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center gap-1.5 text-violet-400 font-bold text-xs uppercase tracking-wider hover:bg-violet-500/10 active:scale-95 transition-all touch-manipulation">
-            <CornerDownLeft size={14} /> Kaydet
+          <button onClick={confirmInput} className={`${btnBase} gap-1.5`}
+            style={{ background: "var(--color-glass)", color: "#8b5cf6", border: "1px solid var(--color-glass-border)" }}>
+            <CornerDownLeft size={13} /> Kaydet
           </button>
         );
       }
       return (
-        <button disabled
-          className="h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center gap-1.5 text-text-ghost cursor-not-allowed opacity-40 font-bold text-xs uppercase tracking-wider">
-          <ArrowRight size={14} /> Sonraki
+        <button disabled className={`${btnBase} gap-1.5 opacity-30 cursor-not-allowed`}
+          style={{ background: "var(--color-glass)", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+          <ArrowRight size={13} /> Sonraki
         </button>
       );
     }
     return (
-      <button onClick={confirmInput} disabled={!hasResult}
-        className={`h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider active:scale-95 transition-all touch-manipulation ${hasResult ? "text-violet-400 hover:bg-violet-500/10" : "text-text-ghost cursor-not-allowed opacity-40"}`}>
-        <CornerDownLeft size={14} /> Kaydet
+      <button onClick={confirmInput} disabled={!hasResult} className={`${btnBase} gap-1.5`}
+        style={{
+          background: hasResult ? "var(--color-glass)" : "var(--color-glass)",
+          color: hasResult ? "#8b5cf6" : "var(--color-text-ghost)",
+          opacity: hasResult ? 1 : 0.3,
+          border: "1px solid var(--color-glass-border)",
+        }}>
+        <CornerDownLeft size={13} /> Kaydet
       </button>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <div className={`grid gap-2 ${isDiscount ? "grid-cols-4" : "grid-cols-3"}`}>
-        <button onClick={clearAll}
-          className="h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center gap-1.5 text-rose-400 font-bold text-xs uppercase tracking-wider hover:bg-rose-500/10 active:scale-95 transition-all touch-manipulation">
-          <RotateCcw size={14} /> Sıfırla
+    <div className="space-y-2">
+      {/* Top Row */}
+      <div className={`grid gap-1.5 ${isDiscount ? "grid-cols-4" : "grid-cols-3"}`}>
+        <button onClick={clearAll} className={`${btnBase} gap-1.5`}
+          style={{ background: "var(--color-glass)", color: "#f43f5e", border: "1px solid var(--color-glass-border)" }}>
+          <RotateCcw size={13} /> Sıfırla
         </button>
-        <button onClick={deleteLast}
-          className="h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center text-amber-400 hover:bg-amber-500/10 active:scale-95 transition-all touch-manipulation">
-          <Delete size={20} />
+        <button onClick={deleteLast} className={btnBase}
+          style={{ background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+          <Delete size={18} />
         </button>
-        {actionBtn()}
+        <ActionBtn />
         {isDiscount && (
-          <button onClick={confirmInput} disabled={!hasResult}
-            className={`h-14 min-h-[56px] rounded-2xl glass flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider active:scale-95 transition-all touch-manipulation ${hasResult ? "text-violet-400 hover:bg-violet-500/10" : "text-text-ghost cursor-not-allowed opacity-40"}`}>
-            <CornerDownLeft size={14} /> Kaydet
+          <button onClick={confirmInput} disabled={!hasResult} className={`${btnBase} gap-1.5`}
+            style={{
+              background: "var(--color-glass)",
+              color: hasResult ? "#8b5cf6" : "var(--color-text-ghost)",
+              opacity: hasResult ? 1 : 0.3,
+              border: "1px solid var(--color-glass-border)",
+            }}>
+            <CornerDownLeft size={13} /> Kaydet
           </button>
         )}
       </div>
 
+      {/* Field Indicator */}
       {isTwo && (
         <div className="flex items-center justify-center gap-2 py-0.5">
-          <div className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${activeField === "first" ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30" : "glass text-text-ghost"}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-current" /> 1. Alan
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all"
+            style={{
+              background: activeField === "first" ? "#06b6d415" : "transparent",
+              color: activeField === "first" ? "#06b6d4" : "var(--color-text-ghost)",
+              border: activeField === "first" ? "1px solid #06b6d425" : "1px solid transparent",
+            }}>
+            1. Alan
           </div>
-          <div className={`w-5 h-[1px] ${activeField === "second" ? "bg-cyan-500/40" : "bg-white/10"}`} />
-          <div className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${activeField === "second" ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30" : "glass text-text-ghost"}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-current" /> 2. Alan
+          <div className="w-4 h-px" style={{ background: "var(--color-glass-border)" }} />
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition-all"
+            style={{
+              background: activeField === "second" ? "#06b6d415" : "transparent",
+              color: activeField === "second" ? "#06b6d4" : "var(--color-text-ghost)",
+              border: activeField === "second" ? "1px solid #06b6d425" : "1px solid transparent",
+            }}>
+            2. Alan
           </div>
         </div>
       )}
 
-      <div className="glass-strong rounded-3xl p-2.5">
+      {/* Numpad */}
+      <div className="rounded-xl p-2" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-glass-border)" }}>
         <div className="grid grid-cols-3 gap-1.5">
           {digits.flat().map((d) => {
             const isDel = d === "⌫";
             return (
-              <button key={d}
-                onClick={() => isDel ? deleteLast() : appendDigit(d)}
-                className={`group h-16 min-h-[64px] rounded-2xl flex items-center justify-center font-bold text-xl transition-all duration-150 active:scale-90 active:duration-75 num-display overflow-hidden relative touch-manipulation ${
-                  isDel ? "glass text-text-secondary hover:text-text-primary hover:bg-white/[0.06]" : "glass-strong text-text-primary hover:bg-white/[0.08] hover:shadow-lg"
-                }`}>
-                <span className="relative z-10 transition-transform duration-100 group-active:scale-90">{d}</span>
-                <span className="absolute inset-0 bg-white/[0.08] scale-0 group-active:scale-100 rounded-2xl transition-transform duration-200 origin-center" />
+              <button key={d} onClick={() => isDel ? deleteLast() : appendDigit(d)}
+                className="group h-14 rounded-lg flex items-center justify-center font-bold text-lg transition-all duration-100 active:scale-90 active:duration-75 num-display touch-manipulation relative overflow-hidden"
+                style={{
+                  background: "var(--color-bg-elevated)",
+                  color: "var(--color-text-primary)",
+                  border: "1px solid var(--color-glass-border)",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "var(--color-glass-hover)"}
+                onMouseLeave={(e) => e.currentTarget.style.background = "var(--color-bg-elevated)"}>
+                {d}
               </button>
             );
           })}

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useStore } from "../store/useStore";
-import { X, Calculator, GripVertical } from "lucide-react";
+import { X, Calculator } from "lucide-react";
 import { calculateKDV, formatTurkishNumber, toDecimal } from "../core/engine";
 
 export function Widget() {
@@ -8,7 +8,7 @@ export function Widget() {
   const toggleWidget = useStore((s) => s.toggleWidget);
   const [amount, setAmount] = useState("");
   const [rate, setRate] = useState<1 | 10 | 20>(20);
-  const [pos, setPos] = useState({ x: window.innerWidth - 300, y: 60 });
+  const [pos, setPos] = useState({ x: 0, y: 80 });
   const [dragging, setDragging] = useState(false);
   const offset = useRef({ x: 0, y: 0 });
 
@@ -36,62 +36,53 @@ export function Widget() {
   if (!showWidget) return null;
 
   return (
-    <div
-      className="fixed z-[9999] select-none"
-      style={{ left: pos.x, top: pos.y, touchAction: "none" }}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-    >
-      <div className="w-72 rounded-2xl shadow-2xl overflow-hidden" style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(20px)" }}>
-        {/* Header - draggable */}
-        <div
-          className="flex items-center justify-between px-3 py-2.5 cursor-grab active:cursor-grabbing"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-          onPointerDown={onPointerDown}
-        >
+    <div className="fixed z-[9999] select-none" style={{ left: pos.x || window.innerWidth - 300, top: pos.y, touchAction: "none" }}
+      onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
+      <div className="w-64 rounded-xl overflow-hidden shadow-2xl" style={{ background: "var(--color-bg-base)", border: "1px solid var(--color-glass-border)" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing" style={{ borderBottom: "1px solid var(--color-glass-border)" }}
+          onPointerDown={onPointerDown}>
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
-              <Calculator size={11} className="text-white" />
+            <div className="w-4 h-4 rounded flex items-center justify-center" style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+              <Calculator size={9} className="text-white" />
             </div>
-            <span className="text-[11px] font-bold text-white/90">Hızlı Hesap</span>
+            <span className="text-[10px] font-bold" style={{ color: "var(--color-text-secondary)" }}>Hızlı Hesap</span>
           </div>
-          <button onClick={toggleWidget} className="p-1 rounded-md hover:bg-white/10 text-white/30 hover:text-white/70 transition-colors">
-            <X size={12} />
+          <button onClick={toggleWidget} className="p-0.5 rounded transition-colors" style={{ color: "var(--color-text-ghost)" }}
+            onMouseEnter={(e) => e.currentTarget.style.color = "var(--color-text-secondary)"}
+            onMouseLeave={(e) => e.currentTarget.style.color = "var(--color-text-ghost)"}>
+            <X size={11} />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-3 space-y-2.5">
-          <input
-            type="text"
-            inputMode="decimal"
-            placeholder="Tutar girin..."
-            value={amount}
+        <div className="p-3 space-y-2">
+          <input type="text" inputMode="decimal" placeholder="Tutar..." value={amount}
             onChange={(e) => setAmount(e.target.value.replace(",", "."))}
-            className="w-full px-3 py-2.5 rounded-xl text-sm font-mono text-white placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+            className="w-full px-3 py-2 rounded-lg text-sm font-mono focus:outline-none focus:ring-1 transition-all"
+            style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }}
+            onFocus={(e) => e.currentTarget.style.borderColor = "#3b82f640"}
+            onBlur={(e) => e.currentTarget.style.borderColor = "var(--color-glass-border)"}
           />
 
           <div className="flex gap-1">
             {([1, 10, 20] as const).map((r) => (
               <button key={r} onClick={() => setRate(r)}
-                className="flex-1 py-2 rounded-xl text-[11px] font-bold transition-all duration-150"
+                className="flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all"
                 style={{
-                  background: rate === r ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "rgba(255,255,255,0.04)",
-                  color: rate === r ? "#fff" : "rgba(255,255,255,0.4)",
-                  border: rate === r ? "none" : "1px solid rgba(255,255,255,0.06)",
+                  background: rate === r ? "#3b82f6" : "var(--color-glass)",
+                  color: rate === r ? "#fff" : "var(--color-text-ghost)",
+                  border: `1px solid ${rate === r ? "#3b82f6" : "var(--color-glass-border)"}`,
                 }}>
-                %{r} KDV
+                %{r}
               </button>
             ))}
           </div>
 
           {result && (
-            <div className="text-center py-3 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Toplam</p>
-              <p className="text-lg font-black font-mono" style={{ background: "linear-gradient(135deg, #60a5fa, #a78bfa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                {result} ₺
-              </p>
+            <div className="text-center py-2 rounded-lg" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
+              <p className="text-[9px] uppercase tracking-widest mb-0.5" style={{ color: "var(--color-text-ghost)" }}>Toplam</p>
+              <p className="num-display text-base font-bold gradient-text-result">{result} ₺</p>
             </div>
           )}
         </div>
