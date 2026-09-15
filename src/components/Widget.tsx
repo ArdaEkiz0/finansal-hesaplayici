@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useStore } from "../store/useStore";
-import { X, Minus, Calculator } from "lucide-react";
+import { X, Calculator, GripVertical } from "lucide-react";
 import { calculateKDV, formatTurkishNumber, toDecimal } from "../core/engine";
 
 export function Widget() {
@@ -8,82 +8,90 @@ export function Widget() {
   const toggleWidget = useStore((s) => s.toggleWidget);
   const [amount, setAmount] = useState("");
   const [rate, setRate] = useState<1 | 10 | 20>(20);
-  const [result, setResult] = useState("");
-  const [pos, setPos] = useState({ x: 100, y: 100 });
+  const [pos, setPos] = useState({ x: window.innerWidth - 300, y: 60 });
   const [dragging, setDragging] = useState(false);
-  const dragRef = useRef({ startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
+  const offset = useRef({ x: 0, y: 0 });
 
-  useEffect(() => {
-    if (!amount) { setResult(""); return; }
-    try {
-      const r = calculateKDV(toDecimal(amount), rate, false);
-      setResult(formatTurkishNumber(r.total, 2));
-    } catch { setResult(""); }
-  }, [amount, rate]);
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    offset.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+    setDragging(true);
+  }, [pos]);
 
-  useEffect(() => {
-    const handleMove = (e: MouseEvent) => {
-      if (!dragging) return;
-      setPos({
-        x: dragRef.current.startPosX + (e.clientX - dragRef.current.startX),
-        y: dragRef.current.startPosY + (e.clientY - dragRef.current.startY),
-      });
-    };
-    const handleUp = () => setDragging(false);
-    if (dragging) {
-      window.addEventListener("mousemove", handleMove);
-      window.addEventListener("mouseup", handleUp);
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging) return;
+    setPos({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y });
   }, [dragging]);
+
+  const onPointerUp = useCallback(() => setDragging(false), []);
+
+  let result = "";
+  try {
+    if (amount) {
+      const r = calculateKDV(toDecimal(amount), rate, false);
+      result = formatTurkishNumber(r.total, 2);
+    }
+  } catch {}
 
   if (!showWidget) return null;
 
   return (
-    <div className="fixed z-[9999]" style={{ left: pos.x, top: pos.y }}>
-      <div className="w-64 glass-strong rounded-2xl shadow-2xl border border-glass-border overflow-hidden anim-scale-in">
-        {/* Header */}
+    <div
+      className="fixed z-[9999] select-none"
+      style={{ left: pos.x, top: pos.y, touchAction: "none" }}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      <div className="w-72 rounded-2xl shadow-2xl overflow-hidden" style={{ background: "rgba(15,23,42,0.95)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(20px)" }}>
+        {/* Header - draggable */}
         <div
-          className="flex items-center justify-between px-3 py-2 border-b border-glass-border cursor-move bg-glass"
-          onMouseDown={(e) => {
-            setDragging(true);
-            dragRef.current = { startX: e.clientX, startY: e.clientY, startPosX: pos.x, startPosY: pos.y };
-          }}
+          className="flex items-center justify-between px-3 py-2.5 cursor-grab active:cursor-grabbing"
+          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          onPointerDown={onPointerDown}
         >
-          <div className="flex items-center gap-1.5">
-            <Calculator size={12} className="text-brand-400" />
-            <span className="text-[11px] font-bold text-text-primary">Hesaplaci</span>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md flex items-center justify-center" style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}>
+              <Calculator size={11} className="text-white" />
+            </div>
+            <span className="text-[11px] font-bold text-white/90">Hızlı Hesap</span>
           </div>
-          <button onClick={toggleWidget} className="p-1 rounded hover:bg-glass-hover text-text-ghost">
+          <button onClick={toggleWidget} className="p-1 rounded-md hover:bg-white/10 text-white/30 hover:text-white/70 transition-colors">
             <X size={12} />
           </button>
         </div>
 
-        {/* Input */}
-        <div className="p-3 space-y-2">
-          <input type="text" inputMode="decimal" placeholder="Tutar" value={amount}
+        {/* Body */}
+        <div className="p-3 space-y-2.5">
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="Tutar girin..."
+            value={amount}
             onChange={(e) => setAmount(e.target.value.replace(",", "."))}
-            className="w-full px-3 py-2 rounded-xl bg-glass border border-glass-border text-sm font-mono text-text-primary placeholder:text-text-ghost focus:border-brand-500 focus:outline-none" autoFocus />
+            className="w-full px-3 py-2.5 rounded-xl text-sm font-mono text-white placeholder:text-white/20 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+          />
 
-          {/* Rate selector */}
           <div className="flex gap-1">
             {([1, 10, 20] as const).map((r) => (
               <button key={r} onClick={() => setRate(r)}
-                className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                  rate === r ? "bg-brand-500 text-white" : "glass text-text-secondary hover:text-text-primary"
-                }`}>
+                className="flex-1 py-2 rounded-xl text-[11px] font-bold transition-all duration-150"
+                style={{
+                  background: rate === r ? "linear-gradient(135deg, #3b82f6, #6366f1)" : "rgba(255,255,255,0.04)",
+                  color: rate === r ? "#fff" : "rgba(255,255,255,0.4)",
+                  border: rate === r ? "none" : "1px solid rgba(255,255,255,0.06)",
+                }}>
                 %{r} KDV
               </button>
             ))}
           </div>
 
-          {/* Result */}
           {result && (
-            <div className="text-center py-2 rounded-xl bg-glass border border-glass-border">
-              <p className="text-lg font-bold font-mono text-brand-400">{result} ₺</p>
+            <div className="text-center py-3 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <p className="text-[10px] text-white/30 uppercase tracking-widest mb-1">Toplam</p>
+              <p className="text-lg font-black font-mono" style={{ background: "linear-gradient(135deg, #60a5fa, #a78bfa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                {result} ₺
+              </p>
             </div>
           )}
         </div>
