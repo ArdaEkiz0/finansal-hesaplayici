@@ -60,6 +60,7 @@ function createMainWindow(): void {
     titleBarStyle: "hidden",
     backgroundColor: "#030712",
     show: false,
+    fullscreen: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
