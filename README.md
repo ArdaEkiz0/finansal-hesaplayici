@@ -6,7 +6,8 @@
 
 <p align="center">
   Turk mali hesaplamalari icin masaustu uygulamasi<br>
-  Electron + React + TypeScript ile yazildi.
+  Electron + React + TypeScript ile yazildi.<br>
+  <small>Developer: Arda M. Ekiz</small>
 </p>
 
 ## Ne Yapar?

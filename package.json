@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "Turk mali hesaplamalari icin masaustu uygulamasi",
   "main": "dist-electron/main.js",
-  "author": "ArdaEkiz0",
+  "author": "Arda M. Ekiz",
   "license": "MIT",
   "scripts": {
     "dev": "vite",

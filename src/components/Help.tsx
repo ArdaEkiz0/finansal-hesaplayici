@@ -41,6 +41,7 @@ export function Help() {
         </div>
         <div className="px-4 py-2.5 border-t border-white/[0.06] text-center">
           <p className="text-[10px] text-text-ghost">Fiziksel numpad desteklenir</p>
+          <p className="text-[9px] text-text-ghost mt-1">Developer: Arda M. Ekiz</p>
         </div>
       </div>
     </div>

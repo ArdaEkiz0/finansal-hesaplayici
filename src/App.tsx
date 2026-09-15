@@ -47,6 +47,8 @@ export default function App() {
               <kbd className="px-1 py-0.5 rounded glass-strong text-[9px] font-mono font-bold text-text-secondary">Enter</kbd> kaydet
               {" · "}
               <kbd className="px-1 py-0.5 rounded glass-strong text-[9px] font-mono font-bold text-text-secondary">Esc</kbd> temizle
+              {" · "}
+              <span className="text-text-faint">Developer: Arda M. Ekiz</span>
             </p>
           </footer>
         </main>

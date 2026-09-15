@@ -14,6 +14,7 @@ export function TitleBar() {
         <span className="text-xs font-bold text-text-primary gradient-text">
           Finansal Hesaplayıcı
         </span>
+        <span className="text-[9px] text-text-ghost ml-1">by Arda M. Ekiz</span>
       </div>
 
       <div className="flex items-center gap-1 no-drag">
