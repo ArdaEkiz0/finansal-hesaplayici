@@ -11,7 +11,16 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "electron:dev": "vite --config vite.config.electron.ts",
-    "electron:build": "vite build --config vite.config.electron.ts"
+    "electron:build": "vite build --config vite.config.electron.ts",
+    "dist": "npm run build && npx vite build --config vite.config.electron.ts && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.ardaekiz.finansal-hesaplayici",
+    "productName": "Finansal Hesaplayici",
+    "files": ["dist/**/*", "dist-electron/**/*", "package.json"],
+    "directories": { "output": "release" },
+    "win": { "target": ["portable"] },
+    "portable": { "artifactName": "Finansal-Hesaplayici-3.0.0-portable.exe" }
   },
   "dependencies": {
     "decimal.js": "^10.6.0",
@@ -27,6 +36,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.1.1",
     "electron": "^36.0.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",
