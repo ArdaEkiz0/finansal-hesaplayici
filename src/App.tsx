@@ -21,12 +21,12 @@ function MainApp() {
       <ModeSelector />
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="hidden xl:block w-[280px] shrink-0 min-h-0" style={{ borderRight: "1px solid var(--color-glass-border)" }}>
+        <div className="hidden xl:block w-[300px] shrink-0 min-h-0" style={{ borderRight: "1px solid var(--color-glass-border)" }}>
           <HistoryPanel />
         </div>
 
-        <main className="flex-1 min-w-0 min-h-0 overflow-y-auto">
-          <div className="h-full w-full max-w-[1100px] mx-auto px-4 sm:px-6 py-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start">
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-4 grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] items-stretch overflow-y-auto">
             <CalcPanel />
             <ResultPanel />
           </div>

@@ -59,7 +59,7 @@ export function ResultPanel() {
   }
 
   return (
-    <section className="card p-5 space-y-4 min-w-0 anim-fade-up" key={result.display + result.detail}>
+    <section className="card p-5 space-y-4 min-w-0 anim-fade-up h-full flex flex-col" key={result.display + result.detail}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-bold uppercase tracking-wider truncate" style={{ color: "var(--color-text-tertiary)" }}>{result.detail}</span>
         <span className="text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0" style={{ background: "rgba(22,185,129,.14)", color: "var(--color-success)" }}>CANLI</span>
@@ -86,7 +86,7 @@ export function ResultPanel() {
       </div>
 
       {result.rows && result.rows.length > 0 && (
-        <div className="card-soft p-1.5">
+        <div className="card-soft p-1.5 flex-1 min-h-0 overflow-y-auto">
           {result.rows.map((d, i) => (
             <button key={i} onClick={() => copyText(d.value, `${d.label} kopyalandı`)} title="Kopyalamak için tıkla"
               className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-left btn-press"

@@ -115,8 +115,8 @@ body {
   display: block;
   max-width: 100%;
 }
-.fluid-number { font-size: clamp(1.6rem, 4vw, 2.6rem); line-height: 1.1; }
-.fluid-number-sm { font-size: clamp(1.1rem, 2.5vw, 1.5rem); line-height: 1.2; }
+.fluid-number { font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.05; }
+.fluid-number-sm { font-size: clamp(1.3rem, 3vw, 1.8rem); line-height: 1.2; }
 
 .gradient-text-result {
   background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));

@@ -49,7 +49,7 @@ export function CalcPanel() {
   const digits = ["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"];
 
   return (
-    <section className="card p-4 space-y-4 min-w-0">
+    <section className="card p-4 gap-4 min-w-0 h-full flex flex-col min-h-[540px]">
       {(mode === "kdv" || mode === "tevkifat" || mode === "kdvCompare") && (
         <div className="space-y-2">
           <div className="flex gap-1.5">
@@ -192,11 +192,11 @@ export function CalcPanel() {
         )}
       </div>
 
-      <div className="card-soft p-2">
-        <div className="grid grid-cols-3 gap-1.5">
+      <div className="card-soft p-2 flex-1 min-h-0 flex flex-col">
+        <div className="grid grid-cols-3 grid-rows-4 gap-1.5 flex-1 min-h-0">
           {digits.map((d) => (
             <button key={d} onClick={() => (d === "⌫" ? deleteLast() : appendDigit(d))}
-              className="h-[52px] rounded-xl font-bold text-[19px] num-display btn-press focus-ring"
+              className="h-full min-h-[52px] rounded-xl font-bold text-[22px] num-display btn-press focus-ring"
               style={{ background: "var(--color-bg-elevated)", color: "var(--color-text-primary)", border: "1px solid var(--color-glass-border)" }}>
               {d}
             </button>

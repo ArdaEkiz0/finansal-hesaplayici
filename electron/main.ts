@@ -174,7 +174,12 @@ function createMainWindow(): void {
     setTimeout(() => {
       if (splashWindow) splashWindow.close();
       mainWindow?.show();
+      mainWindow?.maximize();
     }, 3500);
+  });
+
+  mainWindow.webContents.on("preload-error", (_e, preloadPath, err) => {
+    log(`Preload hatasi: ${preloadPath} - ${err}`);
   });
 
   mainWindow.on("closed", () => {

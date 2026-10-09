@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Calculator, Copy, Check } from "lucide-react";
+import { X, Minus, Calculator, Copy, Check } from "lucide-react";
 import { calculateKDV, formatTurkishNumber, toDecimal, numberToTurkishWords } from "../core/engine";
 
 /** Ayri always-on-top BrowserWindow icinde calisan mini hesaplayici (?widget=1). */
@@ -69,7 +69,12 @@ export function WidgetWindow() {
         <span className="text-[12px] font-bold">Hızlı KDV</span>
         <span className="text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ background: "rgba(22,185,129,.14)", color: "var(--color-success)" }}>CANLI</span>
         <div className="ml-auto flex items-center">
-          <button title="Kapat (Alt+Shift+K ile geri açılır)" onClick={close} className="no-drag p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-ghost)" }}>
+          <button title="Alta al (gizle)" onClick={close} className="no-drag p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-secondary)" }}>
+            <Minus size={13} strokeWidth={2.5} />
+          </button>
+          <button title="Kapat (Alt+Shift+K ile geri açılır)" onClick={close} className="no-drag p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-ghost)" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#e5484d"; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-text-ghost)"; }}>
             <X size={13} />
           </button>
         </div>
