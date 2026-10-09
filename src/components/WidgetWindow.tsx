@@ -11,12 +11,18 @@ export function WidgetWindow() {
   const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
-    try {
-      const t = localStorage.getItem("fh-theme");
-      const th = t === "light" ? "light" : "dark";
+    const apply = () => {
+      let th: "dark" | "light" = "dark";
+      try {
+        const raw = localStorage.getItem("finansal-hesaplayici-v2");
+        if (raw && JSON.parse(raw).theme === "light") th = "light";
+      } catch { /* yok */ }
       setTheme(th);
       document.documentElement.setAttribute("data-theme", th);
-    } catch { /* yok */ }
+    };
+    apply();
+    window.addEventListener("storage", apply);
+    return () => window.removeEventListener("storage", apply);
   }, []);
 
   useEffect(() => {

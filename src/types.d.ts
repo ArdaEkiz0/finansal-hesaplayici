@@ -13,6 +13,7 @@ declare global {
       isMaximized: () => Promise<boolean>;
       widgetToggle: () => void;
       widgetClose: () => void;
+      requestUpdate: () => Promise<"updated" | "skipped" | "failed" | "no-window" | "none">;
       onMaximizeChange: (cb: (maximized: boolean) => void) => void;
     };
   }

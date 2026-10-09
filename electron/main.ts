@@ -142,6 +142,11 @@ function createSplash(): void {
 }
 
 function createMainWindow(): void {
+  let winIcon: string | undefined;
+  try {
+    const p = path.join(__dirname, "../build/icon.ico");
+    if (fs.existsSync(p)) winIcon = p;
+  } catch {}
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -150,6 +155,7 @@ function createMainWindow(): void {
     title: "Finansal Hesaplayıcı",
     frame: false,
     center: true,
+    icon: winIcon,
     backgroundColor: "#070b14",
     show: false,
     fullscreen: false,
@@ -368,33 +374,38 @@ if (!gotTheLock) {
 
     setTimeout(async () => {
       const update = await checkForUpdates();
-      if (update && mainWindow) {
-        log(`Guncelleme mevcut: v${update.version}`);
-        const result = await dialog.showMessageBox(mainWindow, {
-          type: "info",
-          title: "Guncelleme Mevcut",
-          message: `Yeni surum: v${update.version}`,
-          detail: `Mevcut: v${CURRENT_VERSION}\nYeni: v${update.version}\n\nGuncellemeyi yuklemek ister misiniz?`,
-          buttons: ["Guncelle", "Atla"],
-          defaultId: 0,
-        });
-
-        if (result.response === 0) {
-          log("Kullanici guncellemeyi onayladi");
-          const success = await downloadAndInstall(update.url);
-          if (success) {
-            log("Uygulama yeniden baslatiliyor...");
-            app.relaunch();
-            app.exit(0);
-          } else {
-            log("Guncelleme basarisiz");
-            dialog.showErrorBox("Guncelleme HATASI", "Guncelleme yuklenemedi. Lutfen tekrar deneyin veya GitHub'dan manuel indirin.");
-          }
-        }
+      if (update) {
+        await promptAndInstall(update);
       } else {
         log("Guncelleme yok veya kontrol edilemedi");
       }
     }, 5000);
+
+async function promptAndInstall(update: { version: string; notes: string; url: string }): Promise<"updated" | "skipped" | "failed" | "no-window"> {
+  if (!mainWindow || mainWindow.isDestroyed()) return "no-window";
+  log(`Guncelleme mevcut: v${update.version}`);
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: "info",
+    title: "Guncelleme Mevcut",
+    message: `Yeni surum: v${update.version}`,
+    detail: `Mevcut: v${CURRENT_VERSION}\nYeni: v${update.version}\n\nGuncellemeyi yuklemek ister misiniz?`,
+    buttons: ["Guncelle", "Atla"],
+    defaultId: 0,
+  });
+
+  if (result.response !== 0) return "skipped";
+  log("Kullanici guncellemeyi onayladi");
+  const success = await downloadAndInstall(update.url);
+  if (success) {
+    log("Uygulama yeniden baslatiliyor...");
+    app.relaunch();
+    app.exit(0);
+    return "updated";
+  }
+  log("Guncelleme basarisiz");
+  dialog.showErrorBox("Guncelleme HATASI", "Guncelleme yuklenemedi. Lutfen tekrar deneyin veya GitHub'dan manuel indirin.");
+  return "failed";
+}
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
@@ -421,6 +432,12 @@ ipcMain.handle("get-app-name", () => app.getName());
 ipcMain.handle("check-update", async () => {
   const update = await checkForUpdates();
   return update;
+});
+
+ipcMain.handle("request-update", async () => {
+  const update = await checkForUpdates();
+  if (!update) return "none";
+  return promptAndInstall(update);
 });
 
 ipcMain.handle("win-minimize", () => {

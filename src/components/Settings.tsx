@@ -1,5 +1,6 @@
 import { useStore } from "../store/useStore";
-import { X, Sun, Moon, Eye, EyeOff } from "lucide-react";
+import { X, Sun, Moon, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
 
 export function Settings() {
   const show = useStore((s) => s.showSettings);
@@ -10,6 +11,31 @@ export function Settings() {
   const toggleWidget = useStore((s) => s.toggleWidget);
   const settings = useStore((s) => s.settings);
   const updateSettings = useStore((s) => s.updateSettings);
+  const notify = useStore((s) => s.notify);
+  const [checking, setChecking] = useState(false);
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    if (show) window.electronAPI?.getAppVersion?.().then(setVersion).catch(() => {});
+  }, [show]);
+
+  const checkUpdate = async () => {
+    if (!window.electronAPI?.requestUpdate) {
+      notify("Masaüstü uygulamasında çalışır", "info");
+      return;
+    }
+    setChecking(true);
+    try {
+      const res = await window.electronAPI.requestUpdate();
+      if (res === "none") notify("Zaten güncelsiniz", "success");
+      else if (res === "skipped") notify("Güncelleme atlandı", "info");
+      else if (res === "failed") notify("Güncelleme başarısız", "error");
+    } catch {
+      notify("Kontrol edilemedi", "error");
+    } finally {
+      setChecking(false);
+    }
+  };
 
   if (!show) return null;
 
@@ -49,7 +75,13 @@ export function Settings() {
             ))}
           </div>
         </div>
-        <p className="text-[10px] pt-1" style={{ color: "var(--color-text-ghost)" }}>v3.0.0 • Developer: Arda M. Ekiz</p>
+        <div className="flex items-center justify-between py-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+          <span className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>Güncelleme</span>
+          <button onClick={checkUpdate} disabled={checking} className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[12px] font-bold btn-press" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-secondary)", opacity: checking ? 0.6 : 1 }}>
+            <RefreshCw size={13} className={checking ? "animate-spin" : ""} /> {checking ? "Bakılıyor..." : "Denetle"}
+          </button>
+        </div>
+        <p className="text-[10px] pt-1" style={{ color: "var(--color-text-ghost)" }}>v{version || "…"} • Developer: Arda M. Ekiz</p>
       </div>
     </div>
   );
