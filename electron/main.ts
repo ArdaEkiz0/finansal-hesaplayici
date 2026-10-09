@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, shell, ipcMain, dialog, screen, globalShortcut } from "electron";
 import path from "path";
 import https from "https";
 import http from "http";
@@ -20,6 +20,96 @@ try {
 
 let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
+let widgetWindow: BrowserWindow | null = null;
+let quitting = false;
+
+const WIDGET_W = 300;
+const WIDGET_H = 452;
+
+function widgetBoundsPath(): string {
+  return path.join(app.getPath("userData"), "widget-bounds.json");
+}
+
+function loadWidgetBounds(): { x: number; y: number } | null {
+  try {
+    const raw = fs.readFileSync(widgetBoundsPath(), "utf-8");
+    const p = JSON.parse(raw);
+    if (typeof p.x === "number" && typeof p.y === "number") return { x: Math.round(p.x), y: Math.round(p.y) };
+  } catch {}
+  return null;
+}
+
+function saveWidgetBounds(): void {
+  try {
+    if (widgetWindow && !widgetWindow.isDestroyed()) {
+      const b = widgetWindow.getBounds();
+      fs.writeFileSync(widgetBoundsPath(), JSON.stringify({ x: b.x, y: b.y }));
+    }
+  } catch {}
+}
+
+function createWidgetWindow(): void {
+  if (widgetWindow && !widgetWindow.isDestroyed()) return;
+  const area = screen.getPrimaryDisplay().workArea;
+  const saved = loadWidgetBounds();
+  const x = saved?.x ?? Math.round(area.x + area.width - WIDGET_W - 24);
+  const y = saved?.y ?? Math.round(area.y + area.height - WIDGET_H - 24);
+
+  widgetWindow = new BrowserWindow({
+    width: WIDGET_W,
+    height: WIDGET_H,
+    minWidth: WIDGET_W,
+    maxWidth: WIDGET_W,
+    minHeight: WIDGET_H,
+    maxHeight: WIDGET_H,
+    x,
+    y,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    backgroundColor: "#0c1220",
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, "preload.js"),
+    },
+  });
+
+  widgetWindow.setAlwaysOnTop(true, "screen-saver");
+  widgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  widgetWindow.setMenu(null);
+
+  if (isDev && process.env.VITE_DEV_SERVER_URL) {
+    widgetWindow.loadURL(process.env.VITE_DEV_SERVER_URL + "?widget=1");
+  } else {
+    widgetWindow.loadFile(path.join(__dirname, "../dist/index.html"), { query: { widget: "1" } });
+  }
+
+  widgetWindow.on("moved", saveWidgetBounds);
+  widgetWindow.on("close", (e) => {
+    if (!quitting) {
+      e.preventDefault();
+      saveWidgetBounds();
+      widgetWindow?.hide();
+    }
+  });
+  widgetWindow.on("closed", () => {
+    widgetWindow = null;
+  });
+}
+
+function toggleWidgetWindow(): void {
+  createWidgetWindow();
+  if (widgetWindow!.isVisible()) {
+    saveWidgetBounds();
+    widgetWindow!.hide();
+  } else {
+    widgetWindow!.show();
+    widgetWindow!.focus();
+  }
+}
 
 function log(msg: string) {
   const line = `[${new Date().toLocaleTimeString("tr-TR")}] ${msg}\n`;
@@ -89,6 +179,10 @@ function createMainWindow(): void {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    try {
+      if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.destroy();
+    } catch {}
+    widgetWindow = null;
   });
 
   mainWindow.on("maximize", () => {
@@ -257,6 +351,12 @@ if (!gotTheLock) {
   app.whenReady().then(() => {
     createSplash();
 
+    try {
+      globalShortcut.register("Alt+Shift+K", () => toggleWidgetWindow());
+    } catch (e) {
+      log(`Kisayol kayit hatasi: ${e}`);
+    }
+
     setTimeout(() => {
       createMainWindow();
     }, 500);
@@ -301,6 +401,16 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
+app.on("before-quit", () => {
+  quitting = true;
+});
+
+app.on("will-quit", () => {
+  try {
+    globalShortcut.unregisterAll();
+  } catch {}
+});
+
 ipcMain.handle("get-app-version", () => CURRENT_VERSION);
 ipcMain.handle("get-app-name", () => app.getName());
 ipcMain.handle("check-update", async () => {
@@ -326,4 +436,15 @@ ipcMain.handle("win-close", () => {
 
 ipcMain.handle("win-is-maximized", () => {
   return mainWindow?.isMaximized() ?? false;
+});
+
+ipcMain.handle("widget-toggle", () => {
+  toggleWidgetWindow();
+});
+
+ipcMain.handle("widget-close", () => {
+  saveWidgetBounds();
+  try {
+    widgetWindow?.hide();
+  } catch {}
 });

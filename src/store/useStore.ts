@@ -476,7 +476,13 @@ export const useStore = create<State>((set, get) => ({
 
   toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
   toggleHelp: () => set((s) => ({ showHelp: !s.showHelp })),
-  toggleWidget: () => set((s) => ({ showWidget: !s.showWidget })),
+  toggleWidget: () => {
+    if (window.electronAPI?.widgetToggle) {
+      window.electronAPI.widgetToggle();
+      return;
+    }
+    set((s) => ({ showWidget: !s.showWidget }));
+  },
   toggleInvoice: () => set((s) => ({ showInvoice: !s.showInvoice })),
   setTheme: (theme) => { set({ theme }); document.documentElement.setAttribute("data-theme", theme); },
 

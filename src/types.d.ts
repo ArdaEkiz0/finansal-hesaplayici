@@ -11,6 +11,8 @@ declare global {
       maximize: () => void;
       close: () => void;
       isMaximized: () => Promise<boolean>;
+      widgetToggle: () => void;
+      widgetClose: () => void;
       onMaximizeChange: (cb: (maximized: boolean) => void) => void;
     };
   }

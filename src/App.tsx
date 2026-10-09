@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { TitleBar } from "./components/TitleBar";
 import { ModeSelector } from "./components/ModeSelector";
@@ -8,18 +9,12 @@ import { Settings } from "./components/Settings";
 import { Help } from "./components/Help";
 import { Notification } from "./components/Notification";
 import { Widget } from "./components/Widget";
+import { WidgetWindow } from "./components/WidgetWindow";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { useStore } from "./store/useStore";
-import { useEffect } from "react";
 
-export default function App() {
+function MainApp() {
   useKeyboard();
-  const theme = useStore((s) => s.theme);
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
-
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden select-none" style={{ background: "var(--color-bg-deep)", color: "var(--color-text-primary)" }}>
       <TitleBar />
@@ -43,7 +38,7 @@ export default function App() {
         <span><kbd className="px-1 py-0.5 rounded font-mono" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>Tab</kbd> alan</span>
         <span><kbd className="px-1 py-0.5 rounded font-mono" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>Enter</kbd> kaydet</span>
         <span><kbd className="px-1 py-0.5 rounded font-mono" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>Esc</kbd> temizle</span>
-        <span className="hidden sm:inline">Developer: Arda M. Ekiz</span>
+        <span className="hidden sm:inline">Alt+Shift+K: hızlı KDV • Developer: Arda M. Ekiz</span>
       </footer>
 
       <Settings />
@@ -53,4 +48,22 @@ export default function App() {
       <InvoicePreview />
     </div>
   );
+}
+
+export default function App() {
+  const [isWidget] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).has("widget");
+    } catch {
+      return false;
+    }
+  });
+  const theme = useStore((s) => s.theme);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
+
+  if (isWidget) return <WidgetWindow />;
+  return <MainApp />;
 }

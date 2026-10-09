@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   maximize: () => ipcRenderer.invoke("win-maximize"),
   close: () => ipcRenderer.invoke("win-close"),
   isMaximized: () => ipcRenderer.invoke("win-is-maximized"),
+  widgetToggle: () => ipcRenderer.invoke("widget-toggle"),
+  widgetClose: () => ipcRenderer.invoke("widget-close"),
   onMaximizeChange: (cb: (maximized: boolean) => void) => {
     ipcRenderer.on("win-maximize-change", (_e, maximized) => cb(maximized));
   },
