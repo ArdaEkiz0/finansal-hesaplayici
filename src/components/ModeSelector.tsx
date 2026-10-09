@@ -1,15 +1,16 @@
-import { useStore, type CalcMode } from "../store/useStore";
-import { Receipt, TrendingDown, BarChart3, TrendingUp, Tag, Percent, Landmark, GitCompareArrows } from "lucide-react";
+import { useStore, type CalcMode, MODE_LABELS } from "../store/useStore";
+import { Receipt, Scissors, FileWarning, Percent, TrendingUp, BadgePercent, Landmark, Scale, PiggyBank } from "lucide-react";
 
-const modes: { key: CalcMode; label: string; icon: React.ReactNode; color: string }[] = [
-  { key: "kdv", label: "KDV", icon: <Receipt size={14} />, color: "var(--color-primary)" },
-  { key: "stopaj", label: "Stopaj", icon: <TrendingDown size={14} />, color: "var(--color-success)" },
-  { key: "margin", label: "Marj", icon: <BarChart3 size={14} />, color: "var(--color-accent)" },
-  { key: "markup", label: "Kâr Oranı", icon: <TrendingUp size={14} />, color: "var(--color-accent)" },
-  { key: "discount", label: "İndirim", icon: <Tag size={14} />, color: "#8b5cf6" },
-  { key: "percent", label: "Yüzde", icon: <Percent size={14} />, color: "#ec4899" },
-  { key: "compound", label: "Bileşik", icon: <Landmark size={14} />, color: "var(--color-success)" },
-  { key: "kdvCompare", label: "KDV Karşıl.", icon: <GitCompareArrows size={14} />, color: "#8b5cf6" },
+const MODES: { key: CalcMode; icon: React.ReactNode }[] = [
+  { key: "kdv", icon: <Receipt size={15} /> },
+  { key: "stopaj", icon: <Scissors size={15} /> },
+  { key: "tevkifat", icon: <FileWarning size={15} /> },
+  { key: "margin", icon: <TrendingUp size={15} /> },
+  { key: "markup", icon: <PiggyBank size={15} /> },
+  { key: "discount", icon: <BadgePercent size={15} /> },
+  { key: "percent", icon: <Percent size={15} /> },
+  { key: "compound", icon: <Landmark size={15} /> },
+  { key: "kdvCompare", icon: <Scale size={15} /> },
 ];
 
 export function ModeSelector() {
@@ -17,23 +18,27 @@ export function ModeSelector() {
   const setMode = useStore((s) => s.setMode);
 
   return (
-    <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
-      {modes.map((m) => {
-        const active = mode === m.key;
-        return (
-          <button key={m.key} onClick={() => setMode(m.key)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-semibold whitespace-nowrap transition-all duration-150 hover-lift press-scale shrink-0"
-            style={{
-              background: active ? `${m.color}10` : "transparent",
-              color: active ? m.color : "var(--color-text-tertiary)",
-              border: active ? `1px solid ${m.color}20` : "1px solid transparent",
-              boxShadow: active ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-            }}>
-            {m.icon}
-            <span className="ml-1">{m.label}</span>
-          </button>
-        );
-      })}
+    <div className="shrink-0 px-3 sm:px-4 py-2" style={{ background: "var(--color-bg-base)", borderBottom: "1px solid var(--color-glass-border)" }}>
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+        {MODES.map((m) => {
+          const active = mode === m.key;
+          return (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap btn-press focus-ring transition-all"
+              style={
+                active
+                  ? { background: "var(--color-primary)", color: "#fff", boxShadow: "0 4px 14px rgba(47,123,255,.35)" }
+                  : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }
+              }
+            >
+              {m.icon}
+              {MODE_LABELS[m.key]}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

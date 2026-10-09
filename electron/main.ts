@@ -36,9 +36,10 @@ function createSplash(): void {
     frame: false,
     transparent: false,
     resizable: false,
+    center: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    backgroundColor: "#0a0f1a",
+    backgroundColor: "#070b14",
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
 
@@ -52,15 +53,17 @@ function createSplash(): void {
 
 function createMainWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    title: "Finansal Hesaplaci",
-    titleBarStyle: "hidden",
-    backgroundColor: "#030712",
+    width: 1280,
+    height: 840,
+    minWidth: 960,
+    minHeight: 620,
+    title: "Finansal Hesaplayıcı",
+    frame: false,
+    center: true,
+    backgroundColor: "#070b14",
     show: false,
-    fullscreen: true,
+    fullscreen: false,
+    fullscreenable: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

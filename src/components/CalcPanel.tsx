@@ -1,0 +1,208 @@
+import { useStore } from "../store/useStore";
+import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X } from "lucide-react";
+
+const TWO_LABELS: Record<string, [string, string]> = {
+  margin: ["Maliyet (₺)", "Hedef marj (%)"],
+  markup: ["Maliyet (₺)", "Kâr oranı (%)"],
+  percent: ["Yüzde (%)", "Tutar"],
+  compound: ["Ana para (₺)", "Yıllık faiz (%)"],
+};
+
+export function CalcPanel() {
+  const mode = useStore((s) => s.mode);
+  const input = useStore((s) => s.input);
+  const secondInput = useStore((s) => s.secondInput);
+  const activeField = useStore((s) => s.activeField);
+  const setInputDirect = useStore((s) => s.setInputDirect);
+  const setSecondInputDirect = useStore((s) => s.setSecondInputDirect);
+  const appendDigit = useStore((s) => s.appendDigit);
+  const deleteLast = useStore((s) => s.deleteLast);
+  const clearAll = useStore((s) => s.clearAll);
+  const confirmInput = useStore((s) => s.confirmInput);
+  const switchField = useStore((s) => s.switchField);
+  const result = useStore((s) => s.result);
+  const kdvRate = useStore((s) => s.kdvRate);
+  const setKdvRate = useStore((s) => s.setKdvRate);
+  const stopajRate = useStore((s) => s.stopajRate);
+  const setStopajRate = useStore((s) => s.setStopajRate);
+  const tevkifatPay = useStore((s) => s.tevkifatPay);
+  const setTevkifatPay = useStore((s) => s.setTevkifatPay);
+  const kdvExtract = useStore((s) => s.kdvExtract);
+  const setKdvExtract = useStore((s) => s.setKdvExtract);
+  const customKdvRate = useStore((s) => s.customKdvRate);
+  const setCustomKdvRate = useStore((s) => s.setCustomKdvRate);
+  const useCustomRate = useStore((s) => s.useCustomRate);
+  const discountInputs = useStore((s) => s.discountInputs);
+  const activeDiscountIndex = useStore((s) => s.activeDiscountIndex);
+  const setActiveDiscountIndex = useStore((s) => s.setActiveDiscountIndex);
+  const addDiscount = useStore((s) => s.addDiscount);
+  const removeDiscount = useStore((s) => s.removeDiscount);
+  const compoundYears = useStore((s) => s.compoundYears);
+  const setCompoundYears = useStore((s) => s.setCompoundYears);
+  const compoundFrequency = useStore((s) => s.compoundFrequency);
+  const setCompoundFrequency = useStore((s) => s.setCompoundFrequency);
+
+  const isTwo = ["margin", "markup", "percent", "compound"].includes(mode);
+  const isDiscount = mode === "discount";
+  const labels = TWO_LABELS[mode];
+
+  const digits = ["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"];
+
+  return (
+    <section className="card p-4 space-y-4 min-w-0">
+      {(mode === "kdv" || mode === "tevkifat" || mode === "kdvCompare") && (
+        <div className="space-y-2">
+          <div className="flex gap-1.5">
+            {([1, 10, 20] as const).map((r) => (
+              <button key={r} onClick={() => setKdvRate(r)}
+                className="flex-1 py-2 rounded-xl text-[13px] font-bold btn-press focus-ring"
+                style={kdvRate === r && !useCustomRate
+                  ? { background: "var(--color-primary)", color: "#fff" }
+                  : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+                %{r}
+              </button>
+            ))}
+            <input value={customKdvRate} onChange={(e) => setCustomKdvRate(e.target.value)} placeholder="Özel %" inputMode="decimal"
+              className="w-[86px] px-2 py-2 rounded-xl text-[13px] font-bold text-center focus-ring"
+              style={{ background: useCustomRate ? "rgba(47,123,255,.14)" : "var(--color-glass)", border: useCustomRate ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+          </div>
+          {mode === "kdv" && (
+            <div className="flex gap-1.5">
+              {([{ v: false, l: "Hariçten Dahil (+KDV)" }, { v: true, l: "Dahilden Hariç (−KDV)" }] as const).map((o) => (
+                <button key={o.l} onClick={() => setKdvExtract(o.v)}
+                  className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold btn-press"
+                  style={kdvExtract === o.v
+                    ? { background: "rgba(47,123,255,.16)", color: "var(--color-primary-light)", border: "1px solid var(--color-primary)" }
+                    : { background: "transparent", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          )}
+          {mode === "tevkifat" && (
+            <div className="flex flex-wrap gap-1.5">
+              {([2, 3, 4, 5, 6, 7, 9, 10] as const).map((pay) => (
+                <button key={pay} onClick={() => setTevkifatPay(pay)}
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold btn-press"
+                  style={tevkifatPay === pay
+                    ? { background: "var(--color-accent)", color: "#1a1206" }
+                    : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+                  {pay}/10
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "stopaj" && (
+        <div className="flex flex-wrap gap-1.5">
+          {([1, 3, 5, 7, 10, 15, 20] as const).map((r) => (
+            <button key={r} onClick={() => setStopajRate(r)}
+              className="px-3 py-2 rounded-xl text-[12px] font-bold btn-press"
+              style={stopajRate === r
+                ? { background: "var(--color-success)", color: "#fff" }
+                : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+              %{r}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isDiscount ? (
+        <div className="space-y-2">
+          <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>Ana tutar (₺)</label>
+          <input value={input} onChange={(e) => setInputDirect(e.target.value)} placeholder="0" inputMode="decimal" autoFocus
+            className="num-display w-full px-4 py-3 rounded-xl text-right font-bold fluid-number-sm focus-ring"
+            style={{ background: "var(--color-glass)", border: activeField === "first" ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }}
+            onFocus={() => activeField !== "first" && switchField()} />
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>İndirimler</label>
+            <button onClick={addDiscount} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold btn-press" style={{ background: "var(--color-glass)", color: "var(--color-success)", border: "1px solid var(--color-glass-border)" }}>
+              <Plus size={12} /> Oran ekle
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {discountInputs.map((d, i) => (
+              <div key={i} className="flex items-center gap-1 rounded-xl px-1 py-1"
+                style={{ background: activeDiscountIndex === i && activeField === "second" ? "rgba(47,123,255,.14)" : "var(--color-glass)", border: activeDiscountIndex === i && activeField === "second" ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)" }}>
+                <input value={d} placeholder="%0" inputMode="decimal" onChange={(e) => { setActiveDiscountIndex(i); const v = e.target.value.replace(/[^0-9.]/g, ""); const cur = [...discountInputs]; cur[i] = v; useStore.setState({ discountInputs: cur }); }}
+                  onFocus={() => setActiveDiscountIndex(i)}
+                  className="w-[64px] px-2 py-1.5 rounded-lg text-center text-[13px] font-bold bg-transparent focus-ring" style={{ color: "var(--color-text-primary)" }} />
+                {discountInputs.length > 1 && (
+                  <button onClick={() => removeDiscount(i)} className="p-1 rounded" style={{ color: "var(--color-text-ghost)" }}><X size={11} /></button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : isTwo ? (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1 min-w-0">
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>{labels[0]}</label>
+            <input value={input} onChange={(e) => setInputDirect(e.target.value)} placeholder="0" inputMode="decimal"
+              className="num-display w-full px-3 py-2.5 rounded-xl text-right font-bold text-[18px] focus-ring"
+              style={{ background: "var(--color-glass)", border: activeField === "first" ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+          </div>
+          <div className="space-y-1 min-w-0">
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>{labels[1]}</label>
+            <input value={secondInput} onChange={(e) => setSecondInputDirect(e.target.value)} placeholder="0" inputMode="decimal"
+              className="num-display w-full px-3 py-2.5 rounded-xl text-right font-bold text-[18px] focus-ring"
+              style={{ background: "var(--color-glass)", border: activeField === "second" ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+          </div>
+          {mode === "compound" && (
+            <div className="col-span-2 flex gap-2">
+              <input value={compoundYears} onChange={(e) => setCompoundYears(e.target.value)} placeholder="Yıl" inputMode="decimal"
+                className="w-[90px] px-3 py-2 rounded-xl text-center text-[13px] font-bold focus-ring" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+              <div className="flex flex-1 gap-1">
+                {([1, 4, 12, 365] as const).map((f) => (
+                  <button key={f} onClick={() => setCompoundFrequency(f)} className="flex-1 py-2 rounded-lg text-[11px] font-bold btn-press"
+                    style={compoundFrequency === f ? { background: "var(--color-primary)", color: "#fff" } : { background: "var(--color-glass)", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                    {f === 1 ? "Yıllık" : f === 4 ? "Çeyrek" : f === 12 ? "Aylık" : "Günlük"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-1">
+          <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>Tutar (₺)</label>
+          <input value={input} onChange={(e) => setInputDirect(e.target.value)} placeholder="0" inputMode="decimal" autoFocus
+            className="num-display w-full px-4 py-3 rounded-xl text-right font-bold fluid-number-sm focus-ring"
+            style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-1.5">
+        <button onClick={clearAll} className="h-11 rounded-xl flex items-center justify-center gap-1.5 font-semibold text-[13px] btn-press" style={{ background: "var(--color-glass)", color: "var(--color-error)", border: "1px solid var(--color-glass-border)" }}>
+          <RotateCcw size={13} /> Sıfırla
+        </button>
+        <button onClick={deleteLast} className="h-11 rounded-xl flex items-center justify-center btn-press" style={{ background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+          <Delete size={17} />
+        </button>
+        {(isTwo || isDiscount) ? (
+          <button onClick={() => (activeField === "first" ? switchField() : confirmInput())} className="h-11 rounded-xl flex items-center justify-center gap-1.5 font-semibold text-[13px] btn-press" style={{ background: "var(--color-primary)", color: "#fff" }}>
+            {activeField === "first" ? (<><ArrowRight size={13} /> Sonraki</>) : (<><CornerDownLeft size={13} /> Kaydet</>)}
+          </button>
+        ) : (
+          <button onClick={confirmInput} disabled={!result} className="h-11 rounded-xl flex items-center justify-center gap-1.5 font-semibold text-[13px] btn-press" style={{ background: result ? "var(--color-primary)" : "var(--color-glass)", color: result ? "#fff" : "var(--color-text-ghost)", opacity: result ? 1 : 0.5 }}>
+            <CornerDownLeft size={13} /> Kaydet
+          </button>
+        )}
+      </div>
+
+      <div className="card-soft p-2">
+        <div className="grid grid-cols-3 gap-1.5">
+          {digits.map((d) => (
+            <button key={d} onClick={() => (d === "⌫" ? deleteLast() : appendDigit(d))}
+              className="h-[52px] rounded-xl font-bold text-[19px] num-display btn-press focus-ring"
+              style={{ background: "var(--color-bg-elevated)", color: "var(--color-text-primary)", border: "1px solid var(--color-glass-border)" }}>
+              {d}
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
