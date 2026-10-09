@@ -21,7 +21,7 @@ import {
   type TevkifatPay,
 } from "../core/engine";
 
-export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "percent" | "compound" | "kdvCompare";
+export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare";
 
 export interface HistoryEntry {
   id: string;
@@ -50,6 +50,7 @@ export const MODE_LABELS: Record<CalcMode, string> = {
   margin: "Marj",
   markup: "Kâr Oranı",
   discount: "İndirim",
+  fiyat: "Fiyat",
   percent: "Yüzde",
   compound: "Bileşik",
   kdvCompare: "Karşılaştır",
@@ -65,6 +66,7 @@ interface State {
   kdvRate: KVDRate;
   stopajRate: StopajRate;
   tevkifatPay: TevkifatPay;
+  tevkifatCode: string;
   kdvExtract: boolean;
   customKdvRate: string;
   useCustomRate: boolean;
@@ -88,6 +90,7 @@ interface State {
   setKdvRate: (r: KVDRate) => void;
   setStopajRate: (r: StopajRate) => void;
   setTevkifatPay: (p: TevkifatPay) => void;
+  setTevkifatCode: (code: string, pay: TevkifatPay) => void;
   setKdvExtract: (e: boolean) => void;
   setCustomKdvRate: (v: string) => void;
   setUseCustomRate: (b: boolean) => void;
@@ -113,6 +116,16 @@ interface State {
   clearHistory: () => void;
   exportHistory: () => void;
   notify: (msg: string, type?: "success" | "error" | "info") => void;
+}
+
+/** Matraha KDV uygular: extract=true ise verilen tutar KDV dahildir. */
+export function applyKdv(base: Decimal, eff: Decimal, extract: boolean): { main: Decimal; tax: Decimal } {
+  if (extract) {
+    const net = base.div(eff.div(100).plus(1)).toDP(2);
+    return { main: net, tax: base.minus(net).toDP(2) };
+  }
+  const tax = base.mul(eff).div(100).toDP(2);
+  return { main: base.plus(tax).toDP(2), tax };
 }
 
 export function effectiveKdvRate(s: { kdvRate: KVDRate; useCustomRate: boolean; customKdvRate: string }): Decimal {
@@ -200,15 +213,17 @@ function computeInner(s: State): CalcResult | null {
     }
     case "tevkifat": {
       const r = calculateTevkifat(a, s.kdvRate, s.tevkifatPay);
+      const codeSuffix = s.tevkifatCode ? ` • Kod ${s.tevkifatCode}` : "";
       return {
         display: fmt(r.saticiyaOdenen),
-        detail: `Tevkifat ${s.tevkifatPay}/10 — %${s.kdvRate} KDV`,
+        detail: `Tevkifat ${s.tevkifatPay}/10 — %${s.kdvRate} KDV${codeSuffix}`,
         rows: [
           { label: "Satıcıya Ödenen", value: fmt(r.saticiyaOdenen), accent: true },
           { label: "Matrah", value: fmt(r.matrah) },
           { label: `%${s.kdvRate} KDV`, value: fmt(r.kdv) },
           { label: `Tevkifat (${s.tevkifatPay}/10)`, value: fmt(r.tevkifat) },
           { label: "2 No'lu Beyan", value: fmt(r.beyan) },
+          ...(s.tevkifatCode ? [{ label: "İşlem kodu", value: s.tevkifatCode }] : []),
         ],
       };
     }
@@ -260,6 +275,30 @@ function computeInner(s: State): CalcResult | null {
         ],
       };
     }
+    case "fiyat": {
+      const ds = s.discountInputs.filter((d) => d !== "").map(toDecimal);
+      const disc = ds.length > 0 ? calculateChainedDiscount(a, ds) : null;
+      const matrah = disc ? disc.finalPrice : a.toDP(2);
+      const eff = effectiveKdvRate(s);
+      const k = applyKdv(matrah, eff, s.kdvExtract);
+      const dir = s.kdvExtract ? "KDV dahil etiket" : "KDV hariç matrah";
+      return {
+        display: fmt(k.main),
+        detail: `Fiyat — ${dir}, %${eff.toString()} KDV`,
+        rows: [
+          { label: s.kdvExtract ? "Ödenecek" : "Toplam", value: fmt(k.main), accent: true },
+          { label: "Etiket", value: fmt(a) },
+          ...(disc
+            ? [
+                { label: "İndirimler", value: ds.map((d) => "%" + formatTurkishNumber(d, p)).join(" → ") },
+                { label: "Tasarruf", value: fmt(disc.totalSaved) },
+              ]
+            : []),
+          { label: "Matrah", value: fmt(matrah) },
+          { label: `%${eff.toString()} KDV`, value: fmt(k.tax) },
+        ],
+      };
+    }
     case "percent": {
       if (!s.secondInput) return { display: fmt(a), detail: "İkinci değeri girin" };
       const b = toDecimal(s.secondInput);
@@ -305,7 +344,7 @@ function computeInner(s: State): CalcResult | null {
   }
 }
 
-const EXPR_MODES: CalcMode[] = ["kdv", "stopaj", "tevkifat", "kdvCompare"];
+const EXPR_MODES: CalcMode[] = ["kdv", "stopaj", "tevkifat", "kdvCompare", "fiyat"];
 
 function compute(s: State): CalcResult | null {
   const r = computeInner(s);
@@ -331,6 +370,7 @@ export const useStore = create<State>((set, get) => ({
   kdvRate: 20,
   stopajRate: 15,
   tevkifatPay: 5,
+  tevkifatCode: "",
   kdvExtract: false,
   customKdvRate: "",
   useCustomRate: false,
@@ -359,9 +399,10 @@ export const useStore = create<State>((set, get) => ({
     const clean = v.replace(/[^0-9.,]/g, "").replace(/,/g, ".");
     set({ secondInput: clean, result: compute({ ...s, secondInput: clean }) });
   },
-  setKdvRate: (kdvRate) => { set({ kdvRate, useCustomRate: false }); const s = get(); if (s.input || s.mode === "discount") set({ result: compute({ ...s, kdvRate, useCustomRate: false }) }); },
+  setKdvRate: (kdvRate) => { set({ kdvRate, useCustomRate: false }); const s = get(); if (s.input || s.mode === "discount" || s.mode === "fiyat") set({ result: compute({ ...s, kdvRate, useCustomRate: false }) }); },
   setStopajRate: (stopajRate) => { set({ stopajRate }); const s = get(); if (s.input) set({ result: compute({ ...s, stopajRate }) }); },
   setTevkifatPay: (tevkifatPay) => { set({ tevkifatPay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatPay }) }); },
+  setTevkifatCode: (tevkifatCode, pay) => { set({ tevkifatCode, tevkifatPay: pay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatCode, tevkifatPay: pay }) }); },
   setKdvExtract: (kdvExtract) => { set({ kdvExtract }); const s = get(); if (s.input) set({ result: compute({ ...s, kdvExtract }) }); },
   setCustomKdvRate: (customKdvRate) => {
     const clean = customKdvRate.replace(/[^0-9.,]/g, "").replace(/,/g, ".");
@@ -378,7 +419,7 @@ export const useStore = create<State>((set, get) => ({
       const seg = cur.split(/[+\-*/()]/).pop() ?? "";
       return seg.includes(".");
     };
-    if (s.mode === "discount") {
+    if (s.mode === "discount" || s.mode === "fiyat") {
       if (s.activeField === "first") {
         const v = (s.input + digit).slice(0, 30);
         if (digit === "." && segHasDot(s.input)) return;
@@ -408,7 +449,7 @@ export const useStore = create<State>((set, get) => ({
 
   deleteLast: () => {
     const s = get();
-    if (s.mode === "discount" && s.activeField !== "first") {
+    if ((s.mode === "discount" || s.mode === "fiyat") && s.activeField !== "first") {
       const d = [...s.discountInputs];
       d[s.activeDiscountIndex] = (d[s.activeDiscountIndex] ?? "").slice(0, -1);
       set({ discountInputs: d, result: compute({ ...s, discountInputs: d }) });
@@ -428,7 +469,7 @@ export const useStore = create<State>((set, get) => ({
 
   switchField: () => {
     const s = get();
-    if (s.mode === "discount") {
+    if (s.mode === "discount" || s.mode === "fiyat") {
       set({ activeField: s.activeField === "first" ? "second" : "first" });
       return;
     }
@@ -438,6 +479,19 @@ export const useStore = create<State>((set, get) => ({
 
   confirmInput: () => {
     const s = get();
+    if (s.mode === "fiyat") {
+      if (s.result && s.input && s.result.display !== "—") {
+        const eff = effectiveKdvRate(s);
+        const entry: HistoryEntry = {
+          id: Date.now().toString(), mode: s.mode,
+          inputs: `${s.input} → ` + s.discountInputs.filter((d) => d !== "").map((d) => "%" + d).join(" → ") + ` → KDV%${eff.toString()}`,
+          result: s.result.display, detail: s.result.detail, timestamp: Date.now(), pinned: false,
+        };
+        set({ history: [entry, ...s.history].slice(0, 100), input: "", result: null, discountInputs: ["", ""], activeDiscountIndex: 0, activeField: "first" });
+        get().notify("Kaydedildi", "success");
+      }
+      return;
+    }
     if (s.mode === "discount") {
       if (s.result && s.input) {
         const entry: HistoryEntry = {

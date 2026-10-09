@@ -3,7 +3,7 @@ import Decimal from "decimal.js";
 Decimal.set({ precision: 30, rounding: Decimal.ROUND_HALF_UP });
 
 export type KVDRate = 1 | 10 | 20;
-export type StopajRate = 1 | 3 | 5 | 7 | 10 | 15 | 20;
+export type StopajRate = 1 | 3 | 5 | 7 | 10 | 15 | 17 | 20;
 export type TevkifatPay = 2 | 3 | 4 | 5 | 6 | 7 | 9 | 10;
 
 export interface TaxResult {

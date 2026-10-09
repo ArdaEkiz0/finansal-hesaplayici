@@ -1,8 +1,9 @@
 import { useStore, type CalcMode, MODE_LABELS } from "../store/useStore";
-import { Receipt, Scissors, FileWarning, Percent, TrendingUp, BadgePercent, Landmark, Scale, PiggyBank } from "lucide-react";
+import { Receipt, Scissors, FileWarning, Percent, TrendingUp, BadgePercent, Landmark, Scale, PiggyBank, ShoppingCart } from "lucide-react";
 
 const MODES: { key: CalcMode; icon: React.ReactNode }[] = [
   { key: "kdv", icon: <Receipt size={15} /> },
+  { key: "fiyat", icon: <ShoppingCart size={15} /> },
   { key: "stopaj", icon: <Scissors size={15} /> },
   { key: "tevkifat", icon: <FileWarning size={15} /> },
   { key: "margin", icon: <TrendingUp size={15} /> },
