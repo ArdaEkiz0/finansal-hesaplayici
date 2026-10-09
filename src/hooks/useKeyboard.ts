@@ -20,6 +20,9 @@ export function useKeyboard() {
       if (k >= "0" && k <= "9") {
         e.preventDefault();
         useStore.getState().appendDigit(k);
+      } else if (k === "+" || k === "-" || k === "*" || k === "/") {
+        e.preventDefault();
+        useStore.getState().appendDigit(k);
       } else if (k === "." || k === ",") {
         e.preventDefault();
         useStore.getState().appendDigit(".");

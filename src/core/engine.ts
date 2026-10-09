@@ -200,6 +200,79 @@ export function calculateKDVCompare(amount: Decimal, rate: KVDRate): KDVCompareR
   return { extract, inject, difference: diff.toDP(2) };
 }
 
+/** Guvenli dort-islem degerlendirici (numpad + - * / icin). Hata durumunda null doner, throw etmez. */
+export function evaluateExpression(expr: string): Decimal | null {
+  const s = expr.replace(/\s/g, "");
+  if (!s || !/^[0-9.+*/()%-]+$/.test(s)) return null;
+  const js = s.replace(/(\d+(?:\.\d+)?)%/g, "($1/100)");
+  if (/[^0-9.+*/()-]/.test(js)) return null;
+  let i = 0;
+  function peek(): string {
+    return i < js.length ? js[i] : "";
+  }
+  function parseExpr(): Decimal {
+    let v = parseTerm();
+    for (;;) {
+      const c = peek();
+      if (c === "+" || c === "-") {
+        i++;
+        const r = parseTerm();
+        v = c === "+" ? v.plus(r) : v.minus(r);
+      } else return v;
+    }
+  }
+  function parseTerm(): Decimal {
+    let v = parseFactor();
+    for (;;) {
+      const c = peek();
+      if (c === "*" || c === "/") {
+        i++;
+        const r = parseFactor();
+        if (c === "/") {
+          if (r.isZero()) return new Decimal(NaN);
+          v = v.div(r);
+        } else v = v.mul(r);
+      } else return v;
+    }
+  }
+  function parseFactor(): Decimal {
+    const c = peek();
+    if (c === "+") {
+      i++;
+      return parseFactor();
+    }
+    if (c === "-") {
+      i++;
+      return parseFactor().neg();
+    }
+    if (c === "(") {
+      i++;
+      const v = parseExpr();
+      if (peek() !== ")") throw new Error("paren");
+      i++;
+      return v;
+    }
+    let num = "";
+    while (/[0-9.]/.test(peek())) num += js[i++];
+    if (!num || num === "." || (num.match(/\./g) || []).length > 1) throw new Error("num");
+    return new Decimal(num);
+  }
+  try {
+    const v = parseExpr();
+    if (i !== js.length || !v.isFinite()) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+/** Tutar alanini cozer: duz sayi veya "100+50*2" gibi ifade. Bos/gecersizde null. */
+export function parseAmount(raw: string): Decimal | null {
+  const expr = (raw || "").replace(/\s/g, "").replace(/,/g, ".");
+  if (!expr) return null;
+  return evaluateExpression(expr);
+}
+
 const ONES = ["", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"];
 const TENS = ["", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"];
 

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useStore } from "../store/useStore";
 import { X, Calculator, Copy, Check } from "lucide-react";
-import { calculateKDV, formatTurkishNumber, toDecimal } from "../core/engine";
+import { calculateKDV, formatTurkishNumber, parseAmount } from "../core/engine";
 
 export function Widget() {
   const showWidget = useStore((s) => s.showWidget);
@@ -42,8 +42,9 @@ export function Widget() {
 
   let result = "";
   try {
-    if (amount) {
-      const r = calculateKDV(toDecimal(amount), rate, extract);
+    const pv = amount ? parseAmount(amount) : null;
+    if (pv) {
+      const r = calculateKDV(pv, rate, extract);
       result = formatTurkishNumber(extract ? r.netAmount : r.total, 2);
     }
   } catch { result = ""; }

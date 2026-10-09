@@ -47,6 +47,13 @@ export function CalcPanel() {
   const labels = TWO_LABELS[mode];
 
   const digits = ["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"];
+  const showOps = !(isTwo && activeField === "second") && !(isDiscount && activeField !== "first");
+  const ops: { label: string; value: string }[] = [
+    { label: "+", value: "+" },
+    { label: "−", value: "-" },
+    { label: "×", value: "*" },
+    { label: "÷", value: "/" },
+  ];
 
   return (
     <section className="card p-4 gap-4 min-w-0 h-full flex flex-col min-h-[540px]">
@@ -192,7 +199,18 @@ export function CalcPanel() {
         )}
       </div>
 
-      <div className="card-soft p-2 flex-1 min-h-0 flex flex-col">
+      <div className="card-soft p-2 flex-1 min-h-0 flex flex-col gap-1.5">
+        {showOps && (
+          <div className="grid grid-cols-4 gap-1.5">
+            {ops.map((o) => (
+              <button key={o.value} onClick={() => appendDigit(o.value)}
+                className="h-10 rounded-xl font-bold text-[17px] btn-press focus-ring"
+                style={{ background: "rgba(47,123,255,.12)", color: "var(--color-primary-light)", border: "1px solid var(--color-primary)" }}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="grid grid-cols-3 grid-rows-4 gap-1.5 flex-1 min-h-0">
           {digits.map((d) => (
             <button key={d} onClick={() => (d === "⌫" ? deleteLast() : appendDigit(d))}

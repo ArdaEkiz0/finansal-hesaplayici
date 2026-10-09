@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Minus, Calculator, Copy, Check } from "lucide-react";
-import { calculateKDV, formatTurkishNumber, toDecimal, numberToTurkishWords } from "../core/engine";
+import { calculateKDV, formatTurkishNumber, parseAmount, numberToTurkishWords } from "../core/engine";
 
 /** Ayri always-on-top BrowserWindow icinde calisan mini hesaplayici (?widget=1). */
 export function WidgetWindow() {
@@ -32,8 +32,9 @@ export function WidgetWindow() {
   let result = "";
   let words = "";
   try {
-    if (amount) {
-      const r = calculateKDV(toDecimal(amount), rate, extract);
+    const pv = amount ? parseAmount(amount) : null;
+    if (pv) {
+      const r = calculateKDV(pv, rate, extract);
       const v = extract ? r.netAmount : r.total;
       result = formatTurkishNumber(v, 2);
       words = numberToTurkishWords(v);
@@ -81,8 +82,8 @@ export function WidgetWindow() {
       </div>
 
       <div className="flex-1 p-3 space-y-2.5 overflow-hidden">
-        <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,]/g, "").replace(/,/g, "."))}
-          placeholder="Tutar yazın..." inputMode="decimal" autoFocus
+        <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,+\-*/()]/g, "").replace(/,/g, "."))}
+          placeholder="Tutar veya işlem (100+50)..." inputMode="decimal" autoFocus
           className="num-display w-full px-3 py-2.5 rounded-xl text-right font-bold text-[20px] focus-ring"
           style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
 

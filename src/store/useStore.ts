@@ -3,6 +3,7 @@ import Decimal from "decimal.js";
 import { loadState, saveState } from "../lib/persist";
 import {
   toDecimal,
+  parseAmount,
   formatTurkishNumber,
   calculateKDV,
   calculateStopaj,
@@ -124,7 +125,7 @@ export function effectiveKdvRate(s: { kdvRate: KVDRate; useCustomRate: boolean; 
   return new Decimal(s.kdvRate);
 }
 
-function compute(s: State): CalcResult | null {
+function computeInner(s: State): CalcResult | null {
   if (!s.input && s.mode !== "discount") return null;
   if (s.mode === "discount" && !s.input) {
     if (s.discountInputs.some((d) => d !== "")) {
@@ -132,7 +133,8 @@ function compute(s: State): CalcResult | null {
     }
     return null;
   }
-  const a = toDecimal(s.input || "0");
+  const a = parseAmount(s.input);
+  if (!a) return { display: "—", detail: "Geçersiz ifade (örn: 100+50)" };
   const p = s.settings.precision;
   const fmt = s.settings.showCurrencySymbol
     ? (v: Decimal) => formatTurkishNumber(v, p) + " ₺"
@@ -303,6 +305,20 @@ function compute(s: State): CalcResult | null {
   }
 }
 
+const EXPR_MODES: CalcMode[] = ["kdv", "stopaj", "tevkifat", "kdvCompare"];
+
+function compute(s: State): CalcResult | null {
+  const r = computeInner(s);
+  if (r?.rows && /[+\-*/()%]/.test(s.input) && EXPR_MODES.includes(s.mode)) {
+    const a = parseAmount(s.input);
+    if (a) {
+      const v = formatTurkishNumber(a, s.settings.precision) + (s.settings.showCurrencySymbol ? " ₺" : "");
+      r.rows.unshift({ label: `Girdi: ${s.input} =`, value: v });
+    }
+  }
+  return r;
+}
+
 const persisted = loadState();
 
 let notifId = 0;
@@ -335,8 +351,8 @@ export const useStore = create<State>((set, get) => ({
   setMode: (mode) => set({ mode, input: "", secondInput: "", result: null, activeField: "first", discountInputs: ["", ""], activeDiscountIndex: 0 }),
   setInputDirect: (v) => {
     const s = get();
-    const clean = v.replace(/[^0-9.,]/g, "").replace(/,/g, ".");
-    set({ input: clean, result: compute({ ...s, input: clean }) });
+    const clean = v.replace(/[^0-9.,+\-*/()]/g, "").replace(/,/g, ".").slice(0, 30);
+    set({ input: clean, result: clean ? compute({ ...s, input: clean }) : null });
   },
   setSecondInputDirect: (v) => {
     const s = get();
@@ -357,13 +373,19 @@ export const useStore = create<State>((set, get) => ({
 
   appendDigit: (digit) => {
     const s = get();
+    const isOp = digit === "+" || digit === "-" || digit === "*" || digit === "/";
+    const segHasDot = (cur: string) => {
+      const seg = cur.split(/[+\-*/()]/).pop() ?? "";
+      return seg.includes(".");
+    };
     if (s.mode === "discount") {
       if (s.activeField === "first") {
-        const v = (s.input + digit).slice(0, 15);
-        if ((v.match(/\./g) || []).length > 1) return;
+        const v = (s.input + digit).slice(0, 30);
+        if (digit === "." && segHasDot(s.input)) return;
         set({ input: v, result: compute({ ...s, input: v }) });
         return;
       }
+      if (isOp) return;
       const d = [...s.discountInputs];
       const cur = (d[s.activeDiscountIndex] ?? "") + digit;
       if ((cur.match(/\./g) || []).length > 1) return;
@@ -373,12 +395,13 @@ export const useStore = create<State>((set, get) => ({
     }
     const useSecond = TWO_INPUT_MODES.includes(s.mode) && s.activeField === "second";
     if (useSecond) {
+      if (isOp) return;
       const v = (s.secondInput + digit).slice(0, 15);
       if ((v.match(/\./g) || []).length > 1) return;
       set({ secondInput: v, result: compute({ ...s, secondInput: v }) });
     } else {
-      const v = (s.input + digit).slice(0, 15);
-      if ((v.match(/\./g) || []).length > 1) return;
+      const v = (s.input + digit).slice(0, 30);
+      if (digit === "." && segHasDot(s.input)) return;
       set({ input: v, result: compute({ ...s, input: v }) });
     }
   },
