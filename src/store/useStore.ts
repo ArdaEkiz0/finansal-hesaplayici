@@ -16,12 +16,13 @@ import {
   calculateReversePercent,
   calculateKDVCompare,
   calculateCompoundInterest,
+  buildBatchRows,
   type KVDRate,
   type StopajRate,
   type TevkifatPay,
 } from "../core/engine";
 
-export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare";
+export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare" | "batch";
 
 export interface HistoryEntry {
   id: string;
@@ -54,6 +55,7 @@ export const MODE_LABELS: Record<CalcMode, string> = {
   percent: "Yüzde",
   compound: "Bileşik",
   kdvCompare: "Karşılaştır",
+  batch: "Toplu",
 };
 
 export type Theme = "dark" | "light";
@@ -76,6 +78,8 @@ interface State {
   activeDiscountIndex: number;
   compoundYears: string;
   compoundFrequency: number;
+  batchInput: string;
+  batchResult: { rows: { inputs: string; result: string; detail?: string }[]; totals: { base?: string; tax?: string; main?: string }; validCount: number } | null;
   showSettings: boolean;
   showHelp: boolean;
   showWidget: boolean;
@@ -84,6 +88,7 @@ interface State {
   settings: { showCurrencySymbol: boolean; precision: number };
   notification: { id: number; message: string; type: "success" | "error" | "info" } | null;
 
+  setBatchInput: (v: string) => void;
   setMode: (m: CalcMode) => void;
   setInputDirect: (v: string) => void;
   setSecondInputDirect: (v: string) => void;
@@ -341,6 +346,8 @@ function computeInner(s: State): CalcResult | null {
         ],
       };
     }
+    default:
+      return null;
   }
 }
 
@@ -380,6 +387,8 @@ export const useStore = create<State>((set, get) => ({
   activeDiscountIndex: 0,
   compoundYears: "1",
   compoundFrequency: 12,
+  batchInput: "",
+  batchResult: null,
   showSettings: false,
   showHelp: false,
   showWidget: false,
@@ -388,7 +397,25 @@ export const useStore = create<State>((set, get) => ({
   settings: persisted?.settings ?? { showCurrencySymbol: true, precision: 2 },
   notification: null,
 
-  setMode: (mode) => set({ mode, input: "", secondInput: "", result: null, activeField: "first", discountInputs: ["", ""], activeDiscountIndex: 0 }),
+  setBatchInput: (batchInput) => {
+    const s = get();
+    const clean = batchInput.replace(/[^\d.,+\-*/()\r\n\s]/g, "").slice(0, 4000);
+    let batchResult = null;
+    const lines = clean.split(/\r?\n/).filter((l) => l.trim() !== "");
+    if (lines.length >= 2 && (s.mode === "kdv" || s.mode === "stopaj" || s.mode === "tevkifat" || s.mode === "fiyat")) {
+      const r = buildBatchRows(clean, {
+        mode: s.mode,
+        kdvRate: effectiveKdvRate(s),
+        kdvExtract: s.kdvExtract,
+        stopajRate: s.stopajRate,
+        tevkifatPay: s.tevkifatPay,
+        precision: s.settings.precision,
+      });
+      if (r.validCount >= 2) batchResult = r;
+    }
+    set({ batchInput: clean, batchResult });
+  },
+  setMode: (mode) => set({ mode, input: "", secondInput: "", result: null, activeField: "first", discountInputs: ["", ""], activeDiscountIndex: 0, batchInput: "", batchResult: null }),
   setInputDirect: (v) => {
     const s = get();
     const clean = v.replace(/[^0-9.,+\-*/()]/g, "").replace(/,/g, ".").slice(0, 30);

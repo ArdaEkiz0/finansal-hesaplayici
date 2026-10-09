@@ -42,6 +42,9 @@ export function CalcPanel() {
   const setActiveDiscountIndex = useStore((s) => s.setActiveDiscountIndex);
   const addDiscount = useStore((s) => s.addDiscount);
   const removeDiscount = useStore((s) => s.removeDiscount);
+  const setBatchInput = useStore((s) => s.setBatchInput);
+  const batchInput = useStore((s) => s.batchInput);
+  const batchResult = useStore((s) => s.batchResult);
   const compoundYears = useStore((s) => s.compoundYears);
   const setCompoundYears = useStore((s) => s.setCompoundYears);
   const compoundFrequency = useStore((s) => s.compoundFrequency);
@@ -49,6 +52,7 @@ export function CalcPanel() {
 
   const isTwo = ["margin", "markup", "percent", "compound"].includes(mode);
   const isDiscount = mode === "discount" || mode === "fiyat";
+  const isBatch = mode === "batch";
   const labels = TWO_LABELS[mode];
   const [codeQuery, setCodeQuery] = useState("");
 
@@ -172,6 +176,38 @@ export function CalcPanel() {
             ))}
           </div>
           <p className="text-[10px] px-1" style={{ color: "var(--color-text-ghost)" }}>{RATE_DISCLAIMER}</p>
+        </div>
+      )}
+
+      {isBatch && (
+        <div className="space-y-2">
+          <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>
+            Tutarları satır satır yapıştırın (Excel'den kopyalayın)
+          </label>
+          <textarea
+            value={batchInput}
+            onChange={(e) => setBatchInput(e.target.value)}
+            placeholder={"1000\n2500\n3750\n1200"}
+            rows={8}
+            className="num-display w-full px-3 py-2.5 rounded-xl text-[15px] font-bold focus-ring resize-none"
+            style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }}
+          />
+          {batchResult && (
+            <div className="card-soft p-2 space-y-1">
+              <div className="max-h-[180px] overflow-y-auto">
+                {batchResult.rows.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1.5 rounded-lg" style={{ borderBottom: i < batchResult.rows.length - 1 ? "1px solid var(--color-glass-border)" : "none" }}>
+                    <span className="num-display text-[12px]" style={{ color: "var(--color-text-tertiary)" }}>{r.inputs}</span>
+                    <span className="num-display text-[13px] font-bold" style={{ color: "var(--color-text-primary)" }}>{r.result}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between px-2 py-2 rounded-lg" style={{ background: "var(--color-glass-active)" }}>
+                <span className="text-[12px] font-bold" style={{ color: "var(--color-text-secondary)" }}>TOPLAM ({batchResult.validCount} satır)</span>
+                <span className="num-display text-[15px] font-bold gradient-text-result">{batchResult.totals.main}</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -287,6 +287,64 @@ function threeDigitsToWords(n: number): string {
   return s;
 }
 
+/** Toplu hesap satiri ureticisi. */
+export function buildBatchRows(raw: string, opts: {
+  mode: "kdv" | "stopaj" | "tevkifat" | "fiyat";
+  kdvRate: Decimal;
+  kdvExtract: boolean;
+  stopajRate: number;
+  tevkifatPay: number;
+  precision: number;
+}): { rows: { inputs: string; result: string; detail?: string }[]; totals: { base?: string; tax?: string; main?: string }; validCount: number } {
+  const p = opts.precision;
+  const fmt = (v: Decimal, d = p) => formatTurkishNumber(v, d);
+  const rows: { inputs: string; result: string; detail?: string }[] = [];
+  let baseSum = new Decimal(0);
+  let taxSum = new Decimal(0);
+  let mainSum = new Decimal(0);
+  let validCount = 0;
+  for (const line of raw.split(/\r?\n/)) {
+    const value = parseAmount(line);
+    if (!value) continue;
+    validCount++;
+    if (opts.mode === "kdv") {
+      const k = applyKdvLocal(value, opts.kdvRate, opts.kdvExtract);
+      baseSum = baseSum.plus(value);
+      taxSum = taxSum.plus(k.tax);
+      mainSum = mainSum.plus(k.main);
+      rows.push({ inputs: line, result: fmt(k.main), detail: `${fmt(k.tax)} KDV` });
+    } else if (opts.mode === "stopaj") {
+      const s = calculateStopaj(value, opts.stopajRate as StopajRate);
+      baseSum = baseSum.plus(value);
+      taxSum = taxSum.plus(s.taxAmount);
+      mainSum = mainSum.plus(s.netAmount);
+      rows.push({ inputs: line, result: fmt(s.netAmount), detail: `${fmt(s.taxAmount)} kesinti` });
+    } else if (opts.mode === "tevkifat") {
+      const t = calculateTevkifat(value, opts.kdvRate.toNumber() as KVDRate, opts.tevkifatPay as TevkifatPay);
+      baseSum = baseSum.plus(value);
+      taxSum = taxSum.plus(t.tevkifat);
+      mainSum = mainSum.plus(t.saticiyaOdenen);
+      rows.push({ inputs: line, result: fmt(t.saticiyaOdenen), detail: `${fmt(t.tevkifat)} tevkifat` });
+    } else {
+      const k = applyKdvLocal(value, opts.kdvRate, opts.kdvExtract);
+      baseSum = baseSum.plus(value);
+      taxSum = taxSum.plus(k.tax);
+      mainSum = mainSum.plus(k.main);
+      rows.push({ inputs: line, result: fmt(k.main), detail: `${fmt(k.tax)} KDV` });
+    }
+  }
+  return { rows, totals: { base: fmt(baseSum), tax: fmt(taxSum), main: fmt(mainSum) }, validCount };
+}
+
+function applyKdvLocal(base: Decimal, eff: Decimal, extract: boolean): { main: Decimal; tax: Decimal } {
+  if (extract) {
+    const net = base.div(eff.div(100).plus(1)).toDP(2);
+    return { main: net, tax: base.minus(net).toDP(2) };
+  }
+  const tax = base.mul(eff).div(100).toDP(2);
+  return { main: base.plus(tax).toDP(2), tax };
+}
+
 export function numberToTurkishWords(value: Decimal): string {
   try {
     const fixed = value.toDP(2).toFixed(2);
