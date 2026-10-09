@@ -73,9 +73,8 @@ export function WidgetWindow() {
         <div className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #2f7bff, #7aa8ff)" }}>
           <Calculator size={11} className="text-white" />
         </div>
-        <span className="text-[12px] font-bold">Hızlı KDV</span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded font-bold" style={{ background: "rgba(22,185,129,.14)", color: "var(--color-success)" }}>CANLI</span>
-        <div className="ml-auto flex items-center">
+        <span className="text-[12px] font-bold truncate">Hızlı KDV</span>
+        <div className="ml-auto flex items-center shrink-0">
           <button title="Alta al (gizle)" onClick={close} className="no-drag p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-secondary)" }}>
             <Minus size={13} strokeWidth={2.5} />
           </button>
@@ -87,10 +86,10 @@ export function WidgetWindow() {
         </div>
       </div>
 
-      <div className="flex-1 p-3 space-y-2.5 overflow-hidden">
+      <div className="flex-1 p-3 space-y-2.5 overflow-y-auto min-h-0">
         <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,+\-*/()]/g, "").replace(/,/g, "."))}
-          placeholder="Tutar veya işlem (100+50)..." inputMode="decimal" autoFocus
-          className="num-display w-full px-3 py-2.5 rounded-xl text-right font-bold text-[20px] focus-ring"
+          placeholder="Tutar (örn: 100+50)" inputMode="decimal" autoFocus
+          className="num-display w-full px-3 py-2 rounded-xl text-right font-bold text-[18px] focus-ring"
           style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
 
         <div className="flex gap-1.5">
@@ -127,7 +126,7 @@ export function WidgetWindow() {
           <p className="text-center text-[12px] py-4" style={{ color: "var(--color-text-ghost)" }}>Yazdıkça sonuç gelir — buton yok.</p>
         )}
 
-        <p className="text-center text-[9px]" style={{ color: "var(--color-text-ghost)" }}>Alt+Shift+K: göster/gizle • Esc: kapat</p>
+        <p className="text-center text-[10px] leading-relaxed" style={{ color: "var(--color-text-ghost)" }}>Yazdıkça hesaplanır • Enter: kopyala<br />Alt+Shift+K: göster/gizle • Esc: kapat</p>
       </div>
     </div>
   );

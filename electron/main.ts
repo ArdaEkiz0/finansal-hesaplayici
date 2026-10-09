@@ -23,8 +23,8 @@ let splashWindow: BrowserWindow | null = null;
 let widgetWindow: BrowserWindow | null = null;
 let quitting = false;
 
-const WIDGET_W = 300;
-const WIDGET_H = 452;
+const WIDGET_W = 320;
+const WIDGET_H = 404;
 
 function widgetBoundsPath(): string {
   return path.join(app.getPath("userData"), "widget-bounds.json");

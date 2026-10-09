@@ -12,8 +12,10 @@ function copySplash(): import("vite").Plugin {
       const src = path.resolve(__dirname, "electron/splash.html");
       const dest = path.resolve(__dirname, "dist-electron/splash.html");
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, dest);
-        console.log("✓ splash.html kopyalandi");
+        const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf-8"));
+        const html = fs.readFileSync(src, "utf-8").replaceAll("{{APP_VERSION}}", pkg.version ?? "");
+        fs.writeFileSync(dest, html);
+        console.log(`✓ splash.html kopyalandi (v${pkg.version})`);
       }
     },
   };
