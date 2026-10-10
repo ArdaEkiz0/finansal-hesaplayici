@@ -1,6 +1,6 @@
 {
   "name": "finansal-hesaplayici",
-  "version": "3.3.0",
+  "version": "3.3.1",
   "description": "Turk mali hesaplamalari icin masaustu uygulamasi",
   "main": "dist-electron/main.js",
   "author": "Arda M. Ekiz",
@@ -20,7 +20,7 @@
     "files": ["dist/**/*", "dist-electron/**/*", "package.json", "build/icon.ico"],
     "directories": { "output": "release" },
     "win": { "target": ["portable"], "icon": "build/icon.ico" },
-    "portable": { "artifactName": "Finansal-Hesaplayici-3.3.0-portable.exe" }
+    "portable": { "artifactName": "Finansal-Hesaplayici-3.3.1-portable.exe" }
   },
   "dependencies": {
     "decimal.js": "^10.6.0",
