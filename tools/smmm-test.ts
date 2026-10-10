@@ -52,5 +52,17 @@ check("donem devreden", devreden.toString(), "-8000");
 // Gecikme: 10000 anapara, %4.5 aylık, 30 gün -> 450 faiz
 check("gecikme faiz", toDecimal("10000").mul(4.5).div(100).mul(30).div(30).toDP(2).toString(), "450");
 
+// Amortisman normal: 100000 maliyet %20, 5 yıl -> her yıl 20000, toplam 100000
+import { calculateAmortisman } from "../src/core/engine";
+const am1 = calculateAmortisman(toDecimal("100000"), toDecimal("20"), 5, "normal");
+check("amortisman yillik", am1.rows[0].ayrılan.toString(), "20000");
+check("amortisman toplam", am1.toplam.toString(), "100000");
+check("amortisman satir", String(am1.rows.length), "5");
+
+// Amortisman azalan: 100000 %20 -> yıl1 40000, kalan 60000
+const am2 = calculateAmortisman(toDecimal("100000"), toDecimal("20"), 5, "azalan");
+check("azalan yil1", am2.rows[0].ayrılan.toString(), "40000");
+check("azalan kalan1", am2.rows[0].kalan.toString(), "60000");
+
 console.log(fail === 0 ? "TUMU GECTI" : `${fail} HATA`);
 process.exit(fail ? 1 : 0);

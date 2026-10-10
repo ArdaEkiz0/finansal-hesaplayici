@@ -10,6 +10,7 @@ const TWO_LABELS: Record<string, [string, string]> = {
   percent: ["Yüzde (%)", "Tutar"],
   compound: ["Ana para (₺)", "Yıllık faiz (%)"],
   gecikme: ["Anapara (₺)", "Aylık oran (%)"],
+  amortisman: ["Maliyet (₺)", "Oran (%)"],
 };
 
 export function CalcPanel() {
@@ -39,6 +40,19 @@ export function CalcPanel() {
   const setActiveDonemField = useStore((s) => s.setActiveDonemField);
   const gecikmeDays = useStore((s) => s.gecikmeDays);
   const setGecikmeDays = useStore((s) => s.setGecikmeDays);
+  const amortismanYears = useStore((s) => s.amortismanYears);
+  const setAmortismanYears = useStore((s) => s.setAmortismanYears);
+  const amortismanMethod = useStore((s) => s.amortismanMethod);
+  const setAmortismanMethod = useStore((s) => s.setAmortismanMethod);
+  const fxRates = useStore((s) => s.fxRates);
+  const fxDate = useStore((s) => s.fxDate);
+  const fxManual = useStore((s) => s.fxManual);
+  const setFxManual = useStore((s) => s.setFxManual);
+  const fxCurrency = useStore((s) => s.fxCurrency);
+  const setFxCurrency = useStore((s) => s.setFxCurrency);
+  const fxDirection = useStore((s) => s.fxDirection);
+  const setFxDirection = useStore((s) => s.setFxDirection);
+  const fetchFx = useStore((s) => s.fetchFx);
   const tevkifatPay = useStore((s) => s.tevkifatPay);
   const setTevkifatPay = useStore((s) => s.setTevkifatPay);
   const tevkifatCode = useStore((s) => s.tevkifatCode);
@@ -177,6 +191,42 @@ export function CalcPanel() {
         </div>
       )}
 
+      {mode === "doviz" && (
+        <div className="space-y-2">
+          <div className="flex gap-1.5">
+            {(["USD", "EUR", "GBP"] as const).map((c) => (
+              <button key={c} onClick={() => setFxCurrency(c)}
+                className="flex-1 py-2 rounded-xl text-[13px] font-bold btn-press"
+                style={fxCurrency === c
+                  ? { background: "var(--color-primary)", color: "#fff" }
+                  : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+                {c === "USD" ? "$ Dolar" : c === "EUR" ? "€ Euro" : "£ Sterlin"}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1.5">
+            {([["toTL", `${fxCurrency} → TL (alış)`], ["fromTL", `TL → ${fxCurrency} (satış)`]] as const).map(([d, l]) => (
+              <button key={d} onClick={() => setFxDirection(d)}
+                className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold btn-press"
+                style={fxDirection === d
+                  ? { background: "rgba(47,123,255,.16)", color: "var(--color-primary-light)", border: "1px solid var(--color-primary)" }
+                  : { background: "transparent", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                {l}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1.5">
+            <button onClick={fetchFx} className="flex-1 py-2 rounded-xl text-[12px] font-bold btn-press"
+              style={{ background: "var(--color-glass)", color: "var(--color-success)", border: "1px solid var(--color-glass-border)" }}>
+              ↓ TCMB kurunu getir{fxDate ? ` (${fxDate})` : ""}
+            </button>
+            <input value={fxManual} onChange={(e) => setFxManual(e.target.value)} placeholder="veya elle kur"
+              inputMode="decimal" className="w-[130px] px-2 py-2 rounded-xl text-[12px] font-bold text-center focus-ring"
+              style={{ background: fxManual ? "rgba(47,123,255,.14)" : "var(--color-glass)", border: fxManual ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+          </div>
+        </div>
+      )}
+
       {mode === "stopaj" && (
         <div className="space-y-2">
           <div className="flex gap-1.5">
@@ -312,6 +362,20 @@ export function CalcPanel() {
               <input value={gecikmeDays} onChange={(e) => setGecikmeDays(e.target.value)} placeholder="30" inputMode="decimal"
                 className="w-[90px] px-3 py-2 rounded-xl text-center text-[13px] font-bold focus-ring" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
               <span className="text-[10px]" style={{ color: "var(--color-text-ghost)" }}>Basit orantı (gün/30) • resmî takvimi teyit edin</span>
+            </div>
+          )}
+          {mode === "amortisman" && (
+            <div className="col-span-2 flex gap-2">
+              <input value={amortismanYears} onChange={(e) => setAmortismanYears(e.target.value)} placeholder="Yıl" inputMode="numeric"
+                className="w-[70px] px-3 py-2 rounded-xl text-center text-[13px] font-bold focus-ring" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+              <div className="flex flex-1 gap-1">
+                {([["normal", "Normal (düz hat)"], ["azalan", "Azalan bakiyeler"]] as const).map(([m, l]) => (
+                  <button key={m} onClick={() => setAmortismanMethod(m)} className="flex-1 py-2 rounded-lg text-[11px] font-bold btn-press"
+                    style={amortismanMethod === m ? { background: "var(--color-primary)", color: "#fff" } : { background: "var(--color-glass)", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {mode === "compound" && (

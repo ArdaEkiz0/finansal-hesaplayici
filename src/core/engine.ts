@@ -355,6 +355,38 @@ function applyKdvLocal(base: Decimal, eff: Decimal, extract: boolean): { main: D
   return { main: base.plus(tax).toDP(2), tax };
 }
 
+export interface AmortismanRow {
+  year: number;
+  ayrılan: Decimal;
+  kalan: Decimal;
+}
+
+export function calculateAmortisman(
+  cost: Decimal,
+  rate: Decimal,
+  years: number,
+  method: "normal" | "azalan"
+): { rows: AmortismanRow[]; toplam: Decimal } {
+  const rows: AmortismanRow[] = [];
+  let book = cost;
+  const r = rate.div(100);
+  const annualNormal = cost.mul(r);
+  for (let y = 1; y <= years && book.gt(0); y++) {
+    let dep: Decimal;
+    if (method === "normal") {
+      dep = Decimal.min(annualNormal, book);
+    } else {
+      const doubled = book.mul(r.mul(2));
+      dep = Decimal.min(doubled, book);
+    }
+    book = book.minus(dep);
+    rows.push({ year: y, ayrılan: dep.toDP(2), kalan: Decimal.max(book, new Decimal(0)).toDP(2) });
+    if (book.lte(0)) break;
+  }
+  const toplam = rows.reduce((s, x) => s.plus(x.ayrılan), new Decimal(0)).toDP(2);
+  return { rows, toplam };
+}
+
 export function numberToTurkishWords(value: Decimal): string {
   try {
     const fixed = value.toDP(2).toFixed(2);

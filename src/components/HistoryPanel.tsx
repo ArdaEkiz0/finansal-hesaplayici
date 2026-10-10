@@ -1,5 +1,5 @@
 import { useStore, type HistoryEntry } from "../store/useStore";
-import { Search, Pin, Trash2, Download, RotateCcw } from "lucide-react";
+import { Search, Pin, Trash2, Download, RotateCcw, Tag } from "lucide-react";
 import { useState, useMemo } from "react";
 
 export function HistoryPanel() {
@@ -9,15 +9,23 @@ export function HistoryPanel() {
   const loadHistoryEntry = useStore((s) => s.loadHistoryEntry);
   const clearHistory = useStore((s) => s.clearHistory);
   const exportHistory = useStore((s) => s.exportHistory);
+  const setHistoryNote = useStore((s) => s.setHistoryNote);
   const [query, setQuery] = useState("");
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
   const filtered = useMemo(() => {
     const pinned = history.filter((e) => e.pinned);
     const rest = history.filter((e) => !e.pinned);
     const ordered = [...pinned, ...rest];
     if (!query) return ordered;
-    const q = query.toLowerCase();
-    return ordered.filter((e) => e.inputs.toLowerCase().includes(q) || e.result.toLowerCase().includes(q) || e.mode.toLowerCase().includes(q));
+    const q = query.toLocaleLowerCase("tr");
+    return ordered.filter((e) =>
+      e.inputs.toLocaleLowerCase("tr").includes(q) ||
+      e.result.toLocaleLowerCase("tr").includes(q) ||
+      e.mode.toLocaleLowerCase("tr").includes(q) ||
+      (e.note ?? "").toLocaleLowerCase("tr").includes(q)
+    );
   }, [history, query]);
 
   return (
@@ -52,11 +60,23 @@ export function HistoryPanel() {
                 </div>
                 <p className="text-[11px] mt-1 truncate" style={{ color: "var(--color-text-secondary)" }}>{item.inputs}</p>
                 <p className="num-display text-[13px] font-bold mt-0.5" style={{ color: "var(--color-text-primary)" }}>{item.result}</p>
+                {editingNote === item.id ? (
+                  <input autoFocus value={noteDraft} placeholder="Müşteri / açıklama (örn: ABC Ltd Mayıs)"
+                    onChange={(e) => setNoteDraft(e.target.value.slice(0, 60))}
+                    onBlur={() => { setHistoryNote(item.id, noteDraft.trim()); setEditingNote(null); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { setHistoryNote(item.id, noteDraft.trim()); setEditingNote(null); } if (e.key === "Escape") setEditingNote(null); }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full mt-1 px-2 py-1 rounded-lg text-[11px] focus-ring"
+                    style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--color-primary)", color: "var(--color-text-primary)" }} />
+                ) : item.note ? (
+                  <p className="text-[10px] mt-1 truncate font-semibold" style={{ color: "var(--color-accent)" }}>🏷 {item.note}</p>
+                ) : null}
               </button>
               <div className="hidden group-hover:flex gap-1 mt-1">
-                <button onClick={() => togglePinHistory(item.id)} className="p-1 rounded text-[10px] font-bold" style={{ color: "var(--color-primary-light)" }}><Pin size={10} /></button>
-                <button onClick={() => loadHistoryEntry(item.id)} className="p-1 rounded text-[10px] font-bold" style={{ color: "var(--color-text-tertiary)" }}><RotateCcw size={10} /></button>
-                <button onClick={() => deleteHistoryEntry(item.id)} className="p-1 rounded text-[10px] font-bold" style={{ color: "var(--color-error)" }}><Trash2 size={10} /></button>
+                <button title="Sabitle" onClick={() => togglePinHistory(item.id)} className="p-1 rounded text-[10px] font-bold" style={{ color: "var(--color-primary-light)" }}><Pin size={10} /></button>
+                <button title="Geri yükle" onClick={() => loadHistoryEntry(item.id)} className="p-1 rounded text-[10px] font-bold" style={{ color: "var(--color-text-tertiary)" }}><RotateCcw size={10} /></button>
+                <button title="Etiket ekle" onClick={() => { setEditingNote(item.id); setNoteDraft(item.note ?? ""); }} className="p-1 rounded text-[10px] font-bold" style={{ color: "var(--color-accent)" }}><Tag size={10} /></button>
+                <button title="Sil" onClick={() => deleteHistoryEntry(item.id)} className="p-1 rounded text-[10px] font-bold" style={{ color: "var(--color-error)" }}><Trash2 size={10} /></button>
               </div>
             </div>
           ))

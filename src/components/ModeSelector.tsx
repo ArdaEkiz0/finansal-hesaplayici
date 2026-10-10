@@ -1,5 +1,5 @@
 import { useStore, type CalcMode, MODE_LABELS } from "../store/useStore";
-import { Receipt, Scissors, FileWarning, Percent, TrendingUp, BadgePercent, Landmark, Scale, PiggyBank, ShoppingCart, Layers, CalendarRange, AlarmClock } from "lucide-react";
+import { Receipt, Scissors, FileWarning, Percent, TrendingUp, BadgePercent, Landmark, Scale, PiggyBank, ShoppingCart, Layers, CalendarRange, AlarmClock, Wallet, Banknote } from "lucide-react";
 
 const MODES: { key: CalcMode; icon: React.ReactNode }[] = [
   { key: "kdv", icon: <Receipt size={15} /> },
@@ -8,6 +8,8 @@ const MODES: { key: CalcMode; icon: React.ReactNode }[] = [
   { key: "stopaj", icon: <Scissors size={15} /> },
   { key: "tevkifat", icon: <FileWarning size={15} /> },
   { key: "gecikme", icon: <AlarmClock size={15} /> },
+  { key: "amortisman", icon: <Wallet size={15} /> },
+  { key: "doviz", icon: <Banknote size={15} /> },
   { key: "margin", icon: <TrendingUp size={15} /> },
   { key: "markup", icon: <PiggyBank size={15} /> },
   { key: "discount", icon: <BadgePercent size={15} /> },

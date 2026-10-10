@@ -228,6 +228,74 @@ function httpGet(url: string): Promise<Buffer> {
   });
 }
 
+function fxCachePath(): string {
+  return path.join(app.getPath("userData"), "fx.json");
+}
+
+function readFxCache(): { date: string; rates: Record<string, { buy: number; sell: number }> } | null {
+  try {
+    const raw = fs.readFileSync(fxCachePath(), "utf-8");
+    const p = JSON.parse(raw);
+    if (p && p.rates && typeof p.rates === "object") return p;
+  } catch {}
+  return null;
+}
+
+function parseTcmbXml(xml: string): { date: string; rates: Record<string, { buy: number; sell: number }> } | null {
+  try {
+    const dateM = xml.match(/ Tarih="([^"]+)"/) || xml.match(/Date="([^"]+)"/);
+    const date = dateM ? dateM[1] : "";
+    const rates: Record<string, { buy: number; sell: number }> = {};
+    const blocks = xml.match(/<Currency[^>]*Kod="([A-Z]+)"[^>]*>([\s\S]*?)<\/Currency>/g) || [];
+    for (const b of blocks) {
+      const code = b.match(/Kod="([A-Z]+)"/)?.[1];
+      const buy = b.match(/<ForexBuying>([^<]*)<\/ForexBuying>/)?.[1];
+      const sell = b.match(/<ForexSelling>([^<]*)<\/ForexSelling>/)?.[1];
+      if (code && buy && sell) {
+        const nb = parseFloat(buy);
+        const ns = parseFloat(sell);
+        if (nb > 0 && ns > 0) rates[code] = { buy: nb, sell: ns };
+      }
+    }
+    if (Object.keys(rates).length === 0) return null;
+    return { date, rates };
+  } catch {
+    return null;
+  }
+}
+
+function fetchFx(): Promise<{ date: string; rates: Record<string, { buy: number; sell: number }> } | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: { date: string; rates: Record<string, { buy: number; sell: number }> } | null) => {
+      if (done) return;
+      done = true;
+      resolve(v);
+    };
+    setTimeout(() => {
+      log("TCMB zaman asimi, cache kullaniliyor");
+      finish(readFxCache());
+    }, 12000);
+    httpGet("https://www.tcmb.gov.tr/kurlar/today.xml")
+      .then((buf) => {
+        const parsed = parseTcmbXml(buf.toString("utf-8"));
+        if (parsed) {
+          try {
+            fs.writeFileSync(fxCachePath(), JSON.stringify(parsed));
+          } catch {}
+          log(`TCMB kur: ${parsed.date}, ${Object.keys(parsed.rates).length} birim`);
+          finish(parsed);
+        } else {
+          finish(readFxCache());
+        }
+      })
+      .catch((e) => {
+        log(`TCMB hatasi: ${e}`);
+        finish(readFxCache());
+      });
+  });
+}
+
 function checkForUpdates(): Promise<{ hasUpdate: boolean; version: string; notes: string; url: string } | null> {
   return new Promise((resolve) => {
     log("Guncelleme kontrol ediliyor...");
@@ -438,6 +506,10 @@ ipcMain.handle("request-update", async () => {
   const update = await checkForUpdates();
   if (!update) return "none";
   return promptAndInstall(update);
+});
+
+ipcMain.handle("get-fx", async () => {
+  return fetchFx();
 });
 
 ipcMain.handle("win-minimize", () => {

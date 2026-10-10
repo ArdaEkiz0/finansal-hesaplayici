@@ -17,13 +17,14 @@ import {
   calculateReversePercent,
   calculateKDVCompare,
   calculateCompoundInterest,
+  calculateAmortisman,
   buildBatchRows,
   type KVDRate,
   type StopajRate,
   type TevkifatPay,
 } from "../core/engine";
 
-export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare" | "batch" | "donem" | "gecikme";
+export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare" | "batch" | "donem" | "gecikme" | "amortisman" | "doviz";
 
 export interface HistoryEntry {
   id: string;
@@ -31,6 +32,7 @@ export interface HistoryEntry {
   inputs: string;
   result: string;
   detail?: string;
+  note?: string;
   timestamp: number;
   pinned: boolean;
 }
@@ -44,7 +46,7 @@ export interface CalcResult {
   rows?: { label: string; value: string; accent?: boolean }[];
 }
 
-const TWO_INPUT_MODES: CalcMode[] = ["margin", "markup", "percent", "compound", "gecikme"];
+const TWO_INPUT_MODES: CalcMode[] = ["margin", "markup", "percent", "compound", "gecikme", "amortisman"];
 export const MODE_LABELS: Record<CalcMode, string> = {
   kdv: "KDV",
   stopaj: "Stopaj",
@@ -59,6 +61,8 @@ export const MODE_LABELS: Record<CalcMode, string> = {
   batch: "Toplu",
   donem: "Dönem KDV",
   gecikme: "Gecikme",
+  amortisman: "Amortisman",
+  doviz: "Döviz",
 };
 
 export type Theme = "dark" | "light";
@@ -78,6 +82,13 @@ interface State {
   donemDevreden: string;
   activeDonemField: "satis" | "alis" | "devreden";
   gecikmeDays: string;
+  amortismanYears: string;
+  amortismanMethod: "normal" | "azalan";
+  fxRates: Record<string, { buy: number; sell: number }> | null;
+  fxDate: string;
+  fxManual: string;
+  fxCurrency: "USD" | "EUR" | "GBP";
+  fxDirection: "toTL" | "fromTL";
   kdvExtract: boolean;
   customKdvRate: string;
   useCustomRate: boolean;
@@ -112,6 +123,13 @@ interface State {
   setDonemField: (f: "satis" | "alis" | "devreden", v: string) => void;
   setActiveDonemField: (f: "satis" | "alis" | "devreden") => void;
   setGecikmeDays: (d: string) => void;
+  setAmortismanYears: (y: string) => void;
+  setAmortismanMethod: (m: "normal" | "azalan") => void;
+  setFxManual: (v: string) => void;
+  setFxCurrency: (c: "USD" | "EUR" | "GBP") => void;
+  setFxDirection: (d: "toTL" | "fromTL") => void;
+  fetchFx: () => void;
+  setHistoryNote: (id: string, note: string) => void;
   setKdvExtract: (e: boolean) => void;
   setCustomKdvRate: (v: string) => void;
   setUseCustomRate: (b: boolean) => void;
@@ -379,6 +397,43 @@ function computeInner(s: State): CalcResult | null {
         ],
       };
     }
+    case "amortisman": {
+      if (!s.secondInput) return { display: fmt(a), detail: "Amortisman oranını girin (%)" };
+      const years = Math.min(50, Math.max(1, parseInt(s.amortismanYears || "5", 10) || 5));
+      const r = calculateAmortisman(a, toDecimal(s.secondInput), years, s.amortismanMethod);
+      const methodLabel = s.amortismanMethod === "normal" ? "Normal" : "Azalan bakiyeler";
+      return {
+        display: fmt(r.toplam),
+        detail: `Amortisman — ${methodLabel}, %${formatTurkishNumber(toDecimal(s.secondInput), p)}`,
+        rows: [
+          { label: "Toplam ayrılan", value: fmt(r.toplam), accent: true },
+          { label: "Maliyet", value: fmt(a) },
+          ...r.rows.map((row) => ({
+            label: `Yıl ${row.year} (kalan ${fmt(row.kalan)})`,
+            value: fmt(row.ayrılan),
+          })),
+        ],
+      };
+    }
+    case "doviz": {
+      const manual = s.fxManual ? parseAmount(s.fxManual) : null;
+      const live = s.fxRates?.[s.fxCurrency];
+      const liveRate = live ? (s.fxDirection === "toTL" ? live.buy : live.sell) : null;
+      const rateNum = manual ? manual.toNumber() : liveRate;
+      if (!rateNum || rateNum <= 0) return { display: fmt(a), detail: "Önce kuru getirin veya elle girin" };
+      const rate = new Decimal(rateNum);
+      const out = (s.fxDirection === "toTL" ? a.mul(rate) : a.div(rate)).toDP(2);
+      const src = manual ? "Elle girilen kur" : `TCMB ${s.fxDate || ""}`.trim();
+      return {
+        display: s.fxDirection === "toTL" ? fmt(out) : formatTurkishNumber(out, p),
+        detail: `${s.fxCurrency} → TL (${s.fxDirection === "toTL" ? "alış" : "satış"}) • ${src}`,
+        rows: [
+          { label: "Sonuç", value: s.fxDirection === "toTL" ? fmt(out) : formatTurkishNumber(out, p), accent: true },
+          { label: "Girdi", value: formatTurkishNumber(a, p) + (s.fxDirection === "toTL" ? ` ${s.fxCurrency}` : " ₺") },
+          { label: `Kur (1 ${s.fxCurrency})`, value: formatTurkishNumber(rate, 4) + " ₺" },
+        ],
+      };
+    }
     case "kdvCompare": {
       const r = calculateKDVCompare(a, s.kdvRate);
       return {
@@ -474,6 +529,13 @@ export const useStore = create<State>((set, get) => ({
   donemDevreden: "",
   activeDonemField: "satis" as "satis" | "alis" | "devreden",
   gecikmeDays: "30",
+  amortismanYears: "5",
+  amortismanMethod: "normal" as "normal" | "azalan",
+  fxRates: null,
+  fxDate: "",
+  fxManual: "",
+  fxCurrency: "USD" as "USD" | "EUR" | "GBP",
+  fxDirection: "toTL" as "toTL" | "fromTL",
   kdvExtract: false,
   customKdvRate: "",
   useCustomRate: false,
@@ -534,6 +596,55 @@ export const useStore = create<State>((set, get) => ({
     const s = get();
     if (s.input) set({ result: compute({ ...s, gecikmeDays: clean }) });
   },
+  setAmortismanYears: (amortismanYears) => {
+    const clean = amortismanYears.replace(/[^0-9]/g, "").slice(0, 2);
+    set({ amortismanYears: clean });
+    const s = get();
+    if (s.input) set({ result: compute({ ...s, amortismanYears: clean }) });
+  },
+  setAmortismanMethod: (amortismanMethod) => {
+    set({ amortismanMethod });
+    const s = get();
+    if (s.input) set({ result: compute({ ...s, amortismanMethod }) });
+  },
+  setFxManual: (fxManual) => {
+    const clean = fxManual.replace(/[^0-9.,]/g, "").replace(/,/g, ".").slice(0, 12);
+    set({ fxManual: clean });
+    const s = get();
+    if (s.input) set({ result: compute({ ...s, fxManual: clean }) });
+  },
+  setFxCurrency: (fxCurrency) => {
+    set({ fxCurrency });
+    const s = get();
+    if (s.input) set({ result: compute({ ...s, fxCurrency }) });
+  },
+  setFxDirection: (fxDirection) => {
+    set({ fxDirection });
+    const s = get();
+    if (s.input) set({ result: compute({ ...s, fxDirection }) });
+  },
+  fetchFx: async () => {
+    const api = window.electronAPI;
+    if (!api?.getFx) {
+      get().notify("Kurlar masaüstü uygulamasında alınır", "info");
+      return;
+    }
+    get().notify("TCMB kurları alınıyor...", "info");
+    try {
+      const fx = await api.getFx();
+      if (fx?.rates) {
+        set({ fxRates: fx.rates, fxDate: fx.date || "" });
+        const s = get();
+        if (s.input) set({ result: compute(s) });
+        get().notify(`Kurlar güncellendi (${fx.date || "bugün"})`, "success");
+      } else {
+        get().notify("Kur alınamadı, elle girebilirsiniz", "error");
+      }
+    } catch {
+      get().notify("Kur alınamadı, elle girebilirsiniz", "error");
+    }
+  },
+  setHistoryNote: (id, note) => set((s) => ({ history: s.history.map((e) => (e.id === id ? { ...e, note } : e)) })),
   setTevkifatPay: (tevkifatPay) => { set({ tevkifatPay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatPay }) }); },
   setTevkifatCode: (tevkifatCode, pay) => { set({ tevkifatCode, tevkifatPay: pay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatCode, tevkifatPay: pay }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
   setKdvExtract: (kdvExtract) => { set({ kdvExtract }); const s = get(); if (s.input) set({ result: compute({ ...s, kdvExtract }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
@@ -783,8 +894,8 @@ export const useStore = create<State>((set, get) => ({
     const { history } = get();
     if (history.length === 0) return;
     const rows = [
-      "Tarih,Mod,Girdiler,Sonuç,Açıklama",
-      ...history.map((e) => `"${new Date(e.timestamp).toLocaleString("tr-TR")}","${MODE_LABELS[e.mode]}","${e.inputs}","${e.result}","${e.detail || ""}"`),
+      "Tarih,Mod,Girdiler,Sonuç,Açıklama,Etiket",
+      ...history.map((e) => `"${new Date(e.timestamp).toLocaleString("tr-TR")}","${MODE_LABELS[e.mode]}","${e.inputs}","${e.result}","${e.detail || ""}","${e.note || ""}"`),
     ];
     const blob = new Blob(["﻿" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
