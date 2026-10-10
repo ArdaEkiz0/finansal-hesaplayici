@@ -1,5 +1,5 @@
 import { useStore } from "../store/useStore";
-import { Minus, Square, Copy, X, Settings, HelpCircle, Calculator, ReceiptText } from "lucide-react";
+import { Minus, Square, Copy, X, Settings, HelpCircle, Calculator, ReceiptText, BookOpen } from "lucide-react";
 import { useState, useEffect } from "react";
 
 export function TitleBar() {
@@ -7,6 +7,7 @@ export function TitleBar() {
   const toggleHelp = useStore((s) => s.toggleHelp);
   const toggleSettings = useStore((s) => s.toggleSettings);
   const toggleInvoice = useStore((s) => s.toggleInvoice);
+  const toggleRates = useStore((s) => s.toggleRates);
   const result = useStore((s) => s.result);
   const [isMax, setIsMax] = useState(false);
   const [noBridge, setNoBridge] = useState(false);
@@ -52,6 +53,10 @@ export function TitleBar() {
         <button title="Fatura önizleme" onClick={toggleInvoice} disabled={!result} className={toolBtn}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", opacity: result ? 1 : 0.4 }}>
           <ReceiptText size={15} /> <span className="hidden md:inline">Fatura</span>
+        </button>
+        <button title="2026 pratik oranlar" onClick={toggleRates} className={toolBtn}
+          style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
+          <BookOpen size={15} /> <span className="hidden md:inline">Oranlar</span>
         </button>
         <button title="Yardım (F1)" onClick={toggleHelp} className={toolBtn}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>

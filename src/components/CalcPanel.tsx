@@ -1,4 +1,4 @@
-import { useStore } from "../store/useStore";
+import { useStore, MODE_LABELS } from "../store/useStore";
 import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X, Search } from "lucide-react";
 import { useState } from "react";
 import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT_2026, RATE_DISCLAIMER } from "../data/tax";
@@ -9,6 +9,7 @@ const TWO_LABELS: Record<string, [string, string]> = {
   markup: ["Maliyet (₺)", "Kâr oranı (%)"],
   percent: ["Yüzde (%)", "Tutar"],
   compound: ["Ana para (₺)", "Yıllık faiz (%)"],
+  gecikme: ["Anapara (₺)", "Aylık oran (%)"],
 };
 
 export function CalcPanel() {
@@ -28,6 +29,16 @@ export function CalcPanel() {
   const setKdvRate = useStore((s) => s.setKdvRate);
   const stopajRate = useStore((s) => s.stopajRate);
   const setStopajRate = useStore((s) => s.setStopajRate);
+  const stopajDirection = useStore((s) => s.stopajDirection);
+  const setStopajDirection = useStore((s) => s.setStopajDirection);
+  const donemSatis = useStore((s) => s.donemSatis);
+  const donemAlis = useStore((s) => s.donemAlis);
+  const donemDevreden = useStore((s) => s.donemDevreden);
+  const activeDonemField = useStore((s) => s.activeDonemField);
+  const setDonemField = useStore((s) => s.setDonemField);
+  const setActiveDonemField = useStore((s) => s.setActiveDonemField);
+  const gecikmeDays = useStore((s) => s.gecikmeDays);
+  const setGecikmeDays = useStore((s) => s.setGecikmeDays);
   const tevkifatPay = useStore((s) => s.tevkifatPay);
   const setTevkifatPay = useStore((s) => s.setTevkifatPay);
   const tevkifatCode = useStore((s) => s.tevkifatCode);
@@ -45,6 +56,8 @@ export function CalcPanel() {
   const setBatchInput = useStore((s) => s.setBatchInput);
   const batchInput = useStore((s) => s.batchInput);
   const batchResult = useStore((s) => s.batchResult);
+  const batchKind = useStore((s) => s.batchKind);
+  const setBatchKind = useStore((s) => s.setBatchKind);
   const compoundYears = useStore((s) => s.compoundYears);
   const setCompoundYears = useStore((s) => s.setCompoundYears);
   const compoundFrequency = useStore((s) => s.compoundFrequency);
@@ -75,7 +88,7 @@ export function CalcPanel() {
 
   return (
     <section className="card p-4 gap-4 min-w-0 h-full flex flex-col min-h-[540px]">
-      {(mode === "kdv" || mode === "tevkifat" || mode === "kdvCompare" || mode === "fiyat") && (
+      {(mode === "kdv" || mode === "tevkifat" || mode === "kdvCompare" || mode === "fiyat" || mode === "donem" || mode === "batch") && (
         <div className="space-y-2">
           <div className="flex gap-1.5">
             {([1, 10, 20] as const).map((r) => (
@@ -91,6 +104,19 @@ export function CalcPanel() {
               className="w-[86px] px-2 py-2 rounded-xl text-[13px] font-bold text-center focus-ring"
               style={{ background: useCustomRate ? "rgba(47,123,255,.14)" : "var(--color-glass)", border: useCustomRate ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
           </div>
+          {mode === "batch" && (
+            <div className="flex gap-1.5">
+              {(["kdv", "stopaj", "tevkifat", "fiyat"] as const).map((k) => (
+                <button key={k} onClick={() => setBatchKind(k)}
+                  className="flex-1 py-1.5 rounded-lg text-[11px] font-bold btn-press"
+                  style={batchKind === k
+                    ? { background: "var(--color-primary)", color: "#fff" }
+                    : { background: "transparent", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                  {MODE_LABELS[k]}
+                </button>
+              ))}
+            </div>
+          )}
           {(mode === "kdv" || mode === "fiyat") && (
             <div className="flex gap-1.5">
               {([{ v: false, l: "Hariçten Dahil (+KDV)" }, { v: true, l: "Dahilden Hariç (−KDV)" }] as const).map((o) => (
@@ -153,6 +179,17 @@ export function CalcPanel() {
 
       {mode === "stopaj" && (
         <div className="space-y-2">
+          <div className="flex gap-1.5">
+            {([{ v: "brutten", l: "Brütten Net" }, { v: "netten", l: "Netten Brüt" }] as const).map((o) => (
+              <button key={o.v} onClick={() => setStopajDirection(o.v)}
+                className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold btn-press"
+                style={stopajDirection === o.v
+                  ? { background: "rgba(22,185,129,.16)", color: "var(--color-success)", border: "1px solid var(--color-success)" }
+                  : { background: "transparent", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                {o.l}
+              </button>
+            ))}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {STOPAJ_PRESETS.map((preset) => (
               <button key={preset.label} title={preset.note} onClick={() => setStopajRate(preset.rate)}
@@ -211,7 +248,24 @@ export function CalcPanel() {
         </div>
       )}
 
-      {isDiscount ? (
+      {isBatch ? null : mode === "donem" ? (
+        <div className="space-y-2">
+          {(([
+            ["satis", "Satış matrahları toplamı (₺)", donemSatis],
+            ["alis", "Alış matrahları toplamı (₺)", donemAlis],
+            ["devreden", "Geçen aydan devreden KDV (₺)", donemDevreden],
+          ]) as ["satis" | "alis" | "devreden", string, string][]).map(([f, label, val]) => (
+            <div key={f} className="space-y-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>{label}</label>
+              <input value={val} onChange={(e) => setDonemField(f, e.target.value)} placeholder="0" inputMode="decimal"
+                onFocus={() => setActiveDonemField(f)}
+                className="num-display w-full px-3 py-2.5 rounded-xl text-right font-bold text-[18px] focus-ring"
+                style={{ background: "var(--color-glass)", border: activeDonemField === f ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+            </div>
+          ))}
+          <p className="text-[10px] px-1" style={{ color: "var(--color-text-ghost)" }}>Satış ve alış matrahları aynı KDV oranıyla hesaplanır.</p>
+        </div>
+      ) : isDiscount ? (
         <div className="space-y-2">
           <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>{mode === "fiyat" ? "Etiket fiyatı (₺)" : "Ana tutar (₺)"}</label>
           <input value={input} onChange={(e) => setInputDirect(e.target.value)} placeholder="0" inputMode="decimal" autoFocus
@@ -252,6 +306,14 @@ export function CalcPanel() {
               className="num-display w-full px-3 py-2.5 rounded-xl text-right font-bold text-[18px] focus-ring"
               style={{ background: "var(--color-glass)", border: activeField === "second" ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
           </div>
+          {mode === "gecikme" && (
+            <div className="col-span-2 flex items-center gap-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider shrink-0" style={{ color: "var(--color-text-ghost)" }}>Gün</label>
+              <input value={gecikmeDays} onChange={(e) => setGecikmeDays(e.target.value)} placeholder="30" inputMode="decimal"
+                className="w-[90px] px-3 py-2 rounded-xl text-center text-[13px] font-bold focus-ring" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+              <span className="text-[10px]" style={{ color: "var(--color-text-ghost)" }}>Basit orantı (gün/30) • resmî takvimi teyit edin</span>
+            </div>
+          )}
           {mode === "compound" && (
             <div className="col-span-2 flex gap-2">
               <input value={compoundYears} onChange={(e) => setCompoundYears(e.target.value)} placeholder="Yıl" inputMode="decimal"
@@ -276,6 +338,12 @@ export function CalcPanel() {
         </div>
       )}
 
+      {isBatch ? (
+        <button onClick={confirmInput} disabled={!batchResult} className="h-11 rounded-xl flex items-center justify-center gap-1.5 font-semibold text-[13px] btn-press"
+          style={{ background: batchResult ? "var(--color-primary)" : "var(--color-glass)", color: batchResult ? "#fff" : "var(--color-text-ghost)", opacity: batchResult ? 1 : 0.5 }}>
+          <CornerDownLeft size={13} /> Kaydet{batchResult ? ` (${batchResult.validCount} satır)` : ""}
+        </button>
+      ) : (
       <div className="grid grid-cols-3 gap-1.5">
         <button onClick={clearAll} className="h-11 rounded-xl flex items-center justify-center gap-1.5 font-semibold text-[13px] btn-press" style={{ background: "var(--color-glass)", color: "var(--color-error)", border: "1px solid var(--color-glass-border)" }}>
           <RotateCcw size={13} /> Sıfırla
@@ -283,7 +351,7 @@ export function CalcPanel() {
         <button onClick={deleteLast} className="h-11 rounded-xl flex items-center justify-center btn-press" style={{ background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
           <Delete size={17} />
         </button>
-        {(isTwo || isDiscount) ? (
+        {(isTwo || isDiscount) && mode !== "donem" ? (
           <button onClick={() => (activeField === "first" ? switchField() : confirmInput())} className="h-11 rounded-xl flex items-center justify-center gap-1.5 font-semibold text-[13px] btn-press" style={{ background: "var(--color-primary)", color: "#fff" }}>
             {activeField === "first" ? (<><ArrowRight size={13} /> Sonraki</>) : (<><CornerDownLeft size={13} /> Kaydet</>)}
           </button>
@@ -293,7 +361,9 @@ export function CalcPanel() {
           </button>
         )}
       </div>
+      )}
 
+      {!isBatch && (
       <div className="card-soft p-2 flex-1 min-h-0 flex flex-col gap-1.5">
         {showOps && (
           <div className="grid grid-cols-4 gap-1.5">
@@ -316,6 +386,7 @@ export function CalcPanel() {
           ))}
         </div>
       </div>
+      )}
     </section>
   );
 }

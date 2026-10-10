@@ -105,6 +105,16 @@ export function calculateStopaj(gross: Decimal, rate: StopajRate): TaxResult {
   return { taxAmount: tax.toDP(2), total: gross.toDP(2), netAmount: net.toDP(2) };
 }
 
+export function calculateStopajReverse(net: Decimal, rate: StopajRate): TaxResult {
+  const divisor = new Decimal(1).minus(new Decimal(rate).div(100));
+  if (divisor.isZero() || divisor.isNeg()) {
+    return { taxAmount: new Decimal(0), total: net.toDP(2), netAmount: net.toDP(2) };
+  }
+  const gross = net.div(divisor);
+  const tax = gross.minus(net);
+  return { taxAmount: tax.toDP(2), total: gross.toDP(2), netAmount: net.toDP(2) };
+}
+
 export function calculateTevkifat(matrah: Decimal, kdvRate: KVDRate, pay: TevkifatPay): TevkifatResult {
   const kdv = matrah.mul(kdvRate).div(100).toDP(2);
   const tevkifat = kdv.mul(pay).div(10).toDP(2);

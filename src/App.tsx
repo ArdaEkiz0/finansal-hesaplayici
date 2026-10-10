@@ -9,6 +9,7 @@ import { Settings } from "./components/Settings";
 import { Help } from "./components/Help";
 import { Notification } from "./components/Notification";
 import { Widget } from "./components/Widget";
+import { RatesInfo } from "./components/RatesInfo";
 import { WidgetWindow } from "./components/WidgetWindow";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { useStore } from "./store/useStore";
@@ -43,6 +44,7 @@ function MainApp() {
 
       <Settings />
       <Help />
+      <RatesInfo />
       <Notification />
       <Widget />
       <InvoicePreview />

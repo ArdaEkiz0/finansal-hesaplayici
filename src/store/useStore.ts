@@ -7,6 +7,7 @@ import {
   formatTurkishNumber,
   calculateKDV,
   calculateStopaj,
+  calculateStopajReverse,
   calculateTevkifat,
   calculateMargin,
   calculateMarkup,
@@ -22,7 +23,7 @@ import {
   type TevkifatPay,
 } from "../core/engine";
 
-export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare" | "batch";
+export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare" | "batch" | "donem" | "gecikme";
 
 export interface HistoryEntry {
   id: string;
@@ -43,7 +44,7 @@ export interface CalcResult {
   rows?: { label: string; value: string; accent?: boolean }[];
 }
 
-const TWO_INPUT_MODES: CalcMode[] = ["margin", "markup", "percent", "compound"];
+const TWO_INPUT_MODES: CalcMode[] = ["margin", "markup", "percent", "compound", "gecikme"];
 export const MODE_LABELS: Record<CalcMode, string> = {
   kdv: "KDV",
   stopaj: "Stopaj",
@@ -56,6 +57,8 @@ export const MODE_LABELS: Record<CalcMode, string> = {
   compound: "Bileşik",
   kdvCompare: "Karşılaştır",
   batch: "Toplu",
+  donem: "Dönem KDV",
+  gecikme: "Gecikme",
 };
 
 export type Theme = "dark" | "light";
@@ -67,8 +70,14 @@ interface State {
   mode: CalcMode;
   kdvRate: KVDRate;
   stopajRate: StopajRate;
+  stopajDirection: "brutten" | "netten";
   tevkifatPay: TevkifatPay;
   tevkifatCode: string;
+  donemSatis: string;
+  donemAlis: string;
+  donemDevreden: string;
+  activeDonemField: "satis" | "alis" | "devreden";
+  gecikmeDays: string;
   kdvExtract: boolean;
   customKdvRate: string;
   useCustomRate: boolean;
@@ -79,9 +88,11 @@ interface State {
   compoundYears: string;
   compoundFrequency: number;
   batchInput: string;
+  batchKind: "kdv" | "stopaj" | "tevkifat" | "fiyat";
   batchResult: { rows: { inputs: string; result: string; detail?: string }[]; totals: { base?: string; tax?: string; main?: string }; validCount: number } | null;
   showSettings: boolean;
   showHelp: boolean;
+  showRates: boolean;
   showWidget: boolean;
   showInvoice: boolean;
   theme: Theme;
@@ -89,13 +100,18 @@ interface State {
   notification: { id: number; message: string; type: "success" | "error" | "info" } | null;
 
   setBatchInput: (v: string) => void;
+  setBatchKind: (k: "kdv" | "stopaj" | "tevkifat" | "fiyat") => void;
   setMode: (m: CalcMode) => void;
   setInputDirect: (v: string) => void;
   setSecondInputDirect: (v: string) => void;
   setKdvRate: (r: KVDRate) => void;
   setStopajRate: (r: StopajRate) => void;
+  setStopajDirection: (d: "brutten" | "netten") => void;
   setTevkifatPay: (p: TevkifatPay) => void;
   setTevkifatCode: (code: string, pay: TevkifatPay) => void;
+  setDonemField: (f: "satis" | "alis" | "devreden", v: string) => void;
+  setActiveDonemField: (f: "satis" | "alis" | "devreden") => void;
+  setGecikmeDays: (d: string) => void;
   setKdvExtract: (e: boolean) => void;
   setCustomKdvRate: (v: string) => void;
   setUseCustomRate: (b: boolean) => void;
@@ -111,6 +127,7 @@ interface State {
   setCompoundFrequency: (f: number) => void;
   toggleSettings: () => void;
   toggleHelp: () => void;
+  toggleRates: () => void;
   toggleWidget: () => void;
   toggleInvoice: () => void;
   setTheme: (t: Theme) => void;
@@ -205,10 +222,22 @@ function computeInner(s: State): CalcResult | null {
       };
     }
     case "stopaj": {
+      if (s.stopajDirection === "netten") {
+        const r = calculateStopajReverse(a, s.stopajRate);
+        return {
+          display: fmt(r.total),
+          detail: `Netten Brüt — %${s.stopajRate} Stopaj`,
+          rows: [
+            { label: "Brüt", value: fmt(r.total), accent: true },
+            { label: "Net (girdiğiniz)", value: fmt(a) },
+            { label: `%${s.stopajRate} Kesinti`, value: fmt(r.taxAmount) },
+          ],
+        };
+      }
       const r = calculateStopaj(a, s.stopajRate);
       return {
         display: fmt(r.netAmount),
-        detail: `%${s.stopajRate} Stopaj`,
+        detail: `Brütten Net — %${s.stopajRate} Stopaj`,
         rows: [
           { label: "Net Ödenen", value: fmt(r.netAmount), accent: true },
           { label: `%${s.stopajRate} Kesinti`, value: fmt(r.taxAmount) },
@@ -334,6 +363,22 @@ function computeInner(s: State): CalcResult | null {
         ],
       };
     }
+    case "gecikme": {
+      if (!s.secondInput) return { display: fmt(a), detail: "Aylık gecikme oranını girin (%)" };
+      const rate = toDecimal(s.secondInput);
+      const days = toDecimal(s.gecikmeDays || "0");
+      const interest = a.mul(rate).div(100).mul(days).div(30).toDP(2);
+      const total = a.plus(interest).toDP(2);
+      return {
+        display: fmt(total),
+        detail: `Gecikme — %${formatTurkishNumber(rate, p)} aylık, ${formatTurkishNumber(days, 0)} gün`,
+        rows: [
+          { label: "Toplam (anapara + faiz)", value: fmt(total), accent: true },
+          { label: "Anapara", value: fmt(a) },
+          { label: "Gecikme faizi", value: fmt(interest) },
+        ],
+      };
+    }
     case "kdvCompare": {
       const r = calculateKDVCompare(a, s.kdvRate);
       return {
@@ -351,9 +396,40 @@ function computeInner(s: State): CalcResult | null {
   }
 }
 
+function computeDonem(s: State): CalcResult | null {
+  if (!s.donemSatis && !s.donemAlis && !s.donemDevreden) return null;
+  const p = s.settings.precision;
+  const fmt = s.settings.showCurrencySymbol
+    ? (v: Decimal) => formatTurkishNumber(v, p) + " ₺"
+    : (v: Decimal) => formatTurkishNumber(v, p);
+  const satis = parseAmount(s.donemSatis || "") ?? new Decimal(0);
+  const alis = parseAmount(s.donemAlis || "") ?? new Decimal(0);
+  const devr = parseAmount(s.donemDevreden || "") ?? new Decimal(0);
+  const eff = effectiveKdvRate(s);
+  const hesaplanan = satis.mul(eff).div(100).toDP(2);
+  const indirilecek = alis.mul(eff).div(100).toDP(2);
+  const net = hesaplanan.minus(indirilecek).minus(devr).toDP(2);
+  const odenecek = !net.isNeg();
+  const main = net.abs().toDP(2);
+  return {
+    display: fmt(main),
+    detail: `Dönem — %${eff.toString()} • ${odenecek ? "Ödenecek KDV" : "Devreden KDV"}`,
+    rows: [
+      { label: odenecek ? "Ödenecek KDV" : "Devreden KDV", value: fmt(main), accent: true },
+      { label: "Satış matrahı", value: fmt(satis) },
+      { label: "Hesaplanan KDV", value: fmt(hesaplanan) },
+      { label: "Alış matrahı", value: fmt(alis) },
+      { label: "İndirilecek KDV", value: fmt(indirilecek) },
+      { label: "Önceki devreden", value: fmt(devr) },
+    ],
+  };
+}
+
 const EXPR_MODES: CalcMode[] = ["kdv", "stopaj", "tevkifat", "kdvCompare", "fiyat"];
 
 function compute(s: State): CalcResult | null {
+  if (s.mode === "donem") return computeDonem(s);
+  if (s.mode === "batch") return null;
   const r = computeInner(s);
   if (r?.rows && /[+\-*/()%]/.test(s.input) && EXPR_MODES.includes(s.mode)) {
     const a = parseAmount(s.input);
@@ -363,6 +439,20 @@ function compute(s: State): CalcResult | null {
     }
   }
   return r;
+}
+
+function refreshBatch(s: State): { batchResult: State["batchResult"] } {
+  const lines = s.batchInput.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length < 2) return { batchResult: null };
+  const r = buildBatchRows(s.batchInput, {
+    mode: s.batchKind,
+    kdvRate: effectiveKdvRate(s),
+    kdvExtract: s.kdvExtract,
+    stopajRate: s.stopajRate,
+    tevkifatPay: s.tevkifatPay,
+    precision: s.settings.precision,
+  });
+  return { batchResult: r.validCount >= 2 ? r : null };
 }
 
 const persisted = loadState();
@@ -376,8 +466,14 @@ export const useStore = create<State>((set, get) => ({
   mode: "kdv",
   kdvRate: 20,
   stopajRate: 15,
+  stopajDirection: "brutten" as "brutten" | "netten",
   tevkifatPay: 5,
   tevkifatCode: "",
+  donemSatis: "",
+  donemAlis: "",
+  donemDevreden: "",
+  activeDonemField: "satis" as "satis" | "alis" | "devreden",
+  gecikmeDays: "30",
   kdvExtract: false,
   customKdvRate: "",
   useCustomRate: false,
@@ -388,9 +484,11 @@ export const useStore = create<State>((set, get) => ({
   compoundYears: "1",
   compoundFrequency: 12,
   batchInput: "",
+  batchKind: "kdv" as "kdv" | "stopaj" | "tevkifat" | "fiyat",
   batchResult: null,
   showSettings: false,
   showHelp: false,
+  showRates: false,
   showWidget: false,
   showInvoice: false,
   theme: (persisted?.theme as Theme) ?? "dark",
@@ -400,22 +498,15 @@ export const useStore = create<State>((set, get) => ({
   setBatchInput: (batchInput) => {
     const s = get();
     const clean = batchInput.replace(/[^\d.,+\-*/()\r\n\s]/g, "").slice(0, 4000);
-    let batchResult = null;
-    const lines = clean.split(/\r?\n/).filter((l) => l.trim() !== "");
-    if (lines.length >= 2 && (s.mode === "kdv" || s.mode === "stopaj" || s.mode === "tevkifat" || s.mode === "fiyat")) {
-      const r = buildBatchRows(clean, {
-        mode: s.mode,
-        kdvRate: effectiveKdvRate(s),
-        kdvExtract: s.kdvExtract,
-        stopajRate: s.stopajRate,
-        tevkifatPay: s.tevkifatPay,
-        precision: s.settings.precision,
-      });
-      if (r.validCount >= 2) batchResult = r;
-    }
-    set({ batchInput: clean, batchResult });
+    set({ batchInput: clean });
+    set(refreshBatch({ ...get(), batchInput: clean }));
   },
-  setMode: (mode) => set({ mode, input: "", secondInput: "", result: null, activeField: "first", discountInputs: ["", ""], activeDiscountIndex: 0, batchInput: "", batchResult: null }),
+  setBatchKind: (batchKind) => {
+    set({ batchKind });
+    const s = get();
+    if (s.batchInput) set(refreshBatch({ ...s, batchKind }));
+  },
+  setMode: (mode) => set({ mode, input: "", secondInput: "", result: null, activeField: "first", discountInputs: ["", ""], activeDiscountIndex: 0, batchInput: "", batchResult: null, donemSatis: "", donemAlis: "", donemDevreden: "", activeDonemField: "satis" }),
   setInputDirect: (v) => {
     const s = get();
     const clean = v.replace(/[^0-9.,+\-*/()]/g, "").replace(/,/g, ".").slice(0, 30);
@@ -426,11 +517,26 @@ export const useStore = create<State>((set, get) => ({
     const clean = v.replace(/[^0-9.,]/g, "").replace(/,/g, ".");
     set({ secondInput: clean, result: compute({ ...s, secondInput: clean }) });
   },
-  setKdvRate: (kdvRate) => { set({ kdvRate, useCustomRate: false }); const s = get(); if (s.input || s.mode === "discount" || s.mode === "fiyat") set({ result: compute({ ...s, kdvRate, useCustomRate: false }) }); },
-  setStopajRate: (stopajRate) => { set({ stopajRate }); const s = get(); if (s.input) set({ result: compute({ ...s, stopajRate }) }); },
+  setKdvRate: (kdvRate) => { set({ kdvRate, useCustomRate: false }); const s = get(); if (s.input || s.mode === "discount" || s.mode === "fiyat") set({ result: compute({ ...s, kdvRate, useCustomRate: false }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
+  setStopajRate: (stopajRate) => { set({ stopajRate }); const s = get(); if (s.input) set({ result: compute({ ...s, stopajRate }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
+  setStopajDirection: (stopajDirection) => { set({ stopajDirection }); const s = get(); if (s.input) set({ result: compute({ ...s, stopajDirection }) }); },
+  setDonemField: (f, v) => {
+    const clean = v.replace(/[^0-9.,+\-*/()]/g, "").replace(/,/g, ".").slice(0, 30);
+    const key = f === "satis" ? "donemSatis" : f === "alis" ? "donemAlis" : "donemDevreden";
+    set({ [key]: clean } as Partial<State>);
+    const s = get();
+    set({ result: compute({ ...s, [key]: clean } as State) });
+  },
+  setActiveDonemField: (activeDonemField) => set({ activeDonemField }),
+  setGecikmeDays: (gecikmeDays) => {
+    const clean = gecikmeDays.replace(/[^0-9.]/g, "").slice(0, 6);
+    set({ gecikmeDays: clean });
+    const s = get();
+    if (s.input) set({ result: compute({ ...s, gecikmeDays: clean }) });
+  },
   setTevkifatPay: (tevkifatPay) => { set({ tevkifatPay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatPay }) }); },
-  setTevkifatCode: (tevkifatCode, pay) => { set({ tevkifatCode, tevkifatPay: pay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatCode, tevkifatPay: pay }) }); },
-  setKdvExtract: (kdvExtract) => { set({ kdvExtract }); const s = get(); if (s.input) set({ result: compute({ ...s, kdvExtract }) }); },
+  setTevkifatCode: (tevkifatCode, pay) => { set({ tevkifatCode, tevkifatPay: pay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatCode, tevkifatPay: pay }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
+  setKdvExtract: (kdvExtract) => { set({ kdvExtract }); const s = get(); if (s.input) set({ result: compute({ ...s, kdvExtract }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
   setCustomKdvRate: (customKdvRate) => {
     const clean = customKdvRate.replace(/[^0-9.,]/g, "").replace(/,/g, ".");
     set({ customKdvRate: clean, useCustomRate: clean !== "" });
@@ -442,6 +548,19 @@ export const useStore = create<State>((set, get) => ({
   appendDigit: (digit) => {
     const s = get();
     const isOp = digit === "+" || digit === "-" || digit === "*" || digit === "/";
+    if (s.mode === "donem") {
+      const key = s.activeDonemField === "satis" ? "donemSatis" : s.activeDonemField === "alis" ? "donemAlis" : "donemDevreden";
+      const cur = (s[key] ?? "") as string;
+      if (digit === ".") {
+        const seg = cur.split(/[+\-*/()]/).pop() ?? "";
+        if (seg.includes(".")) return;
+      }
+      const v = (cur + digit).slice(0, 30);
+      set({ [key]: v } as Partial<State>);
+      const ns = get();
+      set({ result: compute({ ...ns, [key]: v } as State) });
+      return;
+    }
     const segHasDot = (cur: string) => {
       const seg = cur.split(/[+\-*/()]/).pop() ?? "";
       return seg.includes(".");
@@ -476,6 +595,14 @@ export const useStore = create<State>((set, get) => ({
 
   deleteLast: () => {
     const s = get();
+    if (s.mode === "donem") {
+      const key = s.activeDonemField === "satis" ? "donemSatis" : s.activeDonemField === "alis" ? "donemAlis" : "donemDevreden";
+      const v = ((s[key] ?? "") as string).slice(0, -1);
+      set({ [key]: v } as Partial<State>);
+      const ns = get();
+      set({ result: compute({ ...ns, [key]: v } as State) });
+      return;
+    }
     if ((s.mode === "discount" || s.mode === "fiyat") && s.activeField !== "first") {
       const d = [...s.discountInputs];
       d[s.activeDiscountIndex] = (d[s.activeDiscountIndex] ?? "").slice(0, -1);
@@ -492,10 +619,14 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  clearAll: () => set({ input: "", secondInput: "", result: null, activeField: "first", discountInputs: ["", ""], activeDiscountIndex: 0 }),
+  clearAll: () => set({ input: "", secondInput: "", result: null, activeField: "first", discountInputs: ["", ""], activeDiscountIndex: 0, donemSatis: "", donemAlis: "", donemDevreden: "", activeDonemField: "satis" }),
 
   switchField: () => {
     const s = get();
+    if (s.mode === "donem") {
+      set({ activeDonemField: s.activeDonemField === "satis" ? "alis" : s.activeDonemField === "alis" ? "devreden" : "satis" });
+      return;
+    }
     if (s.mode === "discount" || s.mode === "fiyat") {
       set({ activeField: s.activeField === "first" ? "second" : "first" });
       return;
@@ -506,6 +637,30 @@ export const useStore = create<State>((set, get) => ({
 
   confirmInput: () => {
     const s = get();
+    if (s.mode === "donem") {
+      if (s.result && s.result.display !== "—" && (s.donemSatis || s.donemAlis || s.donemDevreden)) {
+        const entry: HistoryEntry = {
+          id: Date.now().toString(), mode: s.mode,
+          inputs: `Satış ${s.donemSatis || "0"} / Alış ${s.donemAlis || "0"} / Devreden ${s.donemDevreden || "0"}`,
+          result: s.result.display, detail: s.result.detail, timestamp: Date.now(), pinned: false,
+        };
+        set({ history: [entry, ...s.history].slice(0, 100), donemSatis: "", donemAlis: "", donemDevreden: "", activeDonemField: "satis", result: null });
+        get().notify("Kaydedildi", "success");
+      }
+      return;
+    }
+    if (s.mode === "batch") {
+      if (s.batchResult && s.batchResult.validCount >= 2) {
+        const entry: HistoryEntry = {
+          id: Date.now().toString(), mode: s.mode,
+          inputs: `${s.batchResult.validCount} satır toplu`,
+          result: s.batchResult.totals.main ?? "", detail: `Matrah ${s.batchResult.totals.base} • Vergi ${s.batchResult.totals.tax}`, timestamp: Date.now(), pinned: false,
+        };
+        set({ history: [entry, ...s.history].slice(0, 100), batchInput: "", batchResult: null });
+        get().notify("Kaydedildi", "success");
+      }
+      return;
+    }
     if (s.mode === "fiyat") {
       if (s.result && s.input && s.result.display !== "—") {
         const eff = effectiveKdvRate(s);
@@ -580,6 +735,7 @@ export const useStore = create<State>((set, get) => ({
 
   toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
   toggleHelp: () => set((s) => ({ showHelp: !s.showHelp })),
+  toggleRates: () => set((s) => ({ showRates: !s.showRates })),
   toggleWidget: () => {
     if (window.electronAPI?.widgetToggle) {
       window.electronAPI.widgetToggle();
