@@ -1,8 +1,9 @@
 import { useStore, MODE_LABELS } from "../store/useStore";
-import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X, Search, Users, FolderArchive } from "lucide-react";
-import { useState } from "react";
+import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X, Search, Users, FolderArchive, FileUp } from "lucide-react";
+import { useState, useRef } from "react";
 import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT_2026, RATE_DISCLAIMER } from "../data/tax";
 import { donemAd, kalanDevreden } from "../data/donem";
+import { parseEfaturaCsv } from "../data/efatura";
 import { parseAmount, formatTurkishNumber } from "../core/engine";
 
 const TWO_LABELS: Record<string, [string, string]> = {
@@ -61,6 +62,32 @@ export function CalcPanel() {
   const arsivleDonem = useStore((s) => s.arsivleDonem);
   const toggleDonemler = useStore((s) => s.toggleDonemler);
   const toggleCariler = useStore((s) => s.toggleCariler);
+  const notify = useStore((s) => s.notify);
+  const csvRef = useRef<HTMLInputElement>(null);
+  const [csvInfo, setCsvInfo] = useState<string>("");
+
+  const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const p = parseEfaturaCsv(String(reader.result ?? ""), f.name);
+        if (p.count === 0) {
+          setCsvInfo("");
+          notify("CSV'de matrah bulunamadı — sütunlar Matrah/KDV adlıysa tanınır", "error");
+          return;
+        }
+        setBatchInput(p.rows.join("\n"));
+        setCsvInfo(`${f.name}: ${p.count} matrah aktarıldı${p.skipped ? `, ${p.skipped} satır atlandı` : ""}${p.matrahSutun ? ` (sütun: ${p.matrahSutun})` : ""}`);
+        notify(`${p.count} satır yüklendi`, "success");
+      } catch {
+        notify("CSV okunamadı", "error");
+      }
+    };
+    reader.readAsText(f, "utf-8");
+    e.target.value = "";
+  };
   const tevkifatPay = useStore((s) => s.tevkifatPay);
   const setTevkifatPay = useStore((s) => s.setTevkifatPay);
   const tevkifatCode = useStore((s) => s.tevkifatCode);
@@ -276,9 +303,21 @@ export function CalcPanel() {
 
       {isBatch && (
         <div className="space-y-2">
-          <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>
-            Tutarları satır satır yapıştırın (Excel'den kopyalayın)
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>
+              Tutarları satır satır yapıştırın (Excel'den kopyalayın)
+            </label>
+            <div>
+              <input ref={csvRef} type="file" accept=".csv,.txt,text/csv,text/plain" style={{ display: "none" }} onChange={handleCsvFile} />
+              <button onClick={() => csvRef.current?.click()} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold btn-press"
+                style={{ background: "var(--color-glass)", color: "var(--color-primary-light)", border: "1px solid var(--color-glass-border)" }}>
+                <FileUp size={12} /> E-fatura CSV yükle
+              </button>
+            </div>
+          </div>
+          {csvInfo && (
+            <p className="text-[10px] px-1" style={{ color: "var(--color-success)" }}>{csvInfo}</p>
+          )}
           <textarea
             value={batchInput}
             onChange={(e) => setBatchInput(e.target.value)}
