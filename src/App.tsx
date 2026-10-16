@@ -10,6 +10,8 @@ import { Help } from "./components/Help";
 import { Notification } from "./components/Notification";
 import { Widget } from "./components/Widget";
 import { RatesInfo } from "./components/RatesInfo";
+import { DonemlerModal } from "./components/DonemlerModal";
+import { CarilerModal } from "./components/CarilerModal";
 import { WidgetWindow } from "./components/WidgetWindow";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { useStore } from "./store/useStore";
@@ -45,6 +47,8 @@ function MainApp() {
       <Settings />
       <Help />
       <RatesInfo />
+      <DonemlerModal />
+      <CarilerModal />
       <Notification />
       <Widget />
       <InvoicePreview />

@@ -1,8 +1,9 @@
 import { useStore, MODE_LABELS } from "../store/useStore";
-import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X, Search } from "lucide-react";
+import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X, Search, Users, FolderArchive } from "lucide-react";
 import { useState } from "react";
 import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT_2026, RATE_DISCLAIMER } from "../data/tax";
-import { parseAmount } from "../core/engine";
+import { donemAd, kalanDevreden } from "../data/donem";
+import { parseAmount, formatTurkishNumber } from "../core/engine";
 
 const TWO_LABELS: Record<string, [string, string]> = {
   margin: ["Maliyet (₺)", "Hedef marj (%)"],
@@ -53,6 +54,13 @@ export function CalcPanel() {
   const fxDirection = useStore((s) => s.fxDirection);
   const setFxDirection = useStore((s) => s.setFxDirection);
   const fetchFx = useStore((s) => s.fetchFx);
+  const donemler = useStore((s) => s.donemler);
+  const cariler = useStore((s) => s.cariler);
+  const activeCari = useStore((s) => s.activeCari);
+  const setActiveCari = useStore((s) => s.setActiveCari);
+  const arsivleDonem = useStore((s) => s.arsivleDonem);
+  const toggleDonemler = useStore((s) => s.toggleDonemler);
+  const toggleCariler = useStore((s) => s.toggleCariler);
   const tevkifatPay = useStore((s) => s.tevkifatPay);
   const setTevkifatPay = useStore((s) => s.setTevkifatPay);
   const tevkifatCode = useStore((s) => s.tevkifatCode);
@@ -314,6 +322,37 @@ export function CalcPanel() {
             </div>
           ))}
           <p className="text-[10px] px-1" style={{ color: "var(--color-text-ghost)" }}>Satış ve alış matrahları aynı KDV oranıyla hesaplanır.</p>
+          {(() => {
+            const kalan = kalanDevreden(donemler);
+            if (!kalan || !kalan.gt(0)) return null;
+            return (
+              <button onClick={() => setDonemField("devreden", donemler[0].net.replace("-", ""))}
+                className="w-full px-3 py-2 rounded-xl text-[11px] font-bold btn-press flex items-center gap-1.5 justify-center"
+                style={{ background: "rgba(22,185,129,.12)", color: "var(--color-success)", border: "1px solid var(--color-glass-border)" }}>
+                <CornerDownLeft size={12} /> {donemAd(donemler[0])} devreden {formatTurkishNumber(kalan, 2)} ₺ — doldur
+              </button>
+            );
+          })()}
+          <div className="flex gap-1.5">
+            <select value={activeCari} onChange={(e) => setActiveCari(e.target.value)}
+              className="flex-1 px-2 py-2 rounded-xl text-[11px] font-bold focus-ring"
+              style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }}>
+              <option value="">Cari yok (serbest)</option>
+              {cariler.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button onClick={toggleCariler} title="Carileri yönet" className="px-2.5 rounded-xl btn-press" style={{ background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+              <Users size={14} />
+            </button>
+            <button onClick={arsivleDonem} disabled={!donemSatis && !donemAlis} title="Dönemi arşivle (ay kaydı)"
+              className="px-3 py-2 rounded-xl text-[11px] font-bold btn-press flex items-center gap-1.5"
+              style={{ background: donemSatis || donemAlis ? "var(--color-warning)" : "var(--color-glass)", color: donemSatis || donemAlis ? "#fff" : "var(--color-text-ghost)", opacity: donemSatis || donemAlis ? 1 : 0.6 }}>
+              <FolderArchive size={14} /> Arşivle
+            </button>
+          </div>
+          <button onClick={toggleDonemler} className="w-full py-1.5 rounded-xl text-[11px] font-semibold btn-press"
+            style={{ background: "transparent", color: "var(--color-primary-light)", border: "1px dashed var(--color-glass-border)" }}>
+            Dönem arşivini gör ({donemler.length})
+          </button>
         </div>
       ) : isDiscount ? (
         <div className="space-y-2">

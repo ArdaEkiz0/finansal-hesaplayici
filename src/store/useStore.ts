@@ -23,6 +23,14 @@ import {
   type StopajRate,
   type TevkifatPay,
 } from "../core/engine";
+import {
+  computeDonemNet,
+  kalanDevreden,
+  sortByDonemId,
+  AY_AD,
+  type DonemRecord,
+  type Cari,
+} from "../data/donem";
 
 export type CalcMode = "kdv" | "stopaj" | "tevkifat" | "margin" | "markup" | "discount" | "fiyat" | "percent" | "compound" | "kdvCompare" | "batch" | "donem" | "gecikme" | "amortisman" | "doviz";
 
@@ -94,6 +102,11 @@ interface State {
   useCustomRate: boolean;
   result: CalcResult | null;
   history: HistoryEntry[];
+  donemler: DonemRecord[];
+  cariler: Cari[];
+  activeCari: string;
+  showDonemler: boolean;
+  showCariler: boolean;
   discountInputs: string[];
   activeDiscountIndex: number;
   compoundYears: string;
@@ -130,6 +143,13 @@ interface State {
   setFxDirection: (d: "toTL" | "fromTL") => void;
   fetchFx: () => void;
   setHistoryNote: (id: string, note: string) => void;
+  arsivleDonem: () => void;
+  deleteDonem: (id: string) => void;
+  addCari: (name: string) => void;
+  deleteCari: (id: string) => void;
+  setActiveCari: (id: string) => void;
+  toggleDonemler: () => void;
+  toggleCariler: () => void;
   setKdvExtract: (e: boolean) => void;
   setCustomKdvRate: (v: string) => void;
   setUseCustomRate: (b: boolean) => void;
@@ -541,6 +561,9 @@ export const useStore = create<State>((set, get) => ({
   useCustomRate: false,
   result: null,
   history: (persisted?.history ?? []) as HistoryEntry[],
+  donemler: (persisted?.donemler ?? []) as DonemRecord[],
+  cariler: (persisted?.cariler ?? []) as Cari[],
+  activeCari: (persisted?.activeCari as string) ?? "",
   discountInputs: ["", ""],
   activeDiscountIndex: 0,
   compoundYears: "1",
@@ -553,6 +576,8 @@ export const useStore = create<State>((set, get) => ({
   showRates: false,
   showWidget: false,
   showInvoice: false,
+  showDonemler: false,
+  showCariler: false,
   theme: (persisted?.theme as Theme) ?? "dark",
   settings: persisted?.settings ?? { showCurrencySymbol: true, precision: 2 },
   notification: null,
@@ -645,6 +670,61 @@ export const useStore = create<State>((set, get) => ({
     }
   },
   setHistoryNote: (id, note) => set((s) => ({ history: s.history.map((e) => (e.id === id ? { ...e, note } : e)) })),
+  arsivleDonem: () => {
+    const s = get();
+    if (!s.donemSatis && !s.donemAlis) {
+      get().notify("Arşivlemek için satış veya alış matrahı girin", "error");
+      return;
+    }
+    const rate = effectiveKdvRate(s);
+    const c = computeDonemNet(s.donemSatis, s.donemAlis, s.donemDevreden, rate);
+    if (!c) {
+      get().notify("Geçerli matrah girin", "error");
+      return;
+    }
+    const now = new Date();
+    const rec: DonemRecord = {
+      id: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      satis: s.donemSatis || "0",
+      alis: s.donemAlis || "0",
+      devredenGiris: s.donemDevreden || "0",
+      hesaplanan: c.hesaplanan.toString(),
+      indirilecek: c.indirilecek.toString(),
+      net: c.net.toString(),
+      odenecek: c.odenecek,
+      kdvRate: rate.toString(),
+      cari: s.cariler.find((x) => x.id === s.activeCari)?.name ?? "",
+      closedAt: Date.now(),
+    };
+    const donemler = sortByDonemId([rec, ...s.donemler.filter((d) => d.id !== rec.id)]);
+    set({ donemler, donemSatis: "", donemAlis: "", donemDevreden: "", activeDonemField: "satis", result: null });
+    get().notify(`${AY_AD[rec.month]} ${rec.year} arşivlendi`, "success");
+  },
+  deleteDonem: (id) => set((s) => ({ donemler: s.donemler.filter((d) => d.id !== id) })),
+  addCari: (name) => {
+    const n = name.trim().slice(0, 40);
+    if (!n) return;
+    const s = get();
+    if (s.cariler.some((c) => c.name.toLocaleLowerCase("tr") === n.toLocaleLowerCase("tr"))) {
+      get().notify("Bu cari zaten var", "error");
+      return;
+    }
+    const cari: Cari = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: n, createdAt: Date.now() };
+    set({ cariler: [...s.cariler, cari], activeCari: cari.id });
+    get().notify(`${n} eklendi`, "success");
+  },
+  deleteCari: (id) => set((s) => ({ cariler: s.cariler.filter((c) => c.id !== id), activeCari: s.activeCari === id ? "" : s.activeCari })),
+  setActiveCari: (activeCari) => {
+    set({ activeCari });
+    const s = get();
+    if (s.mode === "donem" && (s.donemSatis || s.donemAlis || s.donemDevreden)) {
+      set({ result: compute(s) });
+    }
+  },
+  toggleDonemler: () => set((s) => ({ showDonemler: !s.showDonemler })),
+  toggleCariler: () => set((s) => ({ showCariler: !s.showCariler })),
   setTevkifatPay: (tevkifatPay) => { set({ tevkifatPay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatPay }) }); },
   setTevkifatCode: (tevkifatCode, pay) => { set({ tevkifatCode, tevkifatPay: pay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatCode, tevkifatPay: pay }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
   setKdvExtract: (kdvExtract) => { set({ kdvExtract }); const s = get(); if (s.input) set({ result: compute({ ...s, kdvExtract }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
@@ -917,4 +997,4 @@ export const useStore = create<State>((set, get) => ({
   },
 }));
 
-useStore.subscribe((s) => saveState({ history: s.history, settings: s.settings, theme: s.theme }));
+useStore.subscribe((s) => saveState({ history: s.history, donemler: s.donemler, cariler: s.cariler, activeCari: s.activeCari, settings: s.settings, theme: s.theme }));
