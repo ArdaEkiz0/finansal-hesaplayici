@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Bağımlılıklar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm ci
+
+      - name: DKK testleri
+        run: npm test
+
+      - name: Derleme
+        run: npm run build
+        env:
+          VITE_CONFIG_NATIVE_IGNORE_WARNING: "true"
+
+      - name: Electron derlemesi
+        run: npx vite build --config vite.config.electron.ts
+        env:
+          VITE_CONFIG_NATIVE_IGNORE_WARNING: "true"
+
+      # Tag push'larında (sürüm): portable exe + update.zip → GitHub Release
+      - name: Sürüm paketleme
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npx electron-builder --win portable "-c.directories.output=${{ github.workspace }}\dist-rel"
+        env:
+          VITE_CONFIG_NATIVE_IGNORE_WARNING: "true"
+
+      - name: release hazırla
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $stage = "dist-rel/package"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item -Recurse -Force dist "$stage/dist"
+          Copy-Item -Recurse -Force dist-electron "$stage/dist-electron"
+          Copy-Item -Force package.json "$stage/package.json"
+          Compress-Archive -Path $stage -DestinationPath "dist-rel/update.zip" -Force
+          Get-ChildItem dist-rel
+
+      - name: Release yükle
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-rel/*.exe
+            dist-rel/update.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
