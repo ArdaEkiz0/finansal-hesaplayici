@@ -1,14 +1,18 @@
-// 2026 dogrulanmis oranlar. Degisebilir — GIB rehberini teyit edin.
+// Dogrulanmis oranlar. Her kaydin yururluk yili var — yil degisince uygulama
+// "oranlari teyit edin" uyarisi basar. GIB rehberi son soz.
+
 export interface StopajPreset {
   label: string;
   rate: 1 | 3 | 5 | 7 | 10 | 15 | 17 | 20;
   note: string;
+  /** Maddinin yururluk yili (app uyarisini buradan secer) */
+  since: number;
 }
 
 export const STOPAJ_PRESETS: StopajPreset[] = [
-  { label: "Kira (işyeri)", rate: 20, note: "GVK 94/5-a — brüt kiradan" },
-  { label: "Serbest meslek", rate: 20, note: "GVK 94/2-b" },
-  { label: "Telif (GVK 18)", rate: 17, note: "GVK 94/2-a" },
+  { label: "Kira (işyeri)", rate: 20, note: "GVK 94/5-a — brüt kiradan", since: 2019 },
+  { label: "Serbest meslek", rate: 20, note: "GVK 94/2-b", since: 2019 },
+  { label: "Telif (GVK 18)", rate: 17, note: "GVK 94/2-a", since: 2024 },
 ];
 
 export interface TevkifatCode {
@@ -36,7 +40,16 @@ export const TEVKIFAT_CODES: TevkifatCode[] = [
   { code: "—", name: "Yük taşımacılığı (nakliye)", pay: 2 },
 ];
 
-/** 2026: KDV dahil bedeli bu tutari asmayan islemlerde kismi tevkifat uygulanmaz. */
-export const TEVKIFAT_LIMIT_2026 = 12000;
+/** Kismi tevkifat alt siniri: KDV dahil bedel bu tutari asmiyorsa tevkifat uygulanmaz. */
+export const TEVKIFAT_LIMIT = { value: 12000, since: 2026 };
+
+/** Oran veritabaninin son dogrulama yili — yeni yil girince uyarı çıkar. */
+export const RATES_YEAR = 2026;
 
 export const RATE_DISCLAIMER = "2026 oranlarıdır — işleminize uygulamadan önce GİB rehberini teyit edin.";
+
+/** Verinin doygunluğu: en düşük yürürlük yılından sonraki her 1 Ocak uyarı üretir. */
+export function ratesStaleBugun(bugun: Date = new Date()): boolean {
+  const eski = Math.min(RATES_YEAR, ...STOPAJ_PRESETS.map((p) => p.since), TEVKIFAT_LIMIT.since);
+  return bugun.getFullYear() > Math.max(eski, RATES_YEAR);
+}

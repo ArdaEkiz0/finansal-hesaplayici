@@ -12,12 +12,28 @@ import { Widget } from "./components/Widget";
 import { RatesInfo } from "./components/RatesInfo";
 import { DonemlerModal } from "./components/DonemlerModal";
 import { CarilerModal } from "./components/CarilerModal";
+import { CommandPalette } from "./components/CommandPalette";
 import { WidgetWindow } from "./components/WidgetWindow";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { useStore } from "./store/useStore";
 
 function MainApp() {
   useKeyboard();
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("fh-onboarded")) {
+        localStorage.setItem("fh-onboarded", "1");
+        if (useStore.getState().history.length === 0) {
+          const ap = useStore.getState();
+          ap.toggleHelp();
+          window.setTimeout(() => {
+            const s = useStore.getState();
+            if (s.notification === null) s.notify("Her yerden arama: Ctrl+K", "info");
+          }, 2600);
+        }
+      }
+    } catch { /* localStorage yoksa sessiz geç */ }
+  }, []);
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden select-none" style={{ background: "var(--color-bg-deep)", color: "var(--color-text-primary)" }}>
       <TitleBar />
@@ -49,6 +65,7 @@ function MainApp() {
       <RatesInfo />
       <DonemlerModal />
       <CarilerModal />
+      <CommandPalette />
       <Notification />
       <Widget />
       <InvoicePreview />

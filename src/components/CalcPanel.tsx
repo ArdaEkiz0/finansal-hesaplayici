@@ -1,7 +1,7 @@
 import { useStore, MODE_LABELS } from "../store/useStore";
 import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X, Search, Users, FolderArchive, FileUp } from "lucide-react";
 import { useState, useRef } from "react";
-import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT_2026, RATE_DISCLAIMER } from "../data/tax";
+import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT, RATE_DISCLAIMER, ratesStaleBugun } from "../data/tax";
 import { donemAd, kalanDevreden } from "../data/donem";
 import { parseEfaturaCsv } from "../data/efatura";
 import { parseAmount, formatTurkishNumber } from "../core/engine";
@@ -124,7 +124,7 @@ export function CalcPanel() {
     if (!m) return null;
     return m.plus(m.mul(kdvRate).div(100)).toDP(2);
   })();
-  const underLimit = tevkifatTotal !== null && tevkifatTotal.lt(TEVKIFAT_LIMIT_2026);
+  const underLimit = tevkifatTotal !== null && tevkifatTotal.lt(TEVKIFAT_LIMIT.value);
 
   const digits = ["7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "⌫"];
   const showOps = !(isTwo && activeField === "second") && !(isDiscount && activeField !== "first");
@@ -217,7 +217,7 @@ export function CalcPanel() {
               )}
               {underLimit && (
                 <p className="text-[11px] px-2.5 py-1.5 rounded-lg" style={{ background: "rgba(245,165,36,.12)", color: "var(--color-accent)", border: "1px solid var(--color-accent)" }}>
-                  KDV dahil toplam 12.000 TL altında — kısmi tevkifat uygulanmayabilir (2026 sınırı).
+                  KDV dahil toplam {TEVKIFAT_LIMIT.value.toLocaleString("tr-TR")} TL altında — kısmi tevkifat uygulanmayabilir ({TEVKIFAT_LIMIT.since} sınırı).
                 </p>
               )}
               <p className="text-[10px] px-1" style={{ color: "var(--color-text-ghost)" }}>{RATE_DISCLAIMER}</p>

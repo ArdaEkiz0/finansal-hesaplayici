@@ -10,6 +10,7 @@ export function useKeyboard() {
 
       if (k === "F1") { e.preventDefault(); useStore.getState().toggleHelp(); return; }
       if (k === "F2") { e.preventDefault(); useStore.getState().toggleSettings(); return; }
+      if ((e.ctrlKey || e.metaKey) && (k === "k" || k === "K")) { e.preventDefault(); useStore.getState().togglePalette(); return; }
 
       if (inField) {
         if (k === "Enter") { e.preventDefault(); useStore.getState().confirmInput(); }

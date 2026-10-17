@@ -3,10 +3,12 @@ import { X } from "lucide-react";
 
 const SHORTCUTS = [
   { k: "0-9 .", v: "Rakam yaz (canlı hesap)" },
+  { k: "Ctrl+K", v: "Komut paleti — mod ve panel arama" },
   { k: "Tab", v: "Alan değiştir" },
   { k: "Enter", v: "Sonraki alan / Kaydet" },
   { k: "Backspace", v: "Sil" },
   { k: "Esc", v: "Temizle" },
+  { k: "F1 / F2", v: "Yardım / Ayarlar" },
 ];
 
 export function Help() {

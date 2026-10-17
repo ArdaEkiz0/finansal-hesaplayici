@@ -1,6 +1,6 @@
 import { useStore } from "../store/useStore";
 import { X } from "lucide-react";
-import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT_2026, RATE_DISCLAIMER } from "../data/tax";
+import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT, RATE_DISCLAIMER, ratesStaleBugun, RATES_YEAR } from "../data/tax";
 
 /** 2026 pratik oranlar rehberi (bilgi amacli). */
 export function RatesInfo() {
@@ -15,6 +15,13 @@ export function RatesInfo() {
           <span className="text-[14px] font-bold">2026 Pratik Oranlar</span>
           <button onClick={toggle} className="p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-ghost)" }}><X size={14} /></button>
         </div>
+
+        {ratesStaleBugun() && (
+          <div className="px-3 py-2 rounded-xl text-[11px] font-bold"
+            style={{ background: "rgba(240,150,35,.14)", color: "var(--color-warning)", border: "1px solid var(--color-warning)" }}>
+            Yeni yıl: bu oranlar {RATES_YEAR} doğrulamasıdır — güncel GİB rehberini teyit edin.
+          </div>
+        )}
 
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--color-text-ghost)" }}>KDV</p>
@@ -42,7 +49,7 @@ export function RatesInfo() {
             ))}
           </div>
           <p className="text-[11px] mt-1.5" style={{ color: "var(--color-text-tertiary)" }}>
-            KDV dahil bedeli {TEVKIFAT_LIMIT_2026.toLocaleString("tr-TR")} TL'yi aşmayan işlemlerde kısmi tevkifat uygulanmaz.
+            KDV dahil bedeli {TEVKIFAT_LIMIT.value.toLocaleString("tr-TR")} TL'yi aşmayan işlemlerde kısmi tevkifat uygulanmaz.
           </p>
         </div>
 

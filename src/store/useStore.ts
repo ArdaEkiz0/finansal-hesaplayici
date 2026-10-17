@@ -107,6 +107,7 @@ interface State {
   activeCari: string;
   showDonemler: boolean;
   showCariler: boolean;
+  showPalette: boolean;
   discountInputs: string[];
   activeDiscountIndex: number;
   compoundYears: string;
@@ -150,6 +151,7 @@ interface State {
   setActiveCari: (id: string) => void;
   toggleDonemler: () => void;
   toggleCariler: () => void;
+  togglePalette: () => void;
   setKdvExtract: (e: boolean) => void;
   setCustomKdvRate: (v: string) => void;
   setUseCustomRate: (b: boolean) => void;
@@ -578,6 +580,7 @@ export const useStore = create<State>((set, get) => ({
   showInvoice: false,
   showDonemler: false,
   showCariler: false,
+  showPalette: false,
   theme: (persisted?.theme as Theme) ?? "dark",
   settings: persisted?.settings ?? { showCurrencySymbol: true, precision: 2 },
   notification: null,
@@ -725,6 +728,7 @@ export const useStore = create<State>((set, get) => ({
   },
   toggleDonemler: () => set((s) => ({ showDonemler: !s.showDonemler })),
   toggleCariler: () => set((s) => ({ showCariler: !s.showCariler })),
+  togglePalette: () => set((s) => ({ showPalette: !s.showPalette })),
   setTevkifatPay: (tevkifatPay) => { set({ tevkifatPay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatPay }) }); },
   setTevkifatCode: (tevkifatCode, pay) => { set({ tevkifatCode, tevkifatPay: pay }); const s = get(); if (s.input) set({ result: compute({ ...s, tevkifatCode, tevkifatPay: pay }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
   setKdvExtract: (kdvExtract) => { set({ kdvExtract }); const s = get(); if (s.input) set({ result: compute({ ...s, kdvExtract }) }); if (s.mode === "batch" && s.batchInput) set(refreshBatch(get())); },
