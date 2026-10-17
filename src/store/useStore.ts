@@ -118,6 +118,9 @@ interface State {
   showSettings: boolean;
   showHelp: boolean;
   showWelcome: boolean;
+  showTakvim: boolean;
+  showBeyanOzeti: boolean;
+  beyanDonemId: string;
   showRates: boolean;
   showWidget: boolean;
   showInvoice: boolean;
@@ -170,6 +173,10 @@ interface State {
   toggleHelp: () => void;
   toggleWelcome: () => void;
   setShowWelcome: (v: boolean) => void;
+  toggleTakvim: () => void;
+  openBeyanOzeti: (donemId: string) => void;
+  toggleBeyanOzeti: () => void;
+  restoreYedek: (data: unknown) => boolean;
   toggleRates: () => void;
   toggleWidget: () => void;
   toggleInvoice: () => void;
@@ -579,6 +586,9 @@ export const useStore = create<State>((set, get) => ({
   showSettings: false,
   showHelp: false,
   showWelcome: false,
+  showTakvim: false,
+  showBeyanOzeti: false,
+  beyanDonemId: "",
   showRates: false,
   showWidget: false,
   showInvoice: false,
@@ -936,6 +946,25 @@ export const useStore = create<State>((set, get) => ({
   toggleHelp: () => set((s) => ({ showHelp: !s.showHelp })),
   toggleWelcome: () => set((s) => ({ showWelcome: !s.showWelcome })),
   setShowWelcome: (v) => set({ showWelcome: v }),
+  toggleTakvim: () => set((s) => ({ showTakvim: !s.showTakvim })),
+  openBeyanOzeti: (donemId) => set({ beyanDonemId: donemId, showBeyanOzeti: true }),
+  toggleBeyanOzeti: () => set((s) => ({ showBeyanOzeti: !s.showBeyanOzeti })),
+  restoreYedek: (data) => {
+    try {
+      if (!data || typeof data !== "object") return false;
+      const d = data as Record<string, unknown>;
+      if (!Array.isArray(d.history) && !Array.isArray(d.donemler) && !Array.isArray(d.cariler)) return false;
+      set({
+        history: ((d.history as HistoryEntry[]) ?? []).slice(0, 100),
+        donemler: ((d.donemler as DonemRecord[]) ?? []).slice(0, 240),
+        cariler: ((d.cariler as Cari[]) ?? []).slice(0, 500),
+        activeCari: typeof d.activeCari === "string" ? d.activeCari : "",
+        settings: (d.settings ?? { showCurrencySymbol: true, precision: 2 }) as { showCurrencySymbol: boolean; precision: number },
+        theme: (d.theme === "light" ? "light" : "dark") as Theme,
+      });
+      return true;
+    } catch { return false; }
+  },
   toggleRates: () => set((s) => ({ showRates: !s.showRates })),
   toggleWidget: () => {
     if (window.electronAPI?.widgetToggle) {

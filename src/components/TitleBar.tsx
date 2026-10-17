@@ -1,5 +1,6 @@
 import { useStore } from "../store/useStore";
-import { Minus, Square, Copy, X, Settings, HelpCircle, Calculator, ReceiptText, BookOpen, FolderArchive, GraduationCap } from "lucide-react";
+import { Minus, Square, Copy, X, Settings, HelpCircle, Calculator, ReceiptText, BookOpen, FolderArchive, GraduationCap, CalendarDays } from "lucide-react";
+import { takvimListesi, gunKaldi } from "../data/takvim";
 import { useState, useEffect } from "react";
 
 export function TitleBar() {
@@ -10,6 +11,7 @@ export function TitleBar() {
   const toggleRates = useStore((s) => s.toggleRates);
   const toggleDonemler = useStore((s) => s.toggleDonemler);
   const toggleWelcome = useStore((s) => s.toggleWelcome);
+  const toggleTakvim = useStore((s) => s.toggleTakvim);
   const result = useStore((s) => s.result);
   const [isMax, setIsMax] = useState(false);
   const [noBridge, setNoBridge] = useState(false);
@@ -59,6 +61,18 @@ export function TitleBar() {
         <button title="Dönem KDV arşivi" onClick={toggleDonemler} className={toolBtn}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
           <FolderArchive size={15} /> <span className="hidden md:inline">Dönemler</span>
+        </button>
+        <button title="Vergi takvimi — beyan son günleri" onClick={toggleTakvim} className={toolBtn + " relative"}
+          style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
+          <CalendarDays size={15} /> <span className="hidden md:inline">Takvim</span>
+          {(() => {
+            try {
+              const sira = takvimListesi(new Date());
+              const kaldi = sira.length ? gunKaldi(sira[0].tarih, new Date()) : Infinity;
+              if (kaldi <= 7) return <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: kaldi <= 2 ? "var(--color-error)" : "var(--color-warning)" }} />;
+            } catch { /* yok */ }
+            return null;
+          })()}
         </button>
         <button title="2026 pratik oranlar" onClick={toggleRates} className={toolBtn}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>

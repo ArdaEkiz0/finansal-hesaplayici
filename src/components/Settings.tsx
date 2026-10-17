@@ -1,6 +1,6 @@
 import { useStore } from "../store/useStore";
-import { X, Sun, Moon, Eye, EyeOff, RefreshCw } from "lucide-react";
-import { useState, useEffect } from "react";
+import { X, Sun, Moon, Eye, EyeOff, RefreshCw, Download, FolderOpen } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 
 export function Settings() {
   const show = useStore((s) => s.showSettings);
@@ -14,10 +14,48 @@ export function Settings() {
   const notify = useStore((s) => s.notify);
   const [checking, setChecking] = useState(false);
   const [version, setVersion] = useState("");
+  const yedekRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (show) window.electronAPI?.getAppVersion?.().then(setVersion).catch(() => {});
   }, [show]);
+
+  const yedekAl = () => {
+    const s = useStore.getState();
+    const yedek = {
+      uygulama: "finansal-hesaplayici",
+      surum: version || null,
+      tarih: new Date().toISOString(),
+      history: s.history,
+      donemler: s.donemler,
+      cariler: s.cariler,
+      activeCari: s.activeCari,
+      settings: s.settings,
+      theme: s.theme,
+    };
+    const blob = new Blob([JSON.stringify(yedek, null, 2)], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `finansal-hesaplayici-yedek-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notify("Yedek dosyası indirildi", "success");
+  };
+
+  const yedekFile = (file: File) => {
+    if (!window.confirm("Yedekten geri yükleme mevcut tüm kayıtların üzerine yazar. Devam edilsin mi?")) return;
+    const okur = new FileReader();
+    okur.onload = () => {
+      try {
+        const ok = useStore.getState().restoreYedek(JSON.parse(String(okur.result)));
+        notify(ok ? "Yedek geri yüklendi — tüm kayıtlar döşendi" : "Geçersiz yedek dosyası", ok ? "success" : "error");
+      } catch {
+        notify("Yedek okunamadı (bozuk JSON)", "error");
+      }
+    };
+    okur.readAsText(file);
+  };
 
   const checkUpdate = async () => {
     if (!window.electronAPI?.requestUpdate) {
@@ -75,6 +113,17 @@ export function Settings() {
             ))}
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-2 py-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+          <button onClick={yedekAl} className="py-2 rounded-xl text-[11.5px] font-bold btn-press flex items-center justify-center gap-1.5 glow-primary" style={{ background: "linear-gradient(135deg, var(--color-primary), #1e5fe0)", color: "#fff" }}>
+            <Download size={13} /> Yedek al
+          </button>
+          <button onClick={() => yedekRef.current?.click()} className="py-2 rounded-xl text-[11.5px] font-bold btn-press flex items-center justify-center gap-1.5" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-secondary)" }}>
+            <FolderOpen size={13} /> Yedekten yükle
+          </button>
+          <input ref={yedekRef} type="file" accept=".json,application/json" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) yedekFile(f); e.target.value = ""; }} />
+        </div>
+        <p className="text-[9.5px] -mt-1" style={{ color: "var(--color-text-ghost)" }}>Yedek tüm geçmiş-dönem-cari kayıtları tek JSON'a indirir; bilgisayar değişimi ve sürüm korkusuna karşı imza gibi.</p>
         <div className="flex items-center justify-between py-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
           <span className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>Güncelleme</span>
           <button onClick={checkUpdate} disabled={checking} className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[12px] font-bold btn-press" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-secondary)", opacity: checking ? 0.6 : 1 }}>

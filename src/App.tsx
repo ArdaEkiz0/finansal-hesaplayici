@@ -14,6 +14,8 @@ import { DonemlerModal } from "./components/DonemlerModal";
 import { CarilerModal } from "./components/CarilerModal";
 import { CommandPalette } from "./components/CommandPalette";
 import { Welcome } from "./components/Welcome";
+import { Takvim } from "./components/Takvim";
+import { BeyanOzeti } from "./components/BeyanOzeti";
 import { WidgetWindow } from "./components/WidgetWindow";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { useStore } from "./store/useStore";
@@ -60,6 +62,8 @@ function MainApp() {
       <Settings />
       <Help />
       <Welcome />
+      <Takvim />
+      <BeyanOzeti />
       <RatesInfo />
       <DonemlerModal />
       <CarilerModal />

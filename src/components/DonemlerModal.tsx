@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import Decimal from "decimal.js";
-import { X, Trash2, FolderArchive, Users } from "lucide-react";
+import { X, Trash2, FolderArchive, Users, Printer } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { formatTurkishNumber } from "../core/engine";
 import { donemAd, donemOzet, type DonemRecord } from "../data/donem";
@@ -25,6 +25,7 @@ export function DonemlerModal() {
   const donemler = useStore((s) => s.donemler);
   const deleteDonem = useStore((s) => s.deleteDonem);
   const toggleCariler = useStore((s) => s.toggleCariler);
+  const openBeyanOzeti = useStore((s) => s.openBeyanOzeti);
   const cariler = useStore((s) => s.cariler);
   const [filter, setFilter] = useState<string>("");
 
@@ -97,7 +98,8 @@ export function DonemlerModal() {
                       {fmt(d.net)} <span className="text-[9px] font-bold">{d.odenecek ? "ÖDENECEK" : "DEVREDEN"}</span>
                     </td>
                     <td className={td}>
-                      <button onClick={() => deleteDonem(d.id)} title="Dönemi sil" className="p-1 rounded" style={{ color: "var(--color-error)" }}><Trash2 size={12} /></button>
+                      <button onClick={() => openBeyanOzeti(d.id)} title="Beyan özeti (yazdırılabilir)" className="p-1 rounded key-cap" style={{ color: "var(--color-primary-light)" }}><Printer size={12} /></button>
+                      <button onClick={() => deleteDonem(d.id)} title="Dönemi sil" className="p-1 rounded key-cap" style={{ color: "var(--color-error)" }}><Trash2 size={12} /></button>
                     </td>
                   </tr>
                 ))}

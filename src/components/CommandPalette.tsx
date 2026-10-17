@@ -33,6 +33,7 @@ export function CommandPalette() {
     { id: "pan:ayarlar", label: "Ayarlar", hint: "Panel", kos: () => useStore.getState().toggleSettings() },
     { id: "pan:yardim", label: "Yardım", hint: "Panel", kos: () => useStore.getState().toggleHelp() },
     { id: "pan:tanitim", label: "Nasıl kullanılır (tanıtım)", hint: "Panel", kos: () => useStore.getState().toggleWelcome() },
+    { id: "pan:takvim", label: "Vergi takvimini aç", hint: "Panel", kos: () => useStore.getState().toggleTakvim() },
     { id: "pan:tema", label: "Temayı değiştir", hint: "Panel", kos: () => useStore.getState().setTheme(useStore.getState().theme === "dark" ? "light" : "dark") },
   ], [setMode]);
 
