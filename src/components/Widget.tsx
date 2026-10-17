@@ -68,28 +68,34 @@ export function Widget() {
 
         <div className="p-3 space-y-2">
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,]/g, "").replace(/,/g, "."))}
-            placeholder="Tutar..." inputMode="decimal" autoFocus
+            placeholder="₺ Tutar..." inputMode="decimal" autoFocus
             className="num-display w-full px-3 py-2 rounded-xl text-right font-bold text-[16px] focus-ring"
-            style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-primary)", touchAction: "auto" }} />
-          <div className="flex gap-1">
+            style={{ background: "var(--color-glass)", border: amount ? "1px solid rgba(47,123,255,.45)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)", touchAction: "auto" }} />
+          <div className="flex gap-1 rounded-xl p-1" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
             {([1, 10, 20] as const).map((r) => (
               <button key={r} onClick={() => setRate(r)} className="flex-1 py-1.5 rounded-lg text-[11px] font-bold btn-press"
-                style={rate === r ? { background: "var(--color-primary)", color: "#fff" } : { background: "var(--color-glass)", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                style={rate === r
+                  ? { background: "var(--color-bg-elevated)", color: "var(--color-primary-light)", boxShadow: "0 2px 8px rgba(2,6,18,.25)" }
+                  : { background: "transparent", color: "var(--color-text-tertiary)" }}>
                 %{r}
               </button>
             ))}
             <button onClick={() => setExtract(!extract)} title="Yön değiştir"
-              className="px-2 py-1.5 rounded-lg text-[11px] font-bold btn-press"
-              style={extract ? { background: "rgba(245,165,36,.18)", color: "var(--color-accent)", border: "1px solid var(--color-accent)" } : { background: "var(--color-glass)", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
-              {extract ? "Dahil→" : "Hariç→"}
+              className="flex-1 py-1.5 rounded-lg text-[11px] font-bold btn-press"
+              style={extract
+                ? { background: "var(--color-bg-elevated)", color: "var(--color-accent)", boxShadow: "0 2px 8px rgba(2,6,18,.25)" }
+                : { background: "transparent", color: "var(--color-text-tertiary)" }}>
+              {extract ? "−KDV çıkar" : "+KDV ekle"}
             </button>
           </div>
           {result && (
-            <button onClick={async () => { try { await navigator.clipboard.writeText(result); } catch {} setCopied(true); notify("Kopyalandı", "success"); setTimeout(() => setCopied(false), 1200); }}
-              className="w-full text-center py-2 rounded-xl btn-press" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
-              <span className="text-[9px] uppercase tracking-widest block" style={{ color: "var(--color-text-ghost)" }}>{extract ? "Net" : "Toplam"} • kopyalamak için tıkla</span>
-              <span className="num-display text-[17px] font-bold gradient-text-result flex items-center justify-center gap-1">{result} ₺ {copied ? <Check size={12} /> : <Copy size={12} />}</span>
-            </button>
+            <div className="rounded-xl px-3 py-2 text-center" style={{ background: "linear-gradient(160deg, var(--color-glass-hover), var(--color-glass) 45%)", border: "1px solid var(--color-glass-border)" }}>
+              <button onClick={async () => { try { await navigator.clipboard.writeText(result); } catch {} setCopied(true); notify("Kopyalandı", "success"); setTimeout(() => setCopied(false), 1200); }}
+                className="w-full flex items-center justify-center gap-1 btn-press focus-ring">
+                <span className="num-display text-[18px] font-bold gradient-text-result">{result} ₺</span>
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -164,6 +164,8 @@ body {
 .chip { transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease; }
 .chip:not(.chip-active):hover { border-color: rgba(148, 175, 255, 0.24); }
 [data-theme="light"] .chip:not(.chip-active):hover { border-color: rgba(16, 23, 42, 0.22); }
+.win-close { transition: background 0.15s ease, color 0.15s ease; }
+.win-close:hover { background: var(--color-error) !important; color: #fff !important; }
 .ambient-glow {
   position: absolute;
   border-radius: 999px;

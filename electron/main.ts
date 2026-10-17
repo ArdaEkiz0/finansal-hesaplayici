@@ -24,7 +24,7 @@ let widgetWindow: BrowserWindow | null = null;
 let quitting = false;
 
 const WIDGET_W = 320;
-const WIDGET_H = 404;
+const WIDGET_H = 470;
 
 function widgetBoundsPath(): string {
   return path.join(app.getPath("userData"), "widget-bounds.json");
