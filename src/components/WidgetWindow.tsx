@@ -85,13 +85,13 @@ export function WidgetWindow() {
         </div>
       </div>
 
-      <div className="flex-1 p-3 space-y-2.5 overflow-y-auto min-h-0 relative z-[1]">
+      <div className="flex-1 p-3 space-y-2.5 overflow-y-auto min-h-0 relative z-[1] mx-auto w-full max-w-[440px]">
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[13px] font-bold pointer-events-none" style={{ color: "var(--color-text-ghost)" }}>₺</span>
           <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.,+\-*/()]/g, "").replace(/,/g, "."))}
             placeholder="Tutar — örn: 100+50" inputMode="decimal" autoFocus spellCheck={false}
-            className="num-display w-full pl-7 pr-3 py-2.5 rounded-xl text-right font-bold text-[19px] focus-ring"
-            style={{ background: "var(--color-glass)", border: amount ? "1px solid rgba(47,123,255,.45)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+            className="num-display w-full pl-7 pr-3 py-2.5 rounded-xl text-right font-bold focus-ring"
+            style={{ background: "var(--color-glass)", border: amount ? "1px solid rgba(47,123,255,.45)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)", fontSize: "clamp(18px, 5vw, 28px)" }} />
         </div>
 
         <div className="flex gap-1 rounded-xl p-1" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
@@ -123,7 +123,8 @@ export function WidgetWindow() {
               <span className="relative text-[9px] uppercase tracking-[0.1em] block" style={{ color: "var(--color-text-ghost)" }}>
                 {extract ? "Net tutar" : "KDV dahil toplam"} • tıkla / Enter ile kopyala
               </span>
-              <button onClick={copy} className="relative num-display w-full text-[24px] font-bold gradient-text-result mt-1 flex items-center justify-center gap-1.5 focus-ring btn-press">
+              <button onClick={copy} className="relative num-display w-full font-bold gradient-text-result mt-1 flex items-center justify-center gap-1.5 focus-ring btn-press"
+                style={{ fontSize: "clamp(24px, 9vw, 44px)" }}>
                 {result} ₺ {copied ? <Check size={14} /> : <Copy size={14} />}
               </button>
               {words && <span className="relative block text-[10px] italic px-2 leading-snug mt-1" style={{ color: "var(--color-text-tertiary)" }}>{words}</span>}

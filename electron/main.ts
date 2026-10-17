@@ -30,11 +30,20 @@ function widgetBoundsPath(): string {
   return path.join(app.getPath("userData"), "widget-bounds.json");
 }
 
-function loadWidgetBounds(): { x: number; y: number } | null {
+type WidgetBounds = { x: number; y: number; width?: number; height?: number };
+
+function loadWidgetBounds(): WidgetBounds | null {
   try {
     const raw = fs.readFileSync(widgetBoundsPath(), "utf-8");
     const p = JSON.parse(raw);
-    if (typeof p.x === "number" && typeof p.y === "number") return { x: Math.round(p.x), y: Math.round(p.y) };
+    if (typeof p.x !== "number" || typeof p.y !== "number") return null;
+    const out: WidgetBounds = { x: Math.round(p.x), y: Math.round(p.y) };
+    // Boyut kaydetmissek makul aralikta geri yukle (kusrukl/fantazi deger koru)
+    if (typeof p.width === "number" && typeof p.height === "number") {
+      out.width = Math.min(Math.max(Math.round(p.width), 280), 760);
+      out.height = Math.min(Math.max(Math.round(p.height), 300), 900);
+    }
+    return out;
   } catch {}
   return null;
 }
@@ -43,7 +52,7 @@ function saveWidgetBounds(): void {
   try {
     if (widgetWindow && !widgetWindow.isDestroyed()) {
       const b = widgetWindow.getBounds();
-      fs.writeFileSync(widgetBoundsPath(), JSON.stringify({ x: b.x, y: b.y }));
+      fs.writeFileSync(widgetBoundsPath(), JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height }));
     }
   } catch {}
 }
@@ -56,16 +65,16 @@ function createWidgetWindow(): void {
   const y = saved?.y ?? Math.round(area.y + area.height - WIDGET_H - 24);
 
   widgetWindow = new BrowserWindow({
-    width: WIDGET_W,
-    height: WIDGET_H,
-    minWidth: WIDGET_W,
-    maxWidth: WIDGET_W,
-    minHeight: WIDGET_H,
-    maxHeight: WIDGET_H,
+    width: saved?.width ?? WIDGET_W,
+    height: saved?.height ?? WIDGET_H,
+    minWidth: 280,
+    minHeight: 300,
+    maxWidth: 760,
+    maxHeight: 900,
     x,
     y,
     frame: false,
-    resizable: false,
+    resizable: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
@@ -88,6 +97,7 @@ function createWidgetWindow(): void {
   }
 
   widgetWindow.on("moved", saveWidgetBounds);
+  widgetWindow.on("resized", saveWidgetBounds);
   widgetWindow.on("close", (e) => {
     if (!quitting) {
       e.preventDefault();
