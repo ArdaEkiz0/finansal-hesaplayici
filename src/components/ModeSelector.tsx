@@ -1,12 +1,15 @@
 import { useStore, type CalcMode, MODE_LABELS } from "../store/useStore";
 import { Receipt, Scissors, FileWarning, Percent, TrendingUp, BadgePercent, Landmark, Scale, PiggyBank, ShoppingCart, Layers, CalendarRange, AlarmClock, Wallet, Banknote } from "lucide-react";
 
-const MODES: { key: CalcMode; icon: React.ReactNode }[] = [
+const ONU: { key: CalcMode; icon: React.ReactNode }[] = [
   { key: "kdv", icon: <Receipt size={15} /> },
-  { key: "fiyat", icon: <ShoppingCart size={15} /> },
   { key: "donem", icon: <CalendarRange size={15} /> },
+  { key: "fiyat", icon: <ShoppingCart size={15} /> },
   { key: "stopaj", icon: <Scissors size={15} /> },
   { key: "tevkifat", icon: <FileWarning size={15} /> },
+];
+
+const DESTEK: { key: CalcMode; icon: React.ReactNode }[] = [
   { key: "gecikme", icon: <AlarmClock size={15} /> },
   { key: "amortisman", icon: <Wallet size={15} /> },
   { key: "doviz", icon: <Banknote size={15} /> },
@@ -19,31 +22,32 @@ const MODES: { key: CalcMode; icon: React.ReactNode }[] = [
   { key: "batch", icon: <Layers size={15} /> },
 ];
 
+function Chip({ m, active, onClick }: { m: { key: CalcMode; icon: React.ReactNode }; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title={MODE_LABELS[m.key]}
+      className="flex items-center gap-2 h-9 px-3.5 rounded-xl text-[12.5px] font-semibold whitespace-nowrap btn-press focus-ring"
+      style={active
+        ? { background: "linear-gradient(135deg, var(--color-primary) 0%, #1e5fe0 100%)", color: "#fff", boxShadow: "var(--shadow-glow)", border: "1px solid transparent" }
+        : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}
+    >
+      <span style={{ color: active ? "#fff" : "var(--color-primary-light)" }}>{m.icon}</span>
+      {MODE_LABELS[m.key]}
+    </button>
+  );
+}
+
 export function ModeSelector() {
   const mode = useStore((s) => s.mode);
   const setMode = useStore((s) => s.setMode);
 
   return (
-    <div className="shrink-0 px-3 sm:px-4 py-2" style={{ background: "var(--color-bg-base)", borderBottom: "1px solid var(--color-glass-border)" }}>
-      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
-        {MODES.map((m) => {
-          const active = mode === m.key;
-          return (
-            <button
-              key={m.key}
-              onClick={() => setMode(m.key)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap btn-press focus-ring transition-all"
-              style={
-                active
-                  ? { background: "var(--color-primary)", color: "#fff", boxShadow: "0 4px 14px rgba(47,123,255,.35)" }
-                  : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }
-              }
-            >
-              {m.icon}
-              {MODE_LABELS[m.key]}
-            </button>
-          );
-        })}
+    <div className="shrink-0 px-3 sm:px-5 py-2.5 relative z-10">
+      <div className="max-w-[1440px] mx-auto flex flex-wrap items-center gap-2">
+        {ONU.map((m) => <Chip key={m.key} m={m} active={mode === m.key} onClick={() => setMode(m.key)} />)}
+        <span className="hidden lg:block w-px h-6 mx-1" style={{ background: "var(--color-glass-border)" }} />
+        {DESTEK.map((m) => <Chip key={m.key} m={m} active={mode === m.key} onClick={() => setMode(m.key)} />)}
       </div>
     </div>
   );

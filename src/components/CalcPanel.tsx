@@ -1,7 +1,7 @@
 import { useStore, MODE_LABELS } from "../store/useStore";
 import { Delete, CornerDownLeft, Plus, RotateCcw, ArrowRight, X, Search, Users, FolderArchive, FileUp } from "lucide-react";
 import { useState, useRef } from "react";
-import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT, RATE_DISCLAIMER, ratesStaleBugun } from "../data/tax";
+import { STOPAJ_PRESETS, TEVKIFAT_CODES, TEVKIFAT_LIMIT, RATE_DISCLAIMER } from "../data/tax";
 import { donemAd, kalanDevreden } from "../data/donem";
 import { parseEfaturaCsv } from "../data/efatura";
 import { parseAmount, formatTurkishNumber } from "../core/engine";
@@ -506,23 +506,25 @@ export function CalcPanel() {
       )}
 
       {!isBatch && (
-      <div className="card-soft p-2 flex-1 min-h-0 flex flex-col gap-1.5">
+      <div className="glass-card p-2.5 flex-1 min-h-0 flex flex-col gap-2">
         {showOps && (
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-2">
             {ops.map((o) => (
               <button key={o.value} onClick={() => appendDigit(o.value)}
-                className="h-10 rounded-xl font-bold text-[17px] btn-press focus-ring"
-                style={{ background: "rgba(47,123,255,.12)", color: "var(--color-primary-light)", border: "1px solid var(--color-primary)" }}>
+                className="h-10 rounded-xl font-bold text-[16px] key-cap focus-ring"
+                style={{ background: "rgba(47,123,255,.14)", color: "var(--color-primary-light)", border: "1px solid rgba(47,123,255,.35)" }}>
                 {o.label}
               </button>
             ))}
           </div>
         )}
-        <div className="grid grid-cols-3 grid-rows-4 gap-1.5 flex-1 min-h-0">
+        <div className="grid grid-cols-3 grid-rows-4 gap-2 flex-1 min-h-0">
           {digits.map((d) => (
             <button key={d} onClick={() => (d === "⌫" ? deleteLast() : appendDigit(d))}
-              className="h-full min-h-[52px] rounded-xl font-bold text-[22px] num-display btn-press focus-ring"
-              style={{ background: "var(--color-bg-elevated)", color: "var(--color-text-primary)", border: "1px solid var(--color-glass-border)" }}>
+              className="h-full min-h-[52px] rounded-2xl font-bold text-[22px] num-display key-cap focus-ring"
+              style={d === "⌫"
+                ? { background: "rgba(244,83,106,.10)", color: "var(--color-error)", border: "1px solid rgba(244,83,106,.30)" }
+                : { background: "var(--color-bg-elevated)", color: "var(--color-text-primary)", border: "1px solid var(--color-glass-border)", boxShadow: "0 1px 0 rgba(148,175,255,.08)" }}>
               {d}
             </button>
           ))}

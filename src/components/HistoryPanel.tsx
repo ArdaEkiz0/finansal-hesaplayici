@@ -29,12 +29,15 @@ export function HistoryPanel() {
   }, [history, query]);
 
   return (
-    <div className="h-full flex flex-col min-h-0 p-3 gap-2.5">
+    <div className="h-full flex flex-col min-h-0 p-3.5 gap-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: "var(--color-text-ghost)" }}>Geçmiş</span>
+        <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "var(--color-text-ghost)" }}>
+          Geçmiş
+          {history.length > 0 && <span className="text-[9px] px-1.5 rounded-full" style={{ background: "var(--color-glass)", color: "var(--color-text-tertiary)" }}>{history.length}</span>}
+        </span>
         <div className="flex gap-0.5">
-          <button title="Dışa aktar (CSV)" onClick={exportHistory} className="p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-ghost)" }}><Download size={13} /></button>
-          <button title="Temizle" onClick={clearHistory} className="p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-ghost)" }}><Trash2 size={13} /></button>
+          <button title="Dışa aktar (CSV)" onClick={exportHistory} className="p-1.5 rounded-lg btn-press key-cap" style={{ color: "var(--color-text-ghost)" }}><Download size={13} /></button>
+          <button title="Temizle" onClick={clearHistory} className="p-1.5 rounded-lg btn-press key-cap" style={{ color: "var(--color-text-ghost)" }}><Trash2 size={13} /></button>
         </div>
       </div>
 
@@ -50,8 +53,8 @@ export function HistoryPanel() {
           <p className="text-center py-8 text-[12px]" style={{ color: "var(--color-text-ghost)" }}>Henüz kayıt yok.<br />Hesap yapıp Enter'a basın.</p>
         ) : (
           filtered.slice(0, 100).map((item: HistoryEntry) => (
-            <div key={item.id} className="group rounded-xl p-2.5 btn-press cursor-pointer"
-              style={{ background: item.pinned ? "rgba(47,123,255,.1)" : "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
+            <div key={item.id} className="group rounded-xl p-2.5 btn-press cursor-pointer hover:shadow-md"
+              style={{ background: item.pinned ? "rgba(47,123,255,.12)" : "var(--color-glass)", border: item.pinned ? "1px solid rgba(47,123,255,.35)" : "1px solid var(--color-glass-border)" }}>
               <button className="w-full text-left" onClick={() => loadHistoryEntry(item.id)} title="Geri yüklemek için tıkla">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ background: "var(--color-glass-active)", color: "var(--color-text-tertiary)" }}>{item.mode.toUpperCase()}</span>
@@ -59,7 +62,7 @@ export function HistoryPanel() {
                   <span className="ml-auto text-[9px]" style={{ color: "var(--color-text-ghost)" }}>{new Date(item.timestamp).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" })}</span>
                 </div>
                 <p className="text-[11px] mt-1 truncate" style={{ color: "var(--color-text-secondary)" }}>{item.inputs}</p>
-                <p className="num-display text-[13px] font-bold mt-0.5" style={{ color: "var(--color-text-primary)" }}>{item.result}</p>
+                <p className="num-display text-[13.5px] font-bold mt-0.5" style={{ color: "var(--color-text-primary)" }}>{item.result}</p>
                 {editingNote === item.id ? (
                   <input autoFocus value={noteDraft} placeholder="Müşteri / açıklama (örn: ABC Ltd Mayıs)"
                     onChange={(e) => setNoteDraft(e.target.value.slice(0, 60))}

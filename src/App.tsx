@@ -35,17 +35,20 @@ function MainApp() {
     } catch { /* localStorage yoksa sessiz geç */ }
   }, []);
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden select-none" style={{ background: "var(--color-bg-deep)", color: "var(--color-text-primary)" }}>
+    <div className="h-screen w-screen flex flex-col overflow-hidden select-none relative" style={{ background: "var(--color-bg-deep)", color: "var(--color-text-primary)" }}>
+      {/* Ambiyans: odak duygusu veren yumusak isiklar */}
+      <div aria-hidden className="ambient-glow" style={{ width: 480, height: 480, top: -180, right: -120, background: "radial-gradient(circle, rgba(47,123,255,.16), transparent 70%)" }} />
+      <div aria-hidden className="ambient-glow" style={{ width: 420, height: 420, bottom: -160, left: -100, background: "radial-gradient(circle, rgba(16,185,129,.10), transparent 70%)" }} />
       <TitleBar />
       <ModeSelector />
 
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        <div className="hidden xl:block w-[300px] shrink-0 min-h-0" style={{ borderRight: "1px solid var(--color-glass-border)" }}>
+        <div className="hidden xl:flex w-[310px] shrink-0 min-h-0 flex-col" style={{ borderRight: "1px solid var(--color-glass-border)", background: "rgba(148,175,255,.02)" }}>
           <HistoryPanel />
         </div>
 
-        <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
-          <div className="flex-1 min-h-0 w-full max-w-[1440px] mx-auto px-4 sm:px-6 py-4 grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] items-stretch overflow-y-auto">
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden relative z-[1]">
+          <div className="flex-1 min-h-0 w-full max-w-[1400px] mx-auto px-4 sm:px-6 py-4 grid gap-5 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)] items-stretch overflow-y-auto">
             <CalcPanel />
             <ResultPanel />
           </div>
