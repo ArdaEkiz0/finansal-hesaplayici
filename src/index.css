@@ -128,7 +128,7 @@ body {
   display: block;
   max-width: 100%;
 }
-.fluid-number { font-size: clamp(2.2rem, 5vw, 3.4rem); line-height: 1.05; }
+.fluid-number { font-size: clamp(2.4rem, 5.4vw, 3.8rem); line-height: 1.04; letter-spacing: -0.02em; }
 .fluid-number-sm { font-size: clamp(1.3rem, 3vw, 1.8rem); line-height: 1.2; }
 
 .gradient-text-result {
@@ -161,6 +161,9 @@ body {
 }
 .key-cap:hover { background: var(--color-glass-hover); border-color: rgba(148, 175, 255, 0.22); }
 .key-cap:active { transform: scale(0.955); }
+.chip { transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease; }
+.chip:not(.chip-active):hover { border-color: rgba(148, 175, 255, 0.24); }
+[data-theme="light"] .chip:not(.chip-active):hover { border-color: rgba(16, 23, 42, 0.22); }
 .ambient-glow {
   position: absolute;
   border-radius: 999px;

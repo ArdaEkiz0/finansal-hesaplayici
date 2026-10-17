@@ -139,41 +139,41 @@ export function CalcPanel() {
     <section className="card p-4 gap-4 min-w-0 h-full flex flex-col min-h-[540px]">
       {(mode === "kdv" || mode === "tevkifat" || mode === "kdvCompare" || mode === "fiyat" || mode === "donem" || mode === "batch") && (
         <div className="space-y-2">
-          <div className="flex gap-1.5">
+          <div className="flex gap-1 rounded-xl p-1" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
             {([1, 10, 20] as const).map((r) => (
               <button key={r} onClick={() => setKdvRate(r)}
-                className="flex-1 py-2 rounded-xl text-[13px] font-bold btn-press focus-ring"
+                className="flex-1 py-1.5 rounded-lg text-[13px] font-bold btn-press focus-ring"
                 style={kdvRate === r && !useCustomRate
-                  ? { background: "var(--color-primary)", color: "#fff" }
-                  : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}>
+                  ? { background: "var(--color-bg-elevated)", color: "var(--color-primary-light)", boxShadow: "0 2px 8px rgba(2,6,18,.25)" }
+                  : { background: "transparent", color: "var(--color-text-tertiary)" }}>
                 %{r}
               </button>
             ))}
             <input value={customKdvRate} onChange={(e) => setCustomKdvRate(e.target.value)} placeholder="Özel %" inputMode="decimal"
-              className="w-[86px] px-2 py-2 rounded-xl text-[13px] font-bold text-center focus-ring"
-              style={{ background: useCustomRate ? "rgba(47,123,255,.14)" : "var(--color-glass)", border: useCustomRate ? "1px solid var(--color-primary)" : "1px solid var(--color-glass-border)", color: "var(--color-text-primary)" }} />
+              className="w-[86px] px-2 py-1.5 rounded-lg text-[13px] font-bold text-center focus-ring"
+              style={{ background: useCustomRate ? "rgba(47,123,255,.14)" : "transparent", border: useCustomRate ? "1px solid var(--color-primary)" : "1px solid transparent", color: "var(--color-text-primary)" }} />
           </div>
           {mode === "batch" && (
-            <div className="flex gap-1.5">
+            <div className="flex gap-1 rounded-xl p-1" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
               {(["kdv", "stopaj", "tevkifat", "fiyat"] as const).map((k) => (
                 <button key={k} onClick={() => setBatchKind(k)}
                   className="flex-1 py-1.5 rounded-lg text-[11px] font-bold btn-press"
                   style={batchKind === k
-                    ? { background: "var(--color-primary)", color: "#fff" }
-                    : { background: "transparent", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                    ? { background: "var(--color-bg-elevated)", color: "var(--color-primary-light)", boxShadow: "0 2px 8px rgba(2,6,18,.25)" }
+                    : { background: "transparent", color: "var(--color-text-tertiary)" }}>
                   {MODE_LABELS[k]}
                 </button>
               ))}
             </div>
           )}
           {(mode === "kdv" || mode === "fiyat") && (
-            <div className="flex gap-1.5">
+            <div className="flex gap-1 rounded-xl p-1" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
               {([{ v: false, l: "Hariçten Dahil (+KDV)" }, { v: true, l: "Dahilden Hariç (−KDV)" }] as const).map((o) => (
                 <button key={o.l} onClick={() => setKdvExtract(o.v)}
                   className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold btn-press"
                   style={kdvExtract === o.v
-                    ? { background: "rgba(47,123,255,.16)", color: "var(--color-primary-light)", border: "1px solid var(--color-primary)" }
-                    : { background: "transparent", color: "var(--color-text-ghost)", border: "1px solid var(--color-glass-border)" }}>
+                    ? { background: "var(--color-bg-elevated)", color: "var(--color-primary-light)", boxShadow: "0 2px 8px rgba(2,6,18,.25)" }
+                    : { background: "transparent", color: "var(--color-text-tertiary)" }}>
                   {o.l}
                 </button>
               ))}

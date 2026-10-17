@@ -27,12 +27,12 @@ function Chip({ m, active, onClick }: { m: { key: CalcMode; icon: React.ReactNod
     <button
       onClick={onClick}
       title={MODE_LABELS[m.key]}
-      className="flex items-center gap-2 h-9 px-3.5 rounded-xl text-[12.5px] font-semibold whitespace-nowrap btn-press focus-ring"
+      className={"flex items-center gap-2 h-9 px-3.5 rounded-xl text-[12.5px] font-semibold whitespace-nowrap btn-press focus-ring chip" + (active ? " chip-active" : "")}
       style={active
-        ? { background: "linear-gradient(135deg, var(--color-primary) 0%, #1e5fe0 100%)", color: "#fff", boxShadow: "var(--shadow-glow)", border: "1px solid transparent" }
+        ? { background: "linear-gradient(135deg, var(--color-primary) 0%, #1e5fe0 100%)", color: "#fff", boxShadow: "0 4px 18px rgba(47,123,255,.28)", border: "1px solid rgba(255,255,255,.14)" }
         : { background: "var(--color-glass)", color: "var(--color-text-secondary)", border: "1px solid var(--color-glass-border)" }}
     >
-      <span style={{ color: active ? "#fff" : "var(--color-primary-light)" }}>{m.icon}</span>
+      <span style={{ color: active ? "#fff" : "var(--color-text-tertiary)" }}>{m.icon}</span>
       {MODE_LABELS[m.key]}
     </button>
   );

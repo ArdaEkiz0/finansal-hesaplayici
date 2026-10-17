@@ -37,8 +37,8 @@ function MainApp() {
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden select-none relative" style={{ background: "var(--color-bg-deep)", color: "var(--color-text-primary)" }}>
       {/* Ambiyans: odak duygusu veren yumusak isiklar */}
-      <div aria-hidden className="ambient-glow" style={{ width: 480, height: 480, top: -180, right: -120, background: "radial-gradient(circle, rgba(47,123,255,.16), transparent 70%)" }} />
-      <div aria-hidden className="ambient-glow" style={{ width: 420, height: 420, bottom: -160, left: -100, background: "radial-gradient(circle, rgba(16,185,129,.10), transparent 70%)" }} />
+      <div aria-hidden className="ambient-glow" style={{ width: 420, height: 420, top: -220, right: -160, background: "radial-gradient(circle, rgba(47,123,255,.10), transparent 70%)" }} />
+      <div aria-hidden className="ambient-glow" style={{ width: 380, height: 380, bottom: -200, left: -140, background: "radial-gradient(circle, rgba(16,185,129,.07), transparent 70%)" }} />
       <TitleBar />
       <ModeSelector />
 
