@@ -13,6 +13,7 @@ import { RatesInfo } from "./components/RatesInfo";
 import { DonemlerModal } from "./components/DonemlerModal";
 import { CarilerModal } from "./components/CarilerModal";
 import { CommandPalette } from "./components/CommandPalette";
+import { Welcome } from "./components/Welcome";
 import { WidgetWindow } from "./components/WidgetWindow";
 import { InvoicePreview } from "./components/InvoicePreview";
 import { useStore } from "./store/useStore";
@@ -21,16 +22,9 @@ function MainApp() {
   useKeyboard();
   useEffect(() => {
     try {
-      if (!localStorage.getItem("fh-onboarded")) {
-        localStorage.setItem("fh-onboarded", "1");
-        if (useStore.getState().history.length === 0) {
-          const ap = useStore.getState();
-          ap.toggleHelp();
-          window.setTimeout(() => {
-            const s = useStore.getState();
-            if (s.notification === null) s.notify("Her yerden arama: Ctrl+K", "info");
-          }, 2600);
-        }
+      const saklandi = localStorage.getItem("fh-welcome-hide") === "1";
+      if (!saklandi) {
+        window.setTimeout(() => useStore.getState().setShowWelcome(true), 450);
       }
     } catch { /* localStorage yoksa sessiz geç */ }
   }, []);
@@ -65,6 +59,7 @@ function MainApp() {
 
       <Settings />
       <Help />
+      <Welcome />
       <RatesInfo />
       <DonemlerModal />
       <CarilerModal />

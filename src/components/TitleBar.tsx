@@ -1,5 +1,5 @@
 import { useStore } from "../store/useStore";
-import { Minus, Square, Copy, X, Settings, HelpCircle, Calculator, ReceiptText, BookOpen, FolderArchive } from "lucide-react";
+import { Minus, Square, Copy, X, Settings, HelpCircle, Calculator, ReceiptText, BookOpen, FolderArchive, GraduationCap } from "lucide-react";
 import { useState, useEffect } from "react";
 
 export function TitleBar() {
@@ -9,6 +9,7 @@ export function TitleBar() {
   const toggleInvoice = useStore((s) => s.toggleInvoice);
   const toggleRates = useStore((s) => s.toggleRates);
   const toggleDonemler = useStore((s) => s.toggleDonemler);
+  const toggleWelcome = useStore((s) => s.toggleWelcome);
   const result = useStore((s) => s.result);
   const [isMax, setIsMax] = useState(false);
   const [noBridge, setNoBridge] = useState(false);
@@ -62,6 +63,10 @@ export function TitleBar() {
         <button title="2026 pratik oranlar" onClick={toggleRates} className={toolBtn}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
           <BookOpen size={15} /> <span className="hidden md:inline">Oranlar</span>
+        </button>
+        <button title="Nasıl kullanılır?" onClick={toggleWelcome} className={toolBtn}
+          style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
+          <GraduationCap size={15} /><span className="hidden lg:inline">Tanıtım</span>
         </button>
         <button title="Yardım (F1)" onClick={toggleHelp} className={toolBtn}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>

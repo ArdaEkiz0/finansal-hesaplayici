@@ -117,6 +117,7 @@ interface State {
   batchResult: { rows: { inputs: string; result: string; detail?: string }[]; totals: { base?: string; tax?: string; main?: string }; validCount: number } | null;
   showSettings: boolean;
   showHelp: boolean;
+  showWelcome: boolean;
   showRates: boolean;
   showWidget: boolean;
   showInvoice: boolean;
@@ -167,6 +168,8 @@ interface State {
   setCompoundFrequency: (f: number) => void;
   toggleSettings: () => void;
   toggleHelp: () => void;
+  toggleWelcome: () => void;
+  setShowWelcome: (v: boolean) => void;
   toggleRates: () => void;
   toggleWidget: () => void;
   toggleInvoice: () => void;
@@ -575,6 +578,7 @@ export const useStore = create<State>((set, get) => ({
   batchResult: null,
   showSettings: false,
   showHelp: false,
+  showWelcome: false,
   showRates: false,
   showWidget: false,
   showInvoice: false,
@@ -930,6 +934,8 @@ export const useStore = create<State>((set, get) => ({
 
   toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
   toggleHelp: () => set((s) => ({ showHelp: !s.showHelp })),
+  toggleWelcome: () => set((s) => ({ showWelcome: !s.showWelcome })),
+  setShowWelcome: (v) => set({ showWelcome: v }),
   toggleRates: () => set((s) => ({ showRates: !s.showRates })),
   toggleWidget: () => {
     if (window.electronAPI?.widgetToggle) {
