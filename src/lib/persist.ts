@@ -8,6 +8,7 @@ export interface PersistedData {
   settings: {
     showCurrencySymbol: boolean;
     precision: number;
+    fontScale?: number;
   };
   theme: string;
 }

@@ -15,10 +15,16 @@ export function WidgetWindow() {
       let th: "dark" | "light" = "dark";
       try {
         const raw = localStorage.getItem("finansal-hesaplayici-v2");
-        if (raw && JSON.parse(raw).theme === "light") th = "light";
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed?.theme === "light") th = "light";
+        else if (parsed?.theme === "system") th = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
       } catch { /* yok */ }
       setTheme(th);
       document.documentElement.setAttribute("data-theme", th);
+      try {
+        const zoom = Number(JSON.parse(localStorage.getItem("finansal-hesaplayici-v2") || "{}")?.settings?.fontScale) || 1;
+        document.documentElement.style.zoom = zoom === 1 ? "" : String(Math.min(1.25, Math.max(0.85, zoom)));
+      } catch { /* yok */ }
     };
     apply();
     window.addEventListener("storage", apply);

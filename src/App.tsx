@@ -84,10 +84,27 @@ export default function App() {
     }
   });
   const theme = useStore((s) => s.theme);
+  const fontScale = useStore((s) => s.settings.fontScale);
 
+  // Tema: "system" ise Windows ayarını izler (canlı geçiş dahil).
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      const resolved = theme === "system" ? (mq.matches ? "dark" : "light") : theme;
+      document.documentElement.setAttribute("data-theme", resolved);
+    };
+    apply();
+    if (theme === "system") {
+      mq.addEventListener("change", apply);
+      return () => mq.removeEventListener("change", apply);
+    }
   }, [theme]);
+
+  // Yazı ölçeği: HTML kökünde zoom — tüm arayüzü orantılı büyütür/küçültür.
+  useEffect(() => {
+    const s = Math.min(1.25, Math.max(0.85, fontScale || 1));
+    document.documentElement.style.zoom = s === 1 ? "" : String(s);
+  }, [fontScale]);
 
   if (isWidget) return <WidgetWindow />;
   return <MainApp />;

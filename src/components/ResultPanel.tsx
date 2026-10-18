@@ -10,6 +10,7 @@ export function ResultPanel() {
   const notify = useStore((s) => s.notify);
   const toggleInvoice = useStore((s) => s.toggleInvoice);
   const [copied, setCopied] = useState(false);
+  const [spark, setSpark] = useState(0);
 
   const copyText = async (t: string, msg = "Kopyalandı") => {
     try {
@@ -23,6 +24,7 @@ export function ResultPanel() {
       ta.remove();
     }
     setCopied(true);
+    setSpark((n) => n + 1);
     notify(msg, "success");
     setTimeout(() => setCopied(false), 1400);
   };
@@ -73,6 +75,7 @@ export function ResultPanel() {
 
       <div className="relative rounded-2xl px-5 py-6 overflow-hidden" style={{ background: "linear-gradient(160deg, var(--color-glass-hover), var(--color-glass) 45%)", border: "1px solid var(--color-glass-border)" }}>
         <div aria-hidden className="ambient-glow" style={{ width: 220, height: 220, top: -110, right: -40, background: "radial-gradient(circle, rgba(56,189,248,.16), transparent 70%)" }} />
+        {spark > 0 && <Sparkles key={spark} aria-hidden className="copy-spark" size={16} style={{ color: "var(--color-primary-light)" }} />}
         <div className="relative text-right">
           <span className="num-display font-bold gradient-text-result fluid-number">{result.display}</span>
         </div>

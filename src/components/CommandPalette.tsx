@@ -34,7 +34,9 @@ export function CommandPalette() {
     { id: "pan:yardim", label: "Yardım", hint: "Panel", kos: () => useStore.getState().toggleHelp() },
     { id: "pan:tanitim", label: "Nasıl kullanılır (tanıtım)", hint: "Panel", kos: () => useStore.getState().toggleWelcome() },
     { id: "pan:takvim", label: "Vergi takvimini aç", hint: "Panel", kos: () => useStore.getState().toggleTakvim() },
-    { id: "pan:tema", label: "Temayı değiştir", hint: "Panel", kos: () => useStore.getState().setTheme(useStore.getState().theme === "dark" ? "light" : "dark") },
+    { id: "pan:tema", label: "Temayı değiştir (koyu→açık→sistem)", hint: "Panel", kos: () => { const t = useStore.getState().theme; useStore.getState().setTheme(t === "dark" ? "light" : t === "light" ? "system" : "dark"); } },
+    { id: "pan:yazi-buyut", label: "Yazıyı büyüt (A+)", hint: "Ayar", kos: () => { const s = useStore.getState().settings; useStore.getState().updateSettings({ fontScale: Math.min(1.25, Math.round((s.fontScale ?? 1) * 100 + 5) / 100) }); } },
+    { id: "pan:yazi-kucult", label: "Yazıyı küçült (A−)", hint: "Ayar", kos: () => { const s = useStore.getState().settings; useStore.getState().updateSettings({ fontScale: Math.max(0.85, Math.round((s.fontScale ?? 1) * 100 - 5) / 100) }); } },
   ], [setMode]);
 
   const filtreli = useMemo(() => {

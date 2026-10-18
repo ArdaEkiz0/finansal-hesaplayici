@@ -100,6 +100,28 @@
   --shadow-glow: 0 6px 26px rgba(37, 99, 235, 0.25);
 }
 
+/* Aydinlik temada defter kagidi hissi: cok silik mavi graph cizgileri */
+[data-theme="light"] body {
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.035) 1px, transparent 1px);
+  background-size: 100% 26px, 26px 100%;
+}
+
+/* Kopyalama iltisi: hero kutusunda parlayip yukselen yildiz */
+.copy-spark {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  pointer-events: none;
+  animation: copySpark 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes copySpark {
+  0% { opacity: 0; transform: scale(0.4) rotate(-20deg); }
+  28% { opacity: 1; transform: scale(1.25) rotate(8deg); }
+  100% { opacity: 0; transform: scale(0.9) translateY(-18px) rotate(18deg); }
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { background: var(--color-bg-deep); }
 body {

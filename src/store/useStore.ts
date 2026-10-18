@@ -73,7 +73,7 @@ export const MODE_LABELS: Record<CalcMode, string> = {
   doviz: "Döviz",
 };
 
-export type Theme = "dark" | "light";
+export type Theme = "dark" | "light" | "system";
 
 interface State {
   input: string;
@@ -125,7 +125,7 @@ interface State {
   showWidget: boolean;
   showInvoice: boolean;
   theme: Theme;
-  settings: { showCurrencySymbol: boolean; precision: number };
+  settings: { showCurrencySymbol: boolean; precision: number; fontScale: number };
   notification: { id: number; message: string; type: "success" | "error" | "info" } | null;
 
   setBatchInput: (v: string) => void;
@@ -596,7 +596,7 @@ export const useStore = create<State>((set, get) => ({
   showCariler: false,
   showPalette: false,
   theme: (persisted?.theme as Theme) ?? "dark",
-  settings: persisted?.settings ?? { showCurrencySymbol: true, precision: 2 },
+  settings: { showCurrencySymbol: true, precision: 2, fontScale: 1, ...persisted?.settings },
   notification: null,
 
   setBatchInput: (batchInput) => {
@@ -959,8 +959,8 @@ export const useStore = create<State>((set, get) => ({
         donemler: ((d.donemler as DonemRecord[]) ?? []).slice(0, 240),
         cariler: ((d.cariler as Cari[]) ?? []).slice(0, 500),
         activeCari: typeof d.activeCari === "string" ? d.activeCari : "",
-        settings: (d.settings ?? { showCurrencySymbol: true, precision: 2 }) as { showCurrencySymbol: boolean; precision: number },
-        theme: (d.theme === "light" ? "light" : "dark") as Theme,
+        settings: (d.settings ?? { showCurrencySymbol: true, precision: 2, fontScale: 1 }) as State["settings"],
+        theme: (["dark", "light", "system"].includes(String(d.theme)) ? d.theme : "dark") as Theme,
       });
       return true;
     } catch { return false; }

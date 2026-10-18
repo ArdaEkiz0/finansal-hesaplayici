@@ -1,5 +1,5 @@
 import { useStore } from "../store/useStore";
-import { X, Sun, Moon, Eye, EyeOff, RefreshCw, Download, FolderOpen } from "lucide-react";
+import { X, Sun, Moon, Eye, EyeOff, RefreshCw, Download, FolderOpen, Monitor } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
 export function Settings() {
@@ -86,9 +86,27 @@ export function Settings() {
         </div>
         <div className="flex items-center justify-between py-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
           <span className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>Tema</span>
-          <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[12px] font-bold btn-press" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-secondary)" }}>
-            {theme === "dark" ? <Moon size={13} /> : <Sun size={13} />} {theme === "dark" ? "Koyu" : "Açık"}
-          </button>
+          <div className="flex gap-1 rounded-xl p-1" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
+            {([["dark", "Koyu", Moon], ["light", "Açık", Sun], ["system", "Sistem", Monitor]] as const).map(([val, ad, Icon]) => (
+              <button key={val} onClick={() => setTheme(val)} className="px-2.5 py-1 rounded-lg text-[11px] font-bold btn-press flex items-center gap-1"
+                style={theme === val
+                  ? { background: "var(--color-bg-elevated)", color: "var(--color-primary-light)", boxShadow: "0 1px 4px rgba(0,0,0,.18)" }
+                  : { color: "var(--color-text-ghost)" }}>
+                <Icon size={11} /> {ad}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between py-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+          <span className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>Yazı ölçeği</span>
+          <div className="flex items-center gap-1.5">
+            <button title="Küçült" onClick={() => updateSettings({ fontScale: Math.max(0.85, Math.round((settings.fontScale ?? 1) * 100 - 5) / 100) })} className="w-7 h-7 rounded-lg text-[12px] font-bold btn-press" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-secondary)" }}>A−</button>
+            <span className="w-10 text-center text-[11px] font-bold num-display" style={{ color: "var(--color-primary-light)" }}>{Math.round((settings.fontScale ?? 1) * 100)}%</span>
+            <button title="Büyüt" onClick={() => updateSettings({ fontScale: Math.min(1.25, Math.round((settings.fontScale ?? 1) * 100 + 5) / 100) })} className="w-7 h-7 rounded-lg text-[12px] font-bold btn-press" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-secondary)" }}>A+</button>
+            {(settings.fontScale ?? 1) !== 1 && (
+              <button title="Sıfırla" onClick={() => updateSettings({ fontScale: 1 })} className="px-1.5 h-7 rounded-lg text-[10px] font-bold btn-press" style={{ background: "var(--color-glass)", border: "1px solid var(--color-glass-border)", color: "var(--color-text-ghost)" }}>↺</button>
+            )}
+          </div>
         </div>
         <div className="flex items-center justify-between py-2" style={{ borderTop: "1px solid var(--color-glass-border)" }}>
           <span className="text-[12px]" style={{ color: "var(--color-text-secondary)" }}>Hızlı widget</span>
