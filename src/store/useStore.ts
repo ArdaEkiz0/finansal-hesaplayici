@@ -1012,9 +1012,24 @@ export const useStore = create<State>((set, get) => ({
   exportHistory: () => {
     const { history } = get();
     if (history.length === 0) return;
+    // CSV enjeksiyonu: gömülü tirnak satiri bozabilir, '=' ile baslayan
+    // deger Excel'de formül calistirabilir. Her hucre kacirilir ve
+    // formül benzeri degerler apostrofla metne cevrilir.
+    const hucre = (v: unknown) => {
+      let s = v == null ? "" : String(v);
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return `"${s.replace(/"/g, '""')}"`;
+    };
     const rows = [
       "Tarih,Mod,Girdiler,Sonuç,Açıklama,Etiket",
-      ...history.map((e) => `"${new Date(e.timestamp).toLocaleString("tr-TR")}","${MODE_LABELS[e.mode]}","${e.inputs}","${e.result}","${e.detail || ""}","${e.note || ""}"`),
+      ...history.map((e) => [
+        new Date(e.timestamp).toLocaleString("tr-TR"),
+        MODE_LABELS[e.mode],
+        e.inputs,
+        e.result,
+        e.detail || "",
+        e.note || "",
+      ].map(hucre).join(",")),
     ];
     const blob = new Blob(["﻿" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
