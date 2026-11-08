@@ -3,6 +3,7 @@ import path from "path";
 import https from "https";
 import http from "http";
 import fs from "fs";
+import crypto from "crypto";
 import { execSync } from "child_process";
 
 const isDev = !app.isPackaged;
@@ -220,13 +221,31 @@ function createMainWindow(): void {
   });
 }
 
-function httpGet(url: string): Promise<Buffer> {
+function httpGet(url: string, izinliHostlar?: Set<string>): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https") ? https : http;
     client
       .get(url, { headers: { "User-Agent": "FinansalHesaplaci" } }, (res) => {
         if (res.statusCode === 301 || res.statusCode === 302) {
-          httpGet(res.headers.location!).then(resolve).catch(reject);
+          // Yonlendirme hedefi de ayni kurallara uymali: aksi hâlde
+          // https+izinli host ile baslayan istek http'ye veya baska bir
+          // hosta yonlendirilerek butunluk denetimi bosa cikarilabilir.
+          let hedef: URL;
+          try {
+            hedef = new URL(res.headers.location!, url);
+          } catch {
+            reject(new Error("Gecersiz yonlendirme adresi"));
+            return;
+          }
+          if (hedef.protocol !== "https:") {
+            reject(new Error("Guncelleme yonlendirmesi https degil"));
+            return;
+          }
+          if (izinliHostlar && !izinliHostlar.has(hedef.hostname)) {
+            reject(new Error("Yonlendirme izinli olmayan hosta gidiyor"));
+            return;
+          }
+          httpGet(hedef.toString(), izinliHostlar).then(resolve).catch(reject);
           return;
         }
         const chunks: Buffer[] = [];
@@ -306,7 +325,11 @@ function fetchFx(): Promise<{ date: string; rates: Record<string, { buy: number;
   });
 }
 
-function checkForUpdates(): Promise<{ hasUpdate: boolean; version: string; notes: string; url: string } | null> {
+function sha256Hex(data: Buffer): string {
+  return crypto.createHash("sha256").update(data).digest("hex");
+}
+
+function checkForUpdates(): Promise<{ hasUpdate: boolean; version: string; notes: string; url: string; digest: string; shaUrl: string } | null> {
   return new Promise((resolve) => {
     log("Guncelleme kontrol ediliyor...");
     const options = {
@@ -326,11 +349,21 @@ function checkForUpdates(): Promise<{ hasUpdate: boolean; version: string; notes
             const notes = release.body || "";
             const asset = release.assets?.find((a: any) => a.name.endsWith(".zip"));
             const downloadUrl = asset?.browser_download_url || "";
+            // GitHub asset ozeti ("sha256:<hex>") ya da ayri .sha256 dosyasi.
+            const digest = String(asset?.digest || "").replace(/^sha256:/i, "").toLowerCase();
+            const shaAsset = release.assets?.find((a: any) => /\.sha256$/i.test(a.name || ""));
+            const shaUrl = shaAsset?.browser_download_url || "";
 
             log(`Mevcut: v${CURRENT_VERSION}, Son: v${latestVersion}, URL: ${downloadUrl}`);
 
             if (latestVersion && latestVersion !== CURRENT_VERSION && downloadUrl) {
-              resolve({ hasUpdate: true, version: latestVersion, notes, url: downloadUrl });
+              if (!digest && !shaUrl) {
+                // Fail closed: dogrulanamayan guncelleme yuklenmez.
+                log("Guncelleme ozeti (sha256) yok; guvenlik icin yuklenmiyor.");
+                resolve(null);
+                return;
+              }
+              resolve({ hasUpdate: true, version: latestVersion, notes, url: downloadUrl, digest, shaUrl });
             } else {
               resolve(null);
             }
@@ -347,7 +380,23 @@ function checkForUpdates(): Promise<{ hasUpdate: boolean; version: string; notes
   });
 }
 
-function downloadAndInstall(updateUrl: string): Promise<boolean> {
+const GUNCELLEME_IZINLI_HOSTLAR = new Set([
+  "github.com",
+  "objects.githubusercontent.com",
+  "github-releases.githubusercontent.com",
+  "release-assets.githubusercontent.com",
+]);
+
+async function beklenen_ozet(digest: string, shaUrl: string): Promise<string> {
+  if (digest) return digest;
+  if (!shaUrl) return "";
+  const veri = await httpGet(shaUrl, GUNCELLEME_IZINLI_HOSTLAR);
+  const metin = veri.toString("utf-8").trim().toLowerCase();
+  const ilk = metin.split(/\s+/)[0] || "";
+  return /^[a-f0-9]{64}$/.test(ilk) ? ilk : "";
+}
+
+function downloadAndInstall(updateUrl: string, expectedSha: string, shaUrl: string = ""): Promise<boolean> {
   return new Promise(async (resolve) => {
     const zipPath = path.join(app.getPath("temp"), "fh-update.zip");
     const extractPath = path.join(app.getPath("temp"), "fh-extract");
@@ -357,9 +406,40 @@ function downloadAndInstall(updateUrl: string): Promise<boolean> {
     log(`Hedef klasor: ${appDir}`);
 
     try {
+      let url: URL;
+      try {
+        url = new URL(updateUrl);
+      } catch {
+        log("Gecersiz guncelleme adresi");
+        resolve(false);
+        return;
+      }
+      if (url.protocol !== "https:" || !GUNCELLEME_IZINLI_HOSTLAR.has(url.hostname)) {
+        log(`Guncelleme adresi guvenli degil: ${updateUrl}`);
+        resolve(false);
+        return;
+      }
+
       const data = await httpGet(updateUrl);
       fs.writeFileSync(zipPath, data);
       log(`Indirildi: ${(data.length / 1024).toFixed(0)} KB`);
+
+      // Butunluk: indirilen zip'in sha256'si ilan edilen ozetle ayni olmali.
+      const ozet = (expectedSha || await beklenen_ozet(expectedSha, shaUrl)).toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(ozet)) {
+        log("Guncelleme ozeti dogrulanamadi; yukleme iptal edildi.");
+        try { fs.rmSync(zipPath, { force: true }); } catch {}
+        resolve(false);
+        return;
+      }
+      const gercek = sha256Hex(data);
+      if (!crypto.timingSafeEqual(Buffer.from(gercek, "hex"), Buffer.from(ozet, "hex"))) {
+        log(`Guncelleme ozeti uyusmuyor (beklenen ${ozet.slice(0, 12)}..., gelen ${gercek.slice(0, 12)}...)`);
+        try { fs.rmSync(zipPath, { force: true }); } catch {}
+        resolve(false);
+        return;
+      }
+      log("Guncelleme ozeti dogrulandi.");
 
       if (fs.existsSync(extractPath)) fs.rmSync(extractPath, { recursive: true, force: true });
       fs.mkdirSync(extractPath, { recursive: true });
@@ -459,7 +539,13 @@ if (!gotTheLock) {
       }
     }, 5000);
 
-async function promptAndInstall(update: { version: string; notes: string; url: string }): Promise<"updated" | "skipped" | "failed" | "no-window"> {
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    });
+  });
+}
+
+async function promptAndInstall(update: { version: string; notes: string; url: string; digest: string; shaUrl: string }): Promise<"updated" | "skipped" | "failed" | "no-window"> {
   if (!mainWindow || mainWindow.isDestroyed()) return "no-window";
   log(`Guncelleme mevcut: v${update.version}`);
   const result = await dialog.showMessageBox(mainWindow, {
@@ -473,7 +559,7 @@ async function promptAndInstall(update: { version: string; notes: string; url: s
 
   if (result.response !== 0) return "skipped";
   log("Kullanici guncellemeyi onayladi");
-  const success = await downloadAndInstall(update.url);
+  const success = await downloadAndInstall(update.url, update.digest, update.shaUrl);
   if (success) {
     log("Uygulama yeniden baslatiliyor...");
     app.relaunch();
@@ -483,12 +569,6 @@ async function promptAndInstall(update: { version: string; notes: string; url: s
   log("Guncelleme basarisiz");
   dialog.showErrorBox("Guncelleme HATASI", "Guncelleme yuklenemedi. Lutfen tekrar deneyin veya GitHub'dan manuel indirin.");
   return "failed";
-}
-
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
-    });
-  });
 }
 
 app.on("window-all-closed", () => {
