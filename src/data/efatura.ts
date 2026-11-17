@@ -12,7 +12,7 @@ export interface EfaturaParse {
   matrahSutun: string | null;
 }
 
-const MATRAH_IPUCU = /(matrah|ara\s*toplam|aratoplam|mal[\/\s]*(hizmet|ve\s*hizmet))/i;
+const MATRAH_IPUCU = /(matrah|ara\s*toplam|aratoplam|mal[/\s]*(hizmet|ve\s*hizmet))/i;
 const KDV_IPUCU = /kdv/i;
 
 function ayracSec(text: string): string {
@@ -56,7 +56,7 @@ function hucreleriBol(line: string, ayrac: string): string[] {
 
 /** "1.234,56" | "1234.56" | "1,234.56" -> "1234.56" */
 function sayiTemizle(raw: string): string | null {
-  let t = raw.replace(/[^\d.,\-]/g, "").trim();
+  let t = raw.replace(/[^\d.,-]/g, "").trim();
   if (!t) return null;
   if (t.includes(",") && t.includes(".")) {
     t = t.replace(/\./g, "").replace(",", ".");
@@ -70,7 +70,7 @@ function sayiTemizle(raw: string): string | null {
   return t;
 }
 
-export function parseEfaturaCsv(text: string, kaynak = ""): EfaturaParse {
+export function parseEfaturaCsv(text: string, _kaynak = ""): EfaturaParse {
   const temiz = text.replace(/^\uFEFF/, "");
   const ayrac = ayracSec(temiz);
   const satirlar = temiz.split(/\r?\n/).filter((l) => l.trim() !== "");

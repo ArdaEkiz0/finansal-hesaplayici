@@ -1,92 +1,78 @@
 <p align="center">
-  <img src="public/logo.svg" alt="Finansal Hesaplaci" width="120">
+  <img src="public/logo.svg" alt="Finansal Hesaplayıcı" width="120">
 </p>
 
-<h1 align="center">Finansal Hesaplaci</h1>
+<h1 align="center">Finansal Hesaplayıcı</h1>
 
 <p align="center">
-  Turk mali hesaplamalari icin masaustu uygulamasi<br>
-  Electron + React + TypeScript ile yazildi.<br>
+  Türk vergi ve mali hesapları için tamamen çevrimdışı masaüstü uygulaması<br>
+  Electron + React + TypeScript • decimal.js hassasiyeti • Aurora Ledger arayüzü<br>
   <small>Developer: Arda M. Ekiz</small>
 </p>
 
-## Ne Yapar?
+## İndir
 
-KDV, stopaj, kar marji, bilesek faiz gibi gunluk mali hesaplamalari kolaylastirir.
-Ozellikle Turk vergi sistemindeki oranlari (KDV %1/%10/%20, stopaj %1-%20) destekler.
-Tum hesaplamalar offline calisir, internet gerekmez.
+En güncel sürüm: [Releases](https://github.com/ArdaEkiz0/finansal-hesaplayici/releases) sayfasından indir.
 
-## Modlar
+| Dosya | Ne zaman? |
+|---|---|
+| `Finansal-Hesaplayici-X.Y.Z-kurulum.exe` | Kalıcı kurulum: Başlat menüsü + masaüstü kısayolu, Denetim Masası'ndan kaldırılabilir |
+| `Finansal-Hesaplayici-X.Y.Z-portable.exe` | Kurulum istemeyen tek dosya — USB'den çalıştır |
 
-- **KDV** — KDV ekleme / dahil etme
-- **Stopaj** — Vergi kesintisi hesaplama
-- **Kar Marji** — Marjdan satis fiyati bulma
-- **Kar Orani** — Kardan satis fiyati bulma
-- **Zincirli Indirim** — Ust uste yuzde indirim
-- **Yuzde** — Yuzde bazli islemler
-- **Bilesik Faiz** — Yillik faiz hesaplama
-- **KDV Karsilastirma** — Dahil mi / haric mi karsilastir
+Uygulama içinde **Ayarlar → Güncelleme → Denetle** ile kendi kendini güncelleyebilir.
 
-## Kurulum
+> Not: Sürüm imzasızdır; Windows SmartScreen ilk çalıştırmada "更多信息 → Çalıştır" diyebilir.
 
-`kur.bat` dosyasini calistirin:
+## Neler yapar?
 
-- Node.js yoksa otomatik yukler
-- Electron'u indirir
-- npm install + build yapar
-- Masaustune kisayol birakir
+- **16 hesap modu** — KDV (hariç/dahil, %1/%10/%20 + özel oran), Dönem KDV, Stopaj, Tevkifat, Gecikme faizi, Amortisman, Döviz (TCMB), Marj, Kâr oranı, İndirim, Yüzde, Bileşik, Fiyat, Karşılaştır, Toplu
+- **Dönem arşivi + devreden zinciri** — ay kapanışları, geçmiş dönem devreden KDV otomatik taşınır
+- **Cari kartlar** — dönem ve kayıtlar cari bazında izlenir
+- **E-fatura CSV içe aktarma** — matrah/KDV sütunlarını tanıyıp toplar
+- **Vergi takvimi** — KDV (28), Muhtasar & Prim (26), Damga (26), Ba-Bs ve geçici vergi son günleri, "kaç gün kaldı" rozetleriyle
+- **Beyan özeti** — dönemden yazdırılabilir KDV özeti kartı (ön kontrol aracı, resmi belge değildir)
+- **Yedek al / geri yükle** — tüm veriler tek JSON; bilgisayar değişimi için birebir
+- **Yüzücü widget** — ayrı, boyutlandırılabilir mini hesap makinesi (her zaman üstte)
+- **Komut paleti** — `Ctrl+K` ile her mod ve panele tek tıkla
+- **Tema** — Koyu / Açık / Sistem + yazı ölçeği (A−/A+)
 
-Tek yapman gereken bu. Nodes yoksa bile otomatik kuruyor.
+Tüm hesaplar **çevrimdışı** çalışır; yalnızca döviz kuru ve güncelleme denetimi internet ister.
 
-## Gelistirme
+## Geliştirme
 
 ```bash
 npm install
-npm run dev
+npm run dev          # tarayıcı önizleme (localhost:5173)
+npm test             # vitest — 42 test
+npm run build        # tsc + vite
+npm run dist         # portable + kurulum exe (release/)
 ```
 
-Vite ile hot-reload calisir.
+Etiket push'la yayın: `git tag vX.Y.Z; git push origin vX.Y.Z` → CI test eder, paketleri, GitHub Release'e yükler.
 
-## Yapi
+## Proje yapısı
 
 ```
 src/
-  App.tsx              # Ana layout
-  main.tsx             # Entry point
-  index.css            # Tailwind tema
-  core/
-    engine.ts          # Matematik fonksiyonlari
-  store/
-    useStore.ts        # Zustand state
-  hooks/
-    useKeyboard.ts     # Klavye kisayollari
-  lib/
-    persist.ts         # LocalStorage kayit
-  components/
-    Display.tsx        # Giris alani + sonuc
-    Keypad.tsx         # Sayi tuslari
-    ModeSelector.tsx   # Mod secici
-    History.tsx        # Gecmis sidebar
-    Settings.tsx       # Ayarlar paneli
-    Help.tsx           # Klavye kisayollari
-    TitleBar.tsx       # Electron baslik cubugu
-    Notification.tsx   # Toast bildirim
-    ErrorBoundary.tsx  # Hata yakalama
-
+  core/engine.ts       # decimal.js hesaplama motoru + TR sayı formatı
+  data/                # oranlar (tax), dönem (donem), e-fatura, vergi takvimi (takvim)
+  store/useStore.ts    # Zustand — tek durum deposu, localStorage'a yazar
+  components/          # Aurora Ledger arayüzü (mod seçici, keypad, paneller, modallar)
+  lib/persist.ts       # kalıcılık (sürüm anahtarı v2)
 electron/
-  main.ts             # Electron main process
-  preload.ts          # IPC guvenli kopru
+  main.ts              # pencere, widget, güncelleyici, TCMB kuru
+  preload.ts           # güvenli IPC köprüsü
+tests/                 # vitest — SMMM senaryoları, dönem, e-fatura, takvim
+docs/index.html        # tanıtım sayfası
 ```
 
-## Teknik
+## Teknik notlar
 
-- **decimal.js** — virgullu sayilarda hassasiyet kaybi olmamasi icin
-- **Zustand** — state yonetimi (context kullanimi gerekmedi)
-- **Turk sayi formati** — `1.234.567,89` (nokta ayirici, virgul ondalik)
-- **Yerel fontlar** — Inter ve JetBrains Mono dosyayla birlikte geliyor
-- **Glassmorphism** — koyu tema, cam efektli kartlar
-- **Tek instance** — ayni anda iki pencere acilmaz
-- **Gecmis** — LocalStorage'da saklanir, silinmez
+- **decimal.js** — para hesaplarında kayan nokta hatası yok
+- **TR sayı formatı** — `1.234.567,89`
+- **Güncel oran denetimi** — yıl değişince oranlar için tazelik uyarısı
+- **Tek örnek** — aynı anda iki ana pencere açılmaz
+- **Kod imzası yok** — sertifika alınırsa SmartScreen uyarısı kalkar
 
 ## Lisans
 

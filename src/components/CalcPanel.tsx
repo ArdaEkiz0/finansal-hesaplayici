@@ -46,7 +46,6 @@ export function CalcPanel() {
   const setAmortismanYears = useStore((s) => s.setAmortismanYears);
   const amortismanMethod = useStore((s) => s.amortismanMethod);
   const setAmortismanMethod = useStore((s) => s.setAmortismanMethod);
-  const fxRates = useStore((s) => s.fxRates);
   const fxDate = useStore((s) => s.fxDate);
   const fxManual = useStore((s) => s.fxManual);
   const setFxManual = useStore((s) => s.setFxManual);
@@ -89,7 +88,6 @@ export function CalcPanel() {
     e.target.value = "";
   };
   const tevkifatPay = useStore((s) => s.tevkifatPay);
-  const setTevkifatPay = useStore((s) => s.setTevkifatPay);
   const tevkifatCode = useStore((s) => s.tevkifatCode);
   const setTevkifatCode = useStore((s) => s.setTevkifatCode);
   const kdvExtract = useStore((s) => s.kdvExtract);
