@@ -56,10 +56,10 @@ function kelimeleriOluştur(y: number): TakvimKayit[] {
       açıklama: `${pmAd} Ba/Bs formu bilgileri` });
 
     // Geçici vergi: 3 aylık dönem sonu Mart/Haziran/Eylül/Aralık → beyan: 2 ay sonranın 15'i
-    if (pm === 3 || pm === 6 || pm === 9 || pm === 12) {
+    if (pm === 3 || pm === 6 || pm === 9 || pm === 0) {
       const beyanAy = m1 + 1 <= 12 ? m1 + 1 : 1;
       const beyanYil = beyanAy === 1 ? y + 1 : y;
-      const ceyrekAd: Record<number, string> = { 3: "1. çeyrek (Ocak–Mart) " + py, 6: "2. çeyrek (Nisan–Haziran) " + py, 9: "3. çeyrek (Temmuz–Eylül) " + py, 12: `4. çeyrek (Ekim–Aralık) ${py}` };
+      const ceyrekAd: Record<number, string> = { 0: `4. çeyrek (Ekim–Aralık) ${py}`, 3: "1. çeyrek (Ocak–Mart) " + py, 6: "2. çeyrek (Nisan–Haziran) " + py, 9: "3. çeyrek (Temmuz–Eylül) " + py };
       out.push({ id: `gvv-${beyanYil}-${beyanAy}`, ad: "Geçici Vergi", tip: "gVV",
         tarih: iso(beyanYil, beyanAy, 15), dönemi: ceyrekAd[pm],
         açıklama: "Geçici vergi beyannamesi; vergi beyandan itibaren 7 gün içinde ödenir" });

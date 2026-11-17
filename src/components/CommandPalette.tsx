@@ -45,12 +45,16 @@ export function CommandPalette() {
     return komutlar.filter((k) => k.label.toLocaleLowerCase("tr").includes(q));
   }, [komutlar, query]);
 
+  // Acilista aramayi sifirla — render sirasinda ayarlama (React'in onerdigi desen),
+  // efekt yalnizca DOM senkronu (odak) icin kaliyor.
+  const [oncekiAcik, setOncekiAcik] = useState(show);
+  if (show !== oncekiAcik) {
+    setOncekiAcik(show);
+    if (show) { setQuery(""); setIdx(0); }
+  }
+
   useEffect(() => {
-    if (show) {
-      setQuery("");
-      setIdx(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    if (show) requestAnimationFrame(() => inputRef.current?.focus());
   }, [show]);
 
   if (!show) return null;

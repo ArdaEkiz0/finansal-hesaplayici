@@ -1,7 +1,15 @@
 import { useStore } from "../store/useStore";
 import { Minus, Square, Copy, X, Settings, HelpCircle, Calculator, ReceiptText, BookOpen, FolderArchive, GraduationCap, CalendarDays } from "lucide-react";
 import { takvimListesi, gunKaldi } from "../data/takvim";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+
+type WinApi = {
+  minimize?: () => void;
+  maximize?: () => void;
+  close?: () => void;
+  onMaximizeChange?: (cb: (_e: unknown, m: boolean) => void) => void;
+  isMaximized?: () => Promise<boolean>;
+};
 
 export function TitleBar() {
   const toggleWidget = useStore((s) => s.toggleWidget);
@@ -14,19 +22,24 @@ export function TitleBar() {
   const toggleTakvim = useStore((s) => s.toggleTakvim);
   const result = useStore((s) => s.result);
   const [isMax, setIsMax] = useState(false);
-  const [noBridge, setNoBridge] = useState(false);
+  const api = (window as unknown as { electronAPI?: WinApi }).electronAPI;
+  const noBridge = !api;
 
   useEffect(() => {
-    const api = (window as unknown as { electronAPI?: { onMaximizeChange?: (cb: (_e: unknown, m: boolean) => void) => void; isMaximized?: () => Promise<boolean> } }).electronAPI;
-    if (!api) {
-      setNoBridge(true);
-      return;
-    }
+    if (!api) return;
     api.onMaximizeChange?.((_e, m) => setIsMax(m));
     api.isMaximized?.().then(setIsMax).catch(() => {});
-  }, []);
+  }, [api]);
 
-  const api = (window as unknown as { electronAPI?: { minimize?: () => void; maximize?: () => void; close?: () => void } }).electronAPI;
+  // Vergi takvimi geri sayimi (oturum basina bir): 7 gun ve az ise rozet yanar.
+  const takvimKaldi = useMemo(() => {
+    try {
+      const sira = takvimListesi(new Date());
+      return sira.length ? gunKaldi(sira[0].tarih, new Date()) : Infinity;
+    } catch {
+      return Infinity;
+    }
+  }, []);
 
   const toolBtn =
     "no-drag flex items-center gap-1.5 px-2.5 h-9 rounded-xl btn-press focus-ring transition-colors text-[12px] font-semibold";
@@ -65,14 +78,9 @@ export function TitleBar() {
         <button title="Vergi takvimi — beyan son günleri" onClick={toggleTakvim} className={toolBtn + " relative"}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>
           <CalendarDays size={15} /> <span className="hidden md:inline">Takvim</span>
-          {(() => {
-            try {
-              const sira = takvimListesi(new Date());
-              const kaldi = sira.length ? gunKaldi(sira[0].tarih, new Date()) : Infinity;
-              if (kaldi <= 7) return <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: kaldi <= 2 ? "var(--color-error)" : "var(--color-warning)" }} />;
-            } catch { /* yok */ }
-            return null;
-          })()}
+          {takvimKaldi <= 7 && (
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full" style={{ background: takvimKaldi <= 2 ? "var(--color-error)" : "var(--color-warning)" }} />
+          )}
         </button>
         <button title="2026 pratik oranlar" onClick={toggleRates} className={toolBtn}
           style={{ color: "var(--color-text-secondary)", background: "var(--color-glass)", border: "1px solid var(--color-glass-border)" }}>

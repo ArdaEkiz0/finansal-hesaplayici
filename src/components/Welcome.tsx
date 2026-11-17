@@ -38,7 +38,6 @@ const KULLANIM = [
 export function Welcome() {
   const show = useStore((s) => s.showWelcome);
   const toggle = useStore((s) => s.toggleWelcome);
-  const toggleSettings = useStore((s) => s.toggleSettings);
   const historyCount = useStore((s) => s.history.length);
   const [sakla, setSakla] = useState(false);
 

@@ -11,18 +11,19 @@ export function Widget() {
   const [rate, setRate] = useState<1 | 10 | 20>(20);
   const [extract, setExtract] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [pos, setPos] = useState(() => ({ x: Math.max(0, window.innerWidth - 300), y: 80 }));
-  const drag = useRef<{ dx: number; dy: number; active: boolean }>({ dx: 0, dy: 0, active: false });
-
-  useEffect(() => {
+  const [pos, setPos] = useState(() => {
     try {
       const raw = localStorage.getItem("fh-widget-pos");
       if (raw) {
         const p = JSON.parse(raw);
-        if (typeof p.x === "number" && typeof p.y === "number") setPos({ x: Math.min(Math.max(0, p.x), window.innerWidth - 280), y: Math.min(Math.max(0, p.y), window.innerHeight - 200) });
+        if (typeof p.x === "number" && typeof p.y === "number") {
+          return { x: Math.min(Math.max(0, p.x), window.innerWidth - 280), y: Math.min(Math.max(0, p.y), window.innerHeight - 200) };
+        }
       }
     } catch { /* yok */ }
-  }, []);
+    return { x: Math.max(0, window.innerWidth - 300), y: 80 };
+  });
+  const drag = useRef<{ dx: number; dy: number; active: boolean }>({ dx: 0, dy: 0, active: false });
 
   useEffect(() => {
     try { localStorage.setItem("fh-widget-pos", JSON.stringify(pos)); } catch { /* yok */ }

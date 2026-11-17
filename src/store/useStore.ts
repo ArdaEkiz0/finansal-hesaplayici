@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import Decimal from "decimal.js";
 import { loadState, saveState } from "../lib/persist";
+import { temizleYedek } from "../lib/yedek";
 import {
   toDecimal,
   parseAmount,
@@ -25,7 +26,6 @@ import {
 } from "../core/engine";
 import {
   computeDonemNet,
-  kalanDevreden,
   sortByDonemId,
   AY_AD,
   type DonemRecord,
@@ -600,7 +600,6 @@ export const useStore = create<State>((set, get) => ({
   notification: null,
 
   setBatchInput: (batchInput) => {
-    const s = get();
     const clean = batchInput.replace(/[^\d.,+\-*/()\r\n\s]/g, "").slice(0, 4000);
     set({ batchInput: clean });
     set(refreshBatch({ ...get(), batchInput: clean }));
@@ -950,20 +949,17 @@ export const useStore = create<State>((set, get) => ({
   openBeyanOzeti: (donemId) => set({ beyanDonemId: donemId, showBeyanOzeti: true }),
   toggleBeyanOzeti: () => set((s) => ({ showBeyanOzeti: !s.showBeyanOzeti })),
   restoreYedek: (data) => {
-    try {
-      if (!data || typeof data !== "object") return false;
-      const d = data as Record<string, unknown>;
-      if (!Array.isArray(d.history) && !Array.isArray(d.donemler) && !Array.isArray(d.cariler)) return false;
-      set({
-        history: ((d.history as HistoryEntry[]) ?? []).slice(0, 100),
-        donemler: ((d.donemler as DonemRecord[]) ?? []).slice(0, 240),
-        cariler: ((d.cariler as Cari[]) ?? []).slice(0, 500),
-        activeCari: typeof d.activeCari === "string" ? d.activeCari : "",
-        settings: (d.settings ?? { showCurrencySymbol: true, precision: 2, fontScale: 1 }) as State["settings"],
-        theme: (["dark", "light", "system"].includes(String(d.theme)) ? d.theme : "dark") as Theme,
-      });
-      return true;
-    } catch { return false; }
+    const temiz = temizleYedek(data);
+    if (!temiz) return false;
+    set({
+      history: temiz.history as unknown as HistoryEntry[],
+      donemler: temiz.donemler as unknown as DonemRecord[],
+      cariler: temiz.cariler as unknown as Cari[],
+      activeCari: temiz.activeCari,
+      settings: temiz.settings,
+      theme: temiz.theme as Theme,
+    });
+    return true;
   },
   toggleRates: () => set((s) => ({ showRates: !s.showRates })),
   toggleWidget: () => {

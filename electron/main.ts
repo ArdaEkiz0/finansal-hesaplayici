@@ -396,8 +396,8 @@ async function beklenen_ozet(digest: string, shaUrl: string): Promise<string> {
   return /^[a-f0-9]{64}$/.test(ilk) ? ilk : "";
 }
 
-function downloadAndInstall(updateUrl: string, expectedSha: string, shaUrl: string = ""): Promise<boolean> {
-  return new Promise(async (resolve) => {
+async function downloadAndInstall(updateUrl: string, expectedSha: string, shaUrl: string = ""): Promise<boolean> {
+  {
     const zipPath = path.join(app.getPath("temp"), "fh-update.zip");
     const extractPath = path.join(app.getPath("temp"), "fh-extract");
     const appDir = app.isPackaged ? path.dirname(app.getPath("exe")) : path.join(__dirname, "..");
@@ -411,13 +411,11 @@ function downloadAndInstall(updateUrl: string, expectedSha: string, shaUrl: stri
         url = new URL(updateUrl);
       } catch {
         log("Gecersiz guncelleme adresi");
-        resolve(false);
-        return;
+        return false;
       }
       if (url.protocol !== "https:" || !GUNCELLEME_IZINLI_HOSTLAR.has(url.hostname)) {
         log(`Guncelleme adresi guvenli degil: ${updateUrl}`);
-        resolve(false);
-        return;
+        return false;
       }
 
       const data = await httpGet(updateUrl);
@@ -429,15 +427,13 @@ function downloadAndInstall(updateUrl: string, expectedSha: string, shaUrl: stri
       if (!/^[a-f0-9]{64}$/.test(ozet)) {
         log("Guncelleme ozeti dogrulanamadi; yukleme iptal edildi.");
         try { fs.rmSync(zipPath, { force: true }); } catch {}
-        resolve(false);
-        return;
+        return false;
       }
       const gercek = sha256Hex(data);
       if (!crypto.timingSafeEqual(Buffer.from(gercek, "hex"), Buffer.from(ozet, "hex"))) {
         log(`Guncelleme ozeti uyusmuyor (beklenen ${ozet.slice(0, 12)}..., gelen ${gercek.slice(0, 12)}...)`);
         try { fs.rmSync(zipPath, { force: true }); } catch {}
-        resolve(false);
-        return;
+        return false;
       }
       log("Guncelleme ozeti dogrulandi.");
 
@@ -460,8 +456,7 @@ function downloadAndInstall(updateUrl: string, expectedSha: string, shaUrl: stri
           log("Root'tan kopyalanacak (package/ yok)");
         } else {
           log(`HATA: Gecerli guncelleme icerigi bulunamadi. Icerik: ${extractedItems.join(", ")}`);
-          resolve(false);
-          return;
+          return false;
         }
       }
 
@@ -473,14 +468,14 @@ function downloadAndInstall(updateUrl: string, expectedSha: string, shaUrl: stri
       try { fs.rmSync(extractPath, { recursive: true, force: true }); } catch {}
 
       log("Guncelleme tamamlandi!");
-      resolve(true);
+      return true;
     } catch (e) {
       log(`Guncelleme hatasi: ${e}`);
       try { fs.rmSync(zipPath, { force: true }); } catch {}
       try { fs.rmSync(extractPath, { recursive: true, force: true }); } catch {}
-      resolve(false);
+      return false;
     }
-  });
+  }
 }
 
 function copyDirSync(src: string, dest: string) {

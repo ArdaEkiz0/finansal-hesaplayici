@@ -2,7 +2,7 @@ import { useStore, MODE_LABELS } from "../store/useStore";
 import { X, Printer, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { toDecimal, numberToTurkishWords } from "../core/engine";
+import { numberToTurkishWords } from "../core/engine";
 import Decimal from "decimal.js";
 
 export function InvoicePreview() {
@@ -72,8 +72,4 @@ export function InvoicePreview() {
     </div>,
     document.body
   );
-}
-
-export function unusedInvoiceHelper(v: string) {
-  return toDecimal(v);
 }

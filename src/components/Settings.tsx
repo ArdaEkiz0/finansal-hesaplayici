@@ -1,4 +1,5 @@
 import { useStore } from "../store/useStore";
+import { yedekOlustur } from "../lib/yedek";
 import { X, Sun, Moon, Eye, EyeOff, RefreshCw, Download, FolderOpen, Monitor } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 
@@ -22,17 +23,15 @@ export function Settings() {
 
   const yedekAl = () => {
     const s = useStore.getState();
-    const yedek = {
-      uygulama: "finansal-hesaplayici",
+    const yedek = yedekOlustur({
       surum: version || null,
-      tarih: new Date().toISOString(),
       history: s.history,
       donemler: s.donemler,
       cariler: s.cariler,
       activeCari: s.activeCari,
       settings: s.settings,
       theme: s.theme,
-    };
+    });
     const blob = new Blob([JSON.stringify(yedek, null, 2)], { type: "application/json;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
