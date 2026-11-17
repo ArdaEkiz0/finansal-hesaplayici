@@ -550,10 +550,10 @@ async function promptAndInstall(update: { version: string; notes: string; url: s
   log(`Guncelleme mevcut: v${update.version}`);
   const result = await dialog.showMessageBox(mainWindow, {
     type: "info",
-    title: "Guncelleme Mevcut",
-    message: `Yeni surum: v${update.version}`,
-    detail: `Mevcut: v${CURRENT_VERSION}\nYeni: v${update.version}\n\nGuncellemeyi yuklemek ister misiniz?`,
-    buttons: ["Guncelle", "Atla"],
+    title: "Güncelleme Mevcut",
+    message: `Yeni sürüm: v${update.version}`,
+    detail: `Mevcut: v${CURRENT_VERSION}\nYeni: v${update.version}\n\nGüncellemeyi yüklemek ister misiniz?`,
+    buttons: ["Güncelle", "Atla"],
     defaultId: 0,
   });
 
@@ -567,7 +567,7 @@ async function promptAndInstall(update: { version: string; notes: string; url: s
     return "updated";
   }
   log("Guncelleme basarisiz");
-  dialog.showErrorBox("Guncelleme HATASI", "Guncelleme yuklenemedi. Lutfen tekrar deneyin veya GitHub'dan manuel indirin.");
+  dialog.showErrorBox("Güncelleme Hatası", "Güncelleme yüklenemedi. Lütfen tekrar deneyin veya GitHub'dan manuel indirin.");
   return "failed";
 }
 
