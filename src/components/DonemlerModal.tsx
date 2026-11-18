@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import Decimal from "decimal.js";
-import { X, Trash2, FolderArchive, Users, Printer } from "lucide-react";
+import { X, Trash2, FolderArchive, Users, Printer, FileDown } from "lucide-react";
 import { useStore } from "../store/useStore";
 import { formatTurkishNumber } from "../core/engine";
-import { donemAd, donemOzet, type DonemRecord } from "../data/donem";
+import { donemAd, donemOzet, yillaraGir, type DonemRecord } from "../data/donem";
 
 function parseNum(v: string): Decimal {
   const t = (v || "").trim();
@@ -26,6 +26,7 @@ export function DonemlerModal() {
   const deleteDonem = useStore((s) => s.deleteDonem);
   const toggleCariler = useStore((s) => s.toggleCariler);
   const openBeyanOzeti = useStore((s) => s.openBeyanOzeti);
+  const exportDonemler = useStore((s) => s.exportDonemler);
   const cariler = useStore((s) => s.cariler);
   const [filter, setFilter] = useState<string>("");
 
@@ -53,6 +54,7 @@ export function DonemlerModal() {
             <span className="text-[11px] px-1.5 rounded-full" style={{ background: "var(--color-glass)", color: "var(--color-text-ghost)" }}>{secili.length} dönem</span>
           </div>
           <div className="flex items-center gap-1">
+            <button onClick={() => exportDonemler(secili)} title="Seçili dönemleri CSV indir" className="p-1.5 rounded-lg btn-press" style={{ color: "var(--color-primary-light)" }}><FileDown size={14} /></button>
             <button onClick={toggleCariler} title="Carileri yönet" className="p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-secondary)" }}><Users size={14} /></button>
             <button onClick={toggle} className="p-1.5 rounded-lg btn-press" style={{ color: "var(--color-text-ghost)" }}><X size={14} /></button>
           </div>
@@ -86,22 +88,40 @@ export function DonemlerModal() {
                 </tr>
               </thead>
               <tbody>
-                {secili.map((d: DonemRecord) => (
-                  <tr key={d.id} style={{ borderTop: "1px solid var(--color-glass-border)" }}>
-                    <td className={td}><span className="font-bold num-display">{donemAd(d)}</span><span className="ml-1 text-[10px]" style={{ color: "var(--color-text-ghost)" }}>%{d.kdvRate}</span></td>
-                    <td className={td} style={{ color: "var(--color-accent)" }}>{d.cari || "—"}</td>
-                    <td className={`${td} num-display`} style={{ textAlign: "right", color: "var(--color-text-secondary)" }}>{fmt(d.satis)} / {fmt(d.alis)}</td>
-                    <td className={`${td} num-display`} style={{ textAlign: "right" }}>{fmt(d.hesaplanan)}</td>
-                    <td className={`${td} num-display`} style={{ textAlign: "right" }}>{fmt(d.indirilecek)}</td>
-                    <td className={`${td} num-display`} style={{ textAlign: "right", color: "var(--color-text-ghost)" }}>{fmt(d.devredenGiris)}</td>
-                    <td className={`${td} num-display font-bold`} style={{ textAlign: "right", color: d.odenecek ? "var(--color-warning)" : "var(--color-success)" }}>
-                      {fmt(d.net)} <span className="text-[9px] font-bold">{d.odenecek ? "ÖDENECEK" : "DEVREDEN"}</span>
-                    </td>
-                    <td className={td}>
-                      <button onClick={() => openBeyanOzeti(d.id)} title="Beyan özeti (yazdırılabilir)" className="p-1 rounded key-cap" style={{ color: "var(--color-primary-light)" }}><Printer size={12} /></button>
-                      <button onClick={() => deleteDonem(d.id)} title="Dönemi sil" className="p-1 rounded key-cap" style={{ color: "var(--color-error)" }}><Trash2 size={12} /></button>
-                    </td>
-                  </tr>
+                {yillaraGir(secili).map((g) => (
+                  <Fragment key={g.yil}>
+                    <tr style={{ background: "var(--color-glass)" }}>
+                      <td className={td} colSpan={8}>
+                        <span className="font-bold num-display">{g.yil}</span>
+                        <span className="ml-1.5 text-[10px]" style={{ color: "var(--color-text-ghost)" }}>{g.ozet.sayi} dönem</span>
+                      </td>
+                    </tr>
+                    {g.kayitlar.map((d: DonemRecord) => (
+                      <tr key={d.id} style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+                        <td className={td}><span className="font-bold num-display">{donemAd(d)}</span><span className="ml-1 text-[10px]" style={{ color: "var(--color-text-ghost)" }}>%{d.kdvRate}</span></td>
+                        <td className={td} style={{ color: "var(--color-accent)" }}>{d.cari || "—"}</td>
+                        <td className={`${td} num-display`} style={{ textAlign: "right", color: "var(--color-text-secondary)" }}>{fmt(d.satis)} / {fmt(d.alis)}</td>
+                        <td className={`${td} num-display`} style={{ textAlign: "right" }}>{fmt(d.hesaplanan)}</td>
+                        <td className={`${td} num-display`} style={{ textAlign: "right" }}>{fmt(d.indirilecek)}</td>
+                        <td className={`${td} num-display`} style={{ textAlign: "right", color: "var(--color-text-ghost)" }}>{fmt(d.devredenGiris)}</td>
+                        <td className={`${td} num-display font-bold`} style={{ textAlign: "right", color: d.odenecek ? "var(--color-warning)" : "var(--color-success)" }}>
+                          {fmt(d.net)} <span className="text-[9px] font-bold">{d.odenecek ? "ÖDENECEK" : "DEVREDEN"}</span>
+                        </td>
+                        <td className={td}>
+                          <button onClick={() => openBeyanOzeti(d.id)} title="Beyan özeti (yazdırılabilir)" className="p-1 rounded key-cap" style={{ color: "var(--color-primary-light)" }}><Printer size={12} /></button>
+                          <button onClick={() => deleteDonem(d.id)} title="Dönemi sil" className="p-1 rounded key-cap" style={{ color: "var(--color-error)" }}><Trash2 size={12} /></button>
+                        </td>
+                      </tr>
+                    ))}
+                    <tr style={{ borderTop: "1px solid var(--color-glass-border)" }}>
+                      <td className={`${td} font-bold`} colSpan={3}>{g.yil} TOPLAM</td>
+                      <td className={`${td} num-display font-bold`} style={{ textAlign: "right" }}>{fmt(g.ozet.hesaplanan)}</td>
+                      <td className={`${td} num-display font-bold`} style={{ textAlign: "right" }}>{fmt(g.ozet.indirilecek)}</td>
+                      <td className={td}></td>
+                      <td className={`${td} num-display font-bold`} style={{ textAlign: "right" }}>{fmt(g.ozet.net)}</td>
+                      <td className={td}></td>
+                    </tr>
+                  </Fragment>
                 ))}
               </tbody>
               <tfoot style={{ background: "var(--color-glass)" }}>

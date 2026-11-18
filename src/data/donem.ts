@@ -37,7 +37,8 @@ export function donemAd(r: Pick<DonemRecord, "year" | "month">): string {
   return `${AY_AD[r.month] ?? ""} ${r.year}`;
 }
 
-function parseAmount(v: string): Decimal | null {
+/** Saklanmış dönem sayısını güvenle Decimal'e çevirir (ifade değerlendirmez). */
+export function parseDonemSayisi(v: string): Decimal | null {
   const t = (v ?? "").trim();
   if (!t) return null;
   try {
@@ -46,6 +47,10 @@ function parseAmount(v: string): Decimal | null {
   } catch {
     return null;
   }
+}
+
+function parseAmount(v: string): Decimal | null {
+  return parseDonemSayisi(v);
 }
 
 export interface DonemCompute {
@@ -80,8 +85,17 @@ export function sortByDonemId(list: DonemRecord[]): DonemRecord[] {
   return [...list].sort((a, b) => b.id.localeCompare(a.id));
 }
 
-/** Kayıtları cariye göre süzüp toplamları çıkar. */
-export function donemOzet(list: DonemRecord[]): { hesaplanan: Decimal; indirilecek: Decimal; net: Decimal; odenecekNet: Decimal; devredenNet: Decimal; sayi: number } {
+/** Kayitlari cariye göre süzüp toplamları çıkar. */
+export interface DonemOzet {
+  hesaplanan: Decimal;
+  indirilecek: Decimal;
+  net: Decimal;
+  odenecekNet: Decimal;
+  devredenNet: Decimal;
+  sayi: number;
+}
+
+export function donemOzet(list: DonemRecord[]): DonemOzet {
   let hesaplanan = new Decimal(0);
   let indirilecek = new Decimal(0);
   let net = new Decimal(0);
@@ -98,4 +112,27 @@ export function donemOzet(list: DonemRecord[]): { hesaplanan: Decimal; indirilec
     else devredenNet = devredenNet.plus(n.abs());
   }
   return { hesaplanan, indirilecek, net, odenecekNet, devredenNet, sayi: list.length };
+}
+
+export interface YillikOzet {
+  yil: number;
+  kayitlar: DonemRecord[];
+  ozet: DonemOzet;
+}
+
+/** Kayıtları yılına göre gruplar; en yeni yıl önce, yıl içinde en yeni dönem önce. */
+export function yillaraGir(list: DonemRecord[]): YillikOzet[] {
+  const byYear = new Map<number, DonemRecord[]>();
+  for (const r of list) {
+    const arr = byYear.get(r.year) ?? [];
+    arr.push(r);
+    byYear.set(r.year, arr);
+  }
+  return [...byYear.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([yil, kayitlar]) => ({
+      yil,
+      kayitlar: kayitlar.sort((a, b) => b.id.localeCompare(a.id)),
+      ozet: donemOzet(kayitlar),
+    }));
 }

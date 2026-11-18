@@ -2,6 +2,7 @@ import { create } from "zustand";
 import Decimal from "decimal.js";
 import { loadState, saveState } from "../lib/persist";
 import { temizleYedek } from "../lib/yedek";
+import { csvIndir } from "../lib/csv";
 import {
   toDecimal,
   parseAmount,
@@ -27,6 +28,9 @@ import {
 import {
   computeDonemNet,
   sortByDonemId,
+  donemAd,
+  donemOzet,
+  parseDonemSayisi,
   AY_AD,
   type DonemRecord,
   type Cari,
@@ -187,6 +191,7 @@ interface State {
   loadHistoryEntry: (id: string) => void;
   clearHistory: () => void;
   exportHistory: () => void;
+  exportDonemler: (list?: DonemRecord[]) => void;
   notify: (msg: string, type?: "success" | "error" | "info") => void;
 }
 
@@ -1008,16 +1013,8 @@ export const useStore = create<State>((set, get) => ({
   exportHistory: () => {
     const { history } = get();
     if (history.length === 0) return;
-    // CSV enjeksiyonu: gömülü tirnak satiri bozabilir, '=' ile baslayan
-    // deger Excel'de formül calistirabilir. Her hucre kacirilir ve
-    // formül benzeri degerler apostrofla metne cevrilir.
-    const hucre = (v: unknown) => {
-      let s = v == null ? "" : String(v);
-      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
-      return `"${s.replace(/"/g, '""')}"`;
-    };
-    const rows = [
-      "Tarih,Mod,Girdiler,Sonuç,Açıklama,Etiket",
+    const rows: unknown[][] = [
+      ["Tarih", "Mod", "Girdiler", "Sonuç", "Açıklama", "Etiket"],
       ...history.map((e) => [
         new Date(e.timestamp).toLocaleString("tr-TR"),
         MODE_LABELS[e.mode],
@@ -1025,15 +1022,37 @@ export const useStore = create<State>((set, get) => ({
         e.result,
         e.detail || "",
         e.note || "",
-      ].map(hucre).join(",")),
+      ]),
     ];
-    const blob = new Blob(["﻿" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `hesaplayici-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    csvIndir(`hesaplayici-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  },
+
+  exportDonemler: (list) => {
+    const kayitlar = sortByDonemId(list ?? get().donemler);
+    if (kayitlar.length === 0) return;
+    const para = (v: string) => formatTurkishNumber(parseDonemSayisi(v) ?? new Decimal(0), 2);
+    const ozet = donemOzet(kayitlar);
+    const rows: unknown[][] = [
+      ["Dönem", "Cari", "Oran %", "Matrah Satış", "Matrah Alış", "Giren Devreden", "Hesaplanan", "İndirilecek", "Net", "Durum"],
+      ...kayitlar.map((d) => [
+        donemAd(d),
+        d.cari || "",
+        d.kdvRate,
+        para(d.satis),
+        para(d.alis),
+        para(d.devredenGiris),
+        para(d.hesaplanan),
+        para(d.indirilecek),
+        para(d.net),
+        d.odenecek ? "Ödenecek" : "Devreden",
+      ]),
+      ["", "", "", "", "", "", "", "", "", ""],
+      ["TOPLAM", `${kayitlar.length} dönem`, "", "", "", "",
+        para(ozet.hesaplanan.toString()), para(ozet.indirilecek.toString()), para(ozet.net.toString()),
+        `Ödenecek ${para(ozet.odenecekNet.toString())} / Devreden ${para(ozet.devredenNet.toString())}`],
+    ];
+    const one = kayitlar.length === 1 ? `-${kayitlar[0].id}` : "";
+    csvIndir(`donem-ozeti${one}-${new Date().toISOString().slice(0, 10)}.csv`, rows);
   },
 
   notify: (message, type = "info") => {

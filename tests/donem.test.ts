@@ -7,6 +7,8 @@ import {
   donemOzet,
   donemId,
   donemAd,
+  yillaraGir,
+  parseDonemSayisi,
   type DonemRecord,
 } from "../src/data/donem";
 
@@ -67,5 +69,47 @@ describe("sıralama ve özet", () => {
     expect(o.odenecekNet.toString()).toBe("8000");
     expect(o.devredenNet.toString()).toBe("8000");
     expect(o.sayi).toBe(2);
+  });
+});
+
+// ——— Yeni: yıllık gruplama ve güvenli sayı çözümlemesi ———
+
+const yilRec = (yil: number, ay: number, net: string, odenecek = true): DonemRecord =>
+  rec({ id: `${yil}-${String(ay).padStart(2, "0")}`, year: yil, month: ay,
+    net, odenecek, hesaplanan: "200", indirilecek: "100" });
+
+describe("yillaraGir", () => {
+  it("yillari yeniden eskiye, aylari yeniden eskiye siralar", () => {
+    const g = yillaraGir([yilRec(2025, 3, "100"), yilRec(2026, 1, "50"), yilRec(2026, 3, "80"), yilRec(2025, 11, "60")]);
+    expect(g.map((x) => x.yil)).toEqual([2026, 2025]);
+    expect(g[0].kayitlar.map((x) => x.id)).toEqual(["2026-03", "2026-01"]);
+    expect(g[1].kayitlar.map((x) => x.id)).toEqual(["2025-11", "2025-03"]);
+  });
+
+  it("her yilin kendi toplamini hesaplar", () => {
+    const g = yillaraGir([yilRec(2026, 1, "100"), yilRec(2026, 2, "50")]);
+    expect(g[0].ozet.hesaplanan.toString()).toBe("400");
+    expect(g[0].ozet.indirilecek.toString()).toBe("200");
+    expect(g[0].ozet.net.toString()).toBe("150");
+    expect(g[0].ozet.sayi).toBe(2);
+  });
+
+  it("bos listede bos dondurur", () => {
+    expect(yillaraGir([])).toEqual([]);
+  });
+});
+
+describe("parseDonemSayisi", () => {
+  it("bos/bozuk/ifade iceren girdileri reddeder", () => {
+    expect(parseDonemSayisi("")).toBeNull();
+    expect(parseDonemSayisi("abc")).toBeNull();
+    expect(parseDonemSayisi("1+1")).toBeNull();
+    expect(parseDonemSayisi("1.000.000")).toBeNull();
+  });
+
+  it("sayisal degerleri kabul eder", () => {
+    expect(parseDonemSayisi("1234.56")?.toString()).toBe("1234.56");
+    expect(parseDonemSayisi("-30")?.toString()).toBe("-30");
+    expect(parseDonemSayisi("1,5")?.toString()).toBe("1.5");
   });
 });
