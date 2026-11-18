@@ -138,4 +138,74 @@ mod tests {
         assert!(l.iter().any(|c| c.eylem == Eylem::Yazdir));
         assert!(!filtrele(&l, "yazdir").is_empty());
     }
+
+    #[test]
+    fn mod_komutlari_gecerli_mod_ids() {
+        // Komut paletindeki her Mod eylemi gerçek bir mod tanımına işaret etmeli.
+        use crate::modes::mod_def;
+        let l = komutlar();
+        let mod_komutlari: Vec<_> = l
+            .iter()
+            .filter_map(|c| match c.eylem {
+                Eylem::Mod(id) => Some(id),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(mod_komutlari.len(), 15);
+        for id in mod_komutlari {
+            assert!(mod_def(id).is_some(), "komut geçersiz mod id'si: {id}");
+        }
+    }
+
+    #[test]
+    fn onbes_modun_hepsinin_komutu_var() {
+        use crate::modes::MODLAR;
+        let l = komutlar();
+        for m in MODLAR {
+            assert!(
+                l.iter().any(|c| c.eylem == Eylem::Mod(m.id)),
+                "{} modunun komut paletinde komutu yok",
+                m.id
+            );
+        }
+    }
+
+    #[test]
+    fn tema_komutlari_gecerli_degerler() {
+        let l = komutlar();
+        let temalar: Vec<_> = l
+            .iter()
+            .filter_map(|c| match c.eylem {
+                Eylem::Tema(t) => Some(t),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(temalar, vec!["dark", "light", "system"]);
+    }
+
+    #[test]
+    fn veri_ve_panel_eylemleri_tekil() {
+        // Aynı eylem iki komuta bağlanmamalı (belirsiz kısayol).
+        let l = komutlar();
+        let veri: Vec<_> = l.iter().filter(|c| c.kategori == "Veri").map(|c| c.eylem.clone()).collect();
+        for e in &veri {
+            assert_eq!(veri.iter().filter(|x| **x == *e).count(), 1, "{e:?}");
+        }
+        let panel: Vec<_> = l.iter().filter(|c| c.kategori == "Paneller").map(|c| c.eylem.clone()).collect();
+        for e in &panel {
+            assert_eq!(panel.iter().filter(|x| **x == *e).count(), 1, "{e:?}");
+        }
+    }
+
+    #[test]
+    fn mod_arama_komut_paletinde_calisir() {
+        let l = komutlar();
+        for (sorgu, id) in [("kdv", "kdv"), ("tevkifat", "tevkifat"), ("doviz", "doviz"), ("donem", "donem")] {
+            let bulunan = filtrele(&l, sorgu);
+            assert!(
+                bulunan.iter().any(|&i| l[i].eylem == Eylem::Mod(id)),
+                "{sorgu} → {id} komutu bulunamadı"
+            );
+        }
+    }
 }

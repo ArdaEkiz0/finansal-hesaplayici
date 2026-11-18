@@ -187,6 +187,70 @@ fn value_or<T: serde::de::DeserializeOwned>(v: &Value) -> Option<T> {
     serde_json::from_value(v.clone()).ok()
 }
 
+/// Yeni UI biçimi (`ana`/`detay`) ve eski Electron biçimi (`result`/`detail`,
+/// metin `inputs`) birlikte desteklenir. fh-data kaydı doğrulayıp geçirdikten
+/// sonra bu katmanda alan adı farkı yüzünden veri kaybı olmamalıdır (P0).
+fn value_or_hist(v: &Value) -> Option<HistEntry> {
+    if let Some(e) = value_or::<HistEntry>(v) {
+        return Some(e);
+    }
+    let ana = v
+        .get("ana")
+        .or_else(|| v.get("result"))
+        .and_then(Value::as_str)?;
+    Some(HistEntry {
+        id: v.get("id")?.as_str()?.to_string(),
+        timestamp: v.get("timestamp")?.as_i64()?,
+        mode: v.get("mode")?.as_str()?.to_string(),
+        inputs: v.get("inputs").and_then(value_or::<InputState>).unwrap_or_default(),
+        ana: ana.to_string(),
+        alt: v.get("alt").and_then(Value::as_str).unwrap_or("").to_string(),
+        detay: v
+            .get("detay")
+            .or_else(|| v.get("detail"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+    })
+}
+
+/// Eski Electron dönem kayıtları camelCase alan adı kullanır (`devredenGiris`,
+/// `kdvRate`, `closedAt`); yeni biçim snake_case'tir. İkisi de okunur.
+fn value_or_donem(v: &Value) -> Option<DonemKayit> {
+    if let Some(k) = value_or::<DonemKayit>(v) {
+        return Some(k);
+    }
+    Some(DonemKayit {
+        id: v.get("id")?.as_str()?.to_string(),
+        year: v.get("year")?.as_i64()? as i32,
+        month: v.get("month")?.as_i64()? as i32,
+        satis: v.get("satis").and_then(Value::as_str).unwrap_or("0").to_string(),
+        alis: v.get("alis").and_then(Value::as_str).unwrap_or("0").to_string(),
+        devreden_giris: v
+            .get("devreden_giris")
+            .or_else(|| v.get("devredenGiris"))
+            .and_then(Value::as_str)
+            .unwrap_or("0")
+            .to_string(),
+        hesaplanan: v.get("hesaplanan").and_then(Value::as_str).unwrap_or("0").to_string(),
+        indirilecek: v.get("indirilecek").and_then(Value::as_str).unwrap_or("0").to_string(),
+        net: v.get("net").and_then(Value::as_str).unwrap_or("0").to_string(),
+        odenecek: v.get("odenecek").and_then(Value::as_bool).unwrap_or(true),
+        kdv_rate: v
+            .get("kdv_rate")
+            .or_else(|| v.get("kdvRate"))
+            .and_then(Value::as_str)
+            .unwrap_or("20")
+            .to_string(),
+        cari: v.get("cari").and_then(Value::as_str).unwrap_or("").to_string(),
+        closed_at: v
+            .get("closed_at")
+            .or_else(|| v.get("closedAt"))
+            .and_then(Value::as_i64)
+            .unwrap_or(0),
+    })
+}
+
 fn temiz_settings(t: &TemizYedek, sembol: String) -> Settings {
     Settings {
         theme: t.theme.clone(),
@@ -217,8 +281,8 @@ impl AppState {
         }
         Some(Self {
             settings: temiz_settings(&t, sembol),
-            history: t.history.iter().filter_map(value_or).collect(),
-            donemler: t.donemler.iter().filter_map(value_or).collect(),
+            history: t.history.iter().filter_map(value_or_hist).collect(),
+            donemler: t.donemler.iter().filter_map(value_or_donem).collect(),
             cariler: t.cariler.iter().filter_map(value_or).collect(),
             active_cari: t.active_cari,
             inputs,
@@ -370,5 +434,155 @@ mod tests {
         }
         assert_eq!(h.len(), 100);
         assert_eq!(h[0].id, "119");
+    }
+
+    fn ornek_entry(id: &str, mod_: &str, ana: &str) -> HistEntry {
+        HistEntry {
+            id: id.to_string(),
+            timestamp: 1731912345000,
+            mode: mod_.to_string(),
+            inputs: InputState {
+                birinci: "1000".into(),
+                oran: "20".into(),
+                ..InputState::default()
+            },
+            ana: ana.to_string(),
+            alt: "1200".to_string(),
+            detay: "KDV hesabı".to_string(),
+        }
+    }
+
+    fn ornek_donem(id: &str, cari: &str) -> DonemKayit {
+        DonemKayit {
+            id: id.to_string(),
+            year: 2026,
+            month: id[5..7].parse().unwrap_or(1),
+            satis: "100000".into(),
+            alis: "60000".into(),
+            devreden_giris: "0".into(),
+            hesaplanan: "20000".into(),
+            indirilecek: "12000".into(),
+            net: "8000".into(),
+            odenecek: true,
+            kdv_rate: "20".into(),
+            cari: cari.to_string(),
+            closed_at: 1731912345000,
+        }
+    }
+
+    fn ornek_state() -> AppState {
+        let mut history = Vec::new();
+        gecmis_ekle(&mut history, ornek_entry("h1", "kdv", "200"));
+        gecmis_ekle(&mut history, ornek_entry("h2", "stopaj", "150"));
+        let mut inputs = std::collections::HashMap::new();
+        inputs.insert("kdv".to_string(), InputState {
+            birinci: "1000".into(),
+            oran: "20".into(),
+            secim: "haric".into(),
+            ..InputState::default()
+        });
+        AppState {
+            settings: Settings {
+                theme: "light".into(),
+                font_scale: 1.1,
+                show_currency_symbol: false,
+                precision: 4,
+                currency_symbol: "$".into(),
+            },
+            history,
+            donemler: vec![ornek_donem("2026-01", "c1"), ornek_donem("2026-02", "c2")],
+            cariler: vec![
+                Cari { id: "c1".into(), name: "Müşteri A".into() },
+                Cari { id: "c2".into(), name: "Müşteri B".into() },
+            ],
+            active_cari: "c1".into(),
+            inputs,
+        }
+    }
+
+    #[test]
+    fn gecmis_ekle_sonra_yedekten_geri_yukle() {
+        // gecmis_ekle → yedek_al → temizle_yedek → from_backup zinciri.
+        let state = ornek_state();
+        let yedek = state.yedek_degeri();
+        let geri = AppState::from_backup(&yedek).expect("yedek geri yüklenmeli");
+        assert_eq!(geri.history.len(), 2);
+        assert_eq!(geri.history[0].id, "h2", "en yeni kayıt en önde kalmalı");
+        assert_eq!(geri.history[0].ana, "150");
+        assert_eq!(geri.history[1].ana, "200");
+        assert_eq!(geri.history[0].inputs.birinci, "1000");
+    }
+
+    #[test]
+    fn appstate_tam_round_trip() {
+        let state = ornek_state();
+        let geri = AppState::from_backup(&state.yedek_degeri()).unwrap();
+        assert_eq!(geri.settings, state.settings);
+        assert_eq!(geri.history, state.history);
+        assert_eq!(geri.donemler, state.donemler);
+        assert_eq!(geri.cariler, state.cariler);
+        assert_eq!(geri.active_cari, "c1");
+        assert_eq!(geri.inputs.get("kdv").unwrap().secim, "haric");
+        assert_eq!(geri.inputs.get("kdv").unwrap().oran, "20");
+    }
+
+    #[test]
+    fn p0_eski_result_alani_geri_yuklemede_kaybolmuyor() {
+        // Eski Electron yedekleri "result"/"detail" alanlarını kullanır; P0 regresyonu.
+        let mut yedek = ornek_state().yedek_degeri();
+        yedek["history"] = json!([
+            {"id": "eski", "result": "250", "timestamp": 1, "mode": "kdv",
+             "inputs": "1000", "detail": "eski detay", "pinned": false}
+        ]);
+        let geri = AppState::from_backup(&yedek).expect("eski biçim yüklenmeli");
+        assert_eq!(geri.history.len(), 1, "eski geçmiş kaydı düşürülmemeli");
+        assert_eq!(geri.history[0].ana, "250");
+        assert_eq!(geri.history[0].detay, "eski detay");
+        assert_eq!(geri.settings.precision, 4);
+    }
+
+    #[test]
+    fn p0_eski_electron_donem_field_names_geri_yuklenir() {
+        let mut yedek = ornek_state().yedek_degeri();
+        yedek["donemler"] = json!([{
+            "id": "2026-03", "year": 2026, "month": 3,
+            "satis": "100000", "alis": "60000", "devredenGiris": "1000",
+            "hesaplanan": "20000", "indirilecek": "12000", "net": "7000",
+            "odenecek": true, "kdvRate": "20", "cari": "Müşteri A", "closedAt": 42
+        }]);
+        let geri = AppState::from_backup(&yedek).unwrap();
+        assert_eq!(geri.donemler.len(), 1, "eski dönem kaydı düşürülmemeli");
+        let donem = &geri.donemler[0];
+        assert_eq!(donem.devreden_giris, "1000");
+        assert_eq!(donem.kdv_rate, "20");
+        assert_eq!(donem.closed_at, 42);
+        assert_eq!(donem.net, "7000");
+    }
+
+    #[test]
+    fn cari_filtresi_uygulama_durumu_uzerinde() {
+        // app.rs::donemler_penceresi'ndeki yükleme koşuluyla aynı davranış.
+        let state = ornek_state();
+        let filtrele = |f: &str| -> Vec<DonemKayit> {
+            state.donemler.iter()
+                .filter(|d| f.is_empty() || d.cari == f)
+                .cloned()
+                .collect()
+        };
+        assert_eq!(filtrele("").len(), 2);
+        assert_eq!(filtrele("c1").len(), 1);
+        assert_eq!(filtrele("c1")[0].id, "2026-01");
+        assert_eq!(filtrele("yok").len(), 0);
+        // Filtrelenen kayıtların cari adı çözümlenebiliyor.
+        let ad = state.cariler.iter().find(|c| c.id == filtrele("c2")[0].cari).unwrap().name.clone();
+        assert_eq!(ad, "Müşteri B");
+    }
+
+    #[test]
+    fn satir_bicimi_kenar_durumlari() {
+        assert_eq!(satir_bicimi("Efektif Oran", "12.5", 2, "₺", false), "%12,50");
+        assert_eq!(satir_bicimi("Değişim %", "-96", 2, "₺", false), "%-96,00");
+        assert_eq!(satir_bicimi("Kur (1 USD)", "40", 4, "₺", true), "40,0000 ₺");
+        assert_eq!(satir_bicimi("Geçersiz", "abc", 2, "₺", true), "abc");
     }
 }

@@ -348,4 +348,170 @@ mod tests {
         assert_eq!(mod_etiketi("yok"), "Bilinmeyen mod");
         assert_eq!(gruplar().len(), 4);
     }
+
+    // --- Alan eşlemesi → fh_core uçtan uca (15 modun tamamı) ---
+
+    fn ui(mod_id: &str, birinci: &str, ikinci: &str, oran: &str) -> InputState {
+        let mut i = InputState {
+            birinci: birinci.to_string(),
+            ikinci: ikinci.to_string(),
+            oran: oran.to_string(),
+            ..InputState::default()
+        };
+        varsayilanlari_doldur(&mut i, mod_id);
+        i
+    }
+
+    fn hesapla_ui(mod_id: &str, i: &InputState) -> fh_core::HesapSonucu {
+        fh_core::hesapla(mod_id, &build_girdi(mod_id, i))
+            .unwrap_or_else(|| panic!("{mod_id} UI→core None döndü: {i:?}"))
+    }
+
+    #[test]
+    fn ui_kdv() {
+        let i = ui("kdv", "1000", "", "20");
+        let r = hesapla_ui("kdv", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("200", "1200"));
+        let mut i = ui("kdv", "1200", "", "20");
+        i.secim = "dahil".into();
+        let r = hesapla_ui("kdv", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("200", "1000"));
+    }
+
+    #[test]
+    fn ui_stopaj() {
+        let r = hesapla_ui("stopaj", &ui("stopaj", "50000", "", "20"));
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("10000", "40000"));
+        let mut i = ui("stopaj", "40000", "", "20");
+        i.secim = "netten".into();
+        let r = hesapla_ui("stopaj", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("10000", "50000"));
+    }
+
+    #[test]
+    fn ui_tevkifat() {
+        let mut i = ui("tevkifat", "10000", "", "20");
+        i.tevkifat_pay = "5".into();
+        let r = hesapla_ui("tevkifat", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("1000", "11000"));
+    }
+
+    #[test]
+    fn ui_fiyat() {
+        let r = hesapla_ui("fiyat", &ui("fiyat", "1000", "", "20"));
+        assert_eq!(r.ana, "1200");
+        let mut i = ui("fiyat", "1000", "", "20");
+        i.ek1 = "10,5".into();
+        assert_eq!(hesapla_ui("fiyat", &i).ana, "1026");
+        let mut i = ui("fiyat", "1200", "", "20");
+        i.secim = "dahil".into();
+        assert_eq!(hesapla_ui("fiyat", &i).ana, "1000");
+    }
+
+    #[test]
+    fn ui_kdv_compare() {
+        let r = hesapla_ui("kdvCompare", &ui("kdvCompare", "1000", "", "20"));
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("33.33", "1200"));
+    }
+
+    #[test]
+    fn ui_margin_ve_markup() {
+        let r = hesapla_ui("margin", &ui("margin", "100", "20", ""));
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("125", "25"));
+        let r = hesapla_ui("markup", &ui("markup", "100", "20", ""));
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("120", "20"));
+    }
+
+    #[test]
+    fn ui_discount() {
+        let mut i = ui("discount", "1000", "", "");
+        i.ek1 = "10,10".into();
+        let r = hesapla_ui("discount", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("810", "190"));
+    }
+
+    #[test]
+    fn ui_percent() {
+        let r = hesapla_ui("percent", &ui("percent", "20", "500", ""));
+        assert_eq!(r.ana, "100");
+    }
+
+    #[test]
+    fn ui_compound() {
+        let mut i = ui("compound", "1000", "12", "");
+        i.ek1 = "1".into();
+        i.ek2 = "12".into();
+        let r = hesapla_ui("compound", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("1126.83", "126.83"));
+    }
+
+    #[test]
+    fn ui_gecikme() {
+        let mut i = ui("gecikme", "10000", "4.5", "");
+        i.gun = "30".into();
+        let r = hesapla_ui("gecikme", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("450", "10450"));
+    }
+
+    #[test]
+    fn ui_amortisman() {
+        let mut i = ui("amortisman", "500000", "", "20");
+        i.yil = "5".into();
+        let r = hesapla_ui("amortisman", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("100000", "500000"));
+        let mut i = ui("amortisman", "1000", "", "20");
+        i.yil = "3".into();
+        i.secim = "azalan".into();
+        let r = hesapla_ui("amortisman", &i);
+        assert_eq!(r.alt, "784");
+    }
+
+    #[test]
+    fn ui_doviz() {
+        let mut i = ui("doviz", "100", "40", "");
+        i.tevkifat_kod = "USD".into();
+        assert_eq!(hesapla_ui("doviz", &i).ana, "4000");
+        let mut i = ui("doviz", "4000", "40", "");
+        i.secim = "fromTL".into();
+        assert_eq!(hesapla_ui("doviz", &i).ana, "100");
+    }
+
+    #[test]
+    fn ui_batch() {
+        let mut i = ui("batch", "", "", "20");
+        i.ek1 = "1000\n2000\nboz".into();
+        let r = hesapla_ui("batch", &i);
+        assert_eq!((r.ana.as_str(), r.alt.as_str()), ("3600", "600"));
+        i.secim = "stopaj".into();
+        assert_eq!(hesapla_ui("batch", &i).ana, "2400");
+        i.secim = "tevkifat".into();
+        i.tevkifat_pay = "5".into();
+        i.ek1 = "10000".into();
+        assert_eq!(hesapla_ui("batch", &i).ana, "11000");
+    }
+
+    #[test]
+    fn ui_donem() {
+        let mut i = ui("donem", "100000", "60000", "20");
+        i.ek1 = "1000".into();
+        let r = hesapla_ui("donem", &i);
+        assert_eq!(r.ana, "7000");
+    }
+
+    #[test]
+    fn ui_tum_modlar_varsayilan_alanlarla_sonuc_verir() {
+        // Her mod, varsayılan seçimler doldurulduğunda makul girdiyle Some döner.
+        for m in MODLAR {
+            let mut i = ui(m.id, "1000", "20", "20");
+            i.ek1 = "1".into(); // compound yılı / fiyat indirimi / donem devredeni
+            i.ek2 = "12".into(); // compound bileşme sıklığı
+            i.gun = "30".into();
+            i.yil = "5".into();
+            assert!(
+                fh_core::hesapla(m.id, &build_girdi(m.id, &i)).is_some(),
+                "{} varsayılan alanlarla çalışmalı",
+                m.id
+            );
+        }
+    }
 }

@@ -1,11 +1,17 @@
 //! eframe/egui masaüstü arayüzü. Tüm hesaplama fh-core, tüm veri dönüşümleri
 //! fh-data üzerinden yapılır; bu dosyada finansal formül yoktur.
+//!
+//! Görsel düzen: üstte ürün kimliği + mod şeridi, solda girdi alanı, sağda
+//! bölümlere ayrılmış sonuç bileti, altta tablo biçimli kapı paneli.
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use chrono::Datelike;
-use eframe::egui::{self, Align, Align2, Color32, Context, RichText, Ui, Vec2};
+use eframe::egui::{
+    self, Align, Align2, Color32, Context, CornerRadius, FontId, Frame, Layout, Margin, Pos2,
+    Rect, RichText, Shadow, Stroke, TextWrapMode, Ui, Vec2,
+};
 use fh_core::HesapSonucu;
 use fh_data::{
     DonemRecord, compute_donem_net, csv_metin, efatura_matrahlar, gun_kaldi, takvim_listesi,
@@ -14,10 +20,18 @@ use fh_data::{
 
 use crate::commands::{self, Eylem, Komut};
 use crate::model::{
-    AppState, Cari, DonemKayit, HistEntry, InputState, SURUM, para_bicimi, satir_bicimi,
+    AppState, Cari, DonemKayit, HistEntry, InputState, Settings, SURUM, para_bicimi, satir_bicimi,
 };
 use crate::modes::{self, MODLAR, ModeDef};
-use crate::theme;
+use crate::theme::{self, Palet};
+
+// Tipografi ölçeği — tek yerden yönetilir, yazı ölçeği zoom ile katlanır.
+const T_BUILD: f32 = 9.5;
+const T_SMALL: f32 = 11.0;
+const T_BODY: f32 = 12.5;
+const T_LEAD: f32 = 14.0;
+const T_TITLE: f32 = 19.0;
+const T_AMOUNT: f32 = 38.0;
 
 #[derive(Default)]
 pub struct Pencereler {
@@ -47,12 +61,98 @@ pub struct FhApp {
     pub kopyalandi: Option<Instant>,
     pub son_tema: String,
     pub son_olcek: f64,
+    /// Kapı panelinde açık sekme: 0 geçmiş, 1 dönem, 2 takvim.
+    pub kapi_sekmesi: usize,
+    /// Güncelleme indirmesi sürüyor (yükleniyor durumu).
+    pub indiriliyor: bool,
     /// Arka planda kontrol edilen güncelleme (kilitli paylaşımlı durum).
     pub guncelleme: Arc<Mutex<Option<fh_updater::Guncelleme>>>,
     /// `indir_ve_kur` sonucu: Some(true) başarı, Some(false) başarısız.
     pub indirme_durumu: Arc<Mutex<Option<bool>>>,
     pub guncelleme_bildirildi: bool,
     pub indirme_bildirildi: bool,
+}
+
+// ---------- küçük çizim yardımcıları ----------
+
+/// Hairline ayırıcı çizer ve imleci 1px ilerletir.
+fn hairline(ui: &mut Ui, renk: Color32) {
+    let r = ui.available_rect_before_wrap();
+    ui.painter().rect_filled(
+        Rect::from_min_size(r.min, Vec2::new(r.width(), 1.0)),
+        CornerRadius::ZERO,
+        renk,
+    );
+    ui.add_space(1.0);
+}
+
+/// Biletin iki bölümünü ayıran perforasyon: hairline + iki kenar çentği.
+fn perforasyon(ui: &mut Ui, p: Palet) {
+    let r = ui.available_rect_before_wrap();
+    let y = r.min.y;
+    ui.painter().rect_filled(
+        Rect::from_min_size(Pos2::new(r.min.x, y), Vec2::new(r.width(), 1.0)),
+        CornerRadius::ZERO,
+        p.kenar,
+    );
+    for x in [r.min.x, r.max.x] {
+        ui.painter().rect_filled(
+            Rect::from_center_size(Pos2::new(x, y), Vec2::new(9.0, 9.0)),
+            CornerRadius::same(4),
+            p.arka,
+        );
+    }
+    ui.add_space(1.0);
+}
+
+/// Tablo hücresi: sabit genişlik, tek satır, isteğe bağlı sabit genişlikli rakam.
+fn hucre(ui: &mut Ui, genislik: f32, metin: String, renk: Color32, mono: bool, sag: bool) {
+    ui.allocate_ui(Vec2::new(genislik, 18.0), |ui| {
+        let yerlesim = if sag {
+            Layout::right_to_left(Align::Center)
+        } else {
+            Layout::left_to_right(Align::Center)
+        };
+        ui.with_layout(yerlesim, |ui| {
+            let mut z = RichText::new(metin).size(T_SMALL).color(renk);
+            if mono {
+                z = z.monospace();
+            }
+            ui.add(egui::Label::new(z).wrap_mode(TextWrapMode::Truncate));
+        });
+    });
+}
+
+fn dugme_cercevesi(p: Palet) -> Frame {
+    Frame::new()
+        .fill(p.yuzey)
+        .stroke(Stroke::new(1.0, p.kenar))
+        .corner_radius(CornerRadius::same(4))
+}
+
+fn pencere_cercevesi(p: Palet) -> Frame {
+    Frame::new()
+        .fill(p.yuzey)
+        .stroke(Stroke::new(1.0, p.kenar))
+        .corner_radius(CornerRadius::same(6))
+        .shadow(Shadow {
+            offset: [0, 8],
+            blur: 24,
+            spread: 0,
+            color: Color32::from_black_alpha(110),
+        })
+}
+
+fn birincil_dugme<'a>(ad: &'a str, p: Palet) -> egui::Button<'a> {
+    egui::Button::new(RichText::new(ad).size(T_SMALL).color(Color32::WHITE).strong())
+        .fill(p.birincil)
+        .stroke(Stroke::new(1.0, p.birincil))
+}
+
+fn ikincil_dugme<'a>(ad: &'a str, p: Palet) -> egui::Button<'a> {
+    egui::Button::new(RichText::new(ad).size(T_SMALL).color(p.ikinci))
+        .fill(Color32::TRANSPARENT)
+        .stroke(Stroke::new(1.0, p.kenar))
 }
 
 impl FhApp {
@@ -92,6 +192,8 @@ impl FhApp {
             kopyalandi: None,
             son_tema,
             son_olcek,
+            kapi_sekmesi: 0,
+            indiriliyor: false,
             guncelleme,
             indirme_durumu: Arc::new(Mutex::new(None)),
             guncelleme_bildirildi: false,
@@ -127,6 +229,7 @@ impl FhApp {
         };
         if let Some(basari) = indirme {
             self.indirme_bildirildi = true;
+            self.indiriliyor = false;
             if basari {
                 self.bildir("Güncelleme indirildi; kurulum için hazır");
             } else {
@@ -141,6 +244,7 @@ impl FhApp {
             return;
         };
         self.indirme_bildirildi = false;
+        self.indiriliyor = true;
         if let Ok(mut kilit) = self.indirme_durumu.lock() {
             *kilit = None;
         }
@@ -199,6 +303,20 @@ impl FhApp {
             modes::build_girdi(&mode, e)
         };
         self.result = fh_core::hesapla(&mode, &girdi);
+    }
+
+    /// Kullanıcı modun en az bir gerçek (seçim olmayan) alanını doldurdu mu?
+    fn girdi_dolu(&self) -> bool {
+        let Some(def) = modes::mod_def(&self.mode) else {
+            return false;
+        };
+        let Some(g) = self.state.inputs.get(&self.mode) else {
+            return false;
+        };
+        def.alanlar.iter().any(|f| {
+            matches!(f.tur, modes::FieldKind::Metin | modes::FieldKind::CokSatir)
+                && !g.get(f.alan).trim().is_empty()
+        })
     }
 
     fn tema_guncelle(&mut self, ctx: &Context) {
@@ -381,10 +499,7 @@ impl FhApp {
     }
 
     fn efatura_ice(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
-            .add_filter("CSV", &["csv", "txt"])
-            .pick_file()
-        else {
+        let Some(path) = rfd::FileDialog::new().add_filter("CSV", &["csv", "txt"]).pick_file() else {
             return;
         };
         let Ok(icerik) = std::fs::read_to_string(&path) else {
@@ -427,89 +542,119 @@ impl FhApp {
         self.bildir("Sonuç geçmişe eklendi");
     }
 
-    fn panelleri_goster(&mut self, ui: &mut Ui) {
-        // Üst panel kök Ui'de, CentralPanel'den önce gösterilir (bkz. App::ui).
-        // Panel state'i ve allocate_ui genişlik dağıtımı güvenilmez; eşit
-        // üç kolon sonuç panelinin kırpılmasını kesin çözer.
-        ui.columns(3, |cols| {
-            egui::ScrollArea::vertical().show(&mut cols[0], |ui| self.mod_panel(ui));
-            egui::ScrollArea::vertical().show(&mut cols[1], |ui| self.girdi_panel(ui));
-            egui::ScrollArea::vertical().show(&mut cols[2], |ui| self.sonuc_panel(ui));
-        });
+    // ---------- üst şerit ----------
+
+    fn arac_dugmesi(&self, ui: &mut Ui, ad: &str, aktif: bool, p: Palet) -> egui::Response {
+        let renk = if aktif { Color32::WHITE } else { p.ikinci };
+        ui.add(
+            egui::Button::new(RichText::new(ad).size(T_SMALL).color(renk))
+                .fill(if aktif { p.birincil } else { Color32::TRANSPARENT })
+                .stroke(Stroke::new(1.0, if aktif { p.birincil } else { p.kenar })),
+        )
     }
 
     fn ust_panel(&mut self, ui: &mut Ui) {
         let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let guncelleme = self.guncelleme.lock().ok().and_then(|k| k.clone());
+        let dar = ui.ctx().content_rect().width() < 1040.0;
+        let (l_k, l_ap, l_am, l_w, l_ay, l_tk, l_cr, l_dn, l_gc) = if dar {
+            ("⌘K", "A+", "A−", "W", "Ayar", "Tak", "Cari", "Dön", "Geç")
+        } else {
+            ("⌘K", "A+", "A−", "Widget", "Ayarlar", "Takvim", "Cari", "Dönemler", "Geçmiş")
+        };
+
         ui.horizontal(|ui| {
-            ui.label(RichText::new("◈ Finansal Hesaplayıcı").size(16.0).color(p.birincil).strong());
-            ui.label(RichText::new(format!("v{SURUM} · çevrimdışı")).size(11.0).color(p.soluk));
-        });
-        ui.horizontal_wrapped(|ui| {
-            for (ad, tik) in [
-                ("Geçmiş", 0), ("Dönemler", 1), ("Cari", 2), ("Takvim", 3),
-                ("Ayarlar", 4), ("Mini Widget", 5), ("⌘K", 6),
-            ] {
-                let acik = match tik {
-                    0 => self.p.gecmis, 1 => self.p.donemler, 2 => self.p.cariler,
-                    3 => self.p.takvim, 4 => self.p.ayarlar, 5 => self.p.widget,
-                    _ => self.p.palet,
-                };
-                let b = egui::Button::new(RichText::new(ad).size(12.0).color(if acik { p.birincil } else { p.ikinci }))
-                    .fill(Color32::TRANSPARENT);
-                if ui.add(b).clicked() {
-                    match tik {
-                        0 => self.p.gecmis = !self.p.gecmis,
-                        1 => self.p.donemler = !self.p.donemler,
-                        2 => self.p.cariler = !self.p.cariler,
-                        3 => self.p.takvim = !self.p.takvim,
-                        4 => self.p.ayarlar = !self.p.ayarlar,
-                        5 => self.p.widget = !self.p.widget,
-                        _ => {
-                            self.p.palet = !self.p.palet;
-                            self.palet_sorgu.clear();
-                            self.palet_sec = 0;
-                        }
-                    }
+            ui.label(RichText::new("◈").size(T_TITLE).color(p.birincil).strong());
+            ui.label(RichText::new("Finansal Hesaplayıcı").size(T_TITLE - 3.0).color(p.metin).strong());
+            if !dar {
+                ui.add_space(5.0);
+                ui.label(RichText::new(format!("v{SURUM}")).size(T_BUILD).color(p.soluk).monospace());
+                ui.label(RichText::new("· çevrimdışı").size(T_SMALL).color(p.soluk));
+            }
+
+            ui.add_space(18.0);
+            // right_to_left iç Ui genişliği aştığı için düğmeler pencere dışına
+            // taşıyordu; sıralı yerleştirme tümünü görünür tutar.
+            {
+                if self.arac_dugmesi(ui, l_k, self.p.palet, p).clicked() {
+                    self.p.palet = !self.p.palet;
+                    self.palet_sorgu.clear();
+                    self.palet_sec = 0;
+                }
+                if self.arac_dugmesi(ui, l_ap, false, p).clicked() {
+                    self.font_degistir(0.05);
+                }
+                if self.arac_dugmesi(ui, l_am, false, p).clicked() {
+                    self.font_degistir(-0.05);
+                }
+                if self.arac_dugmesi(ui, l_w, self.p.widget, p).clicked() {
+                    self.p.widget = !self.p.widget;
+                }
+                if self.arac_dugmesi(ui, l_ay, self.p.ayarlar, p).clicked() {
+                    self.p.ayarlar = !self.p.ayarlar;
+                }
+                if self.arac_dugmesi(ui, l_tk, self.p.takvim, p).clicked() {
+                    self.p.takvim = !self.p.takvim;
+                }
+                if self.arac_dugmesi(ui, l_cr, self.p.cariler, p).clicked() {
+                    self.p.cariler = !self.p.cariler;
+                }
+                if self.arac_dugmesi(ui, l_dn, self.p.donemler, p).clicked() {
+                    self.p.donemler = !self.p.donemler;
+                }
+                if self.arac_dugmesi(ui, l_gc, self.p.gecmis, p).clicked() {
+                    self.p.gecmis = !self.p.gecmis;
                 }
             }
         });
-        if let Some(g) = guncelleme {
+
+        ui.add_space(7.0);
+        hairline(ui, p.kenar);
+        ui.add_space(7.0);
+
+        // Mod şeridi: 15 mod grup halinde, yatay kaydırmalı tek satır.
+        egui::ScrollArea::horizontal().show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for grup in modes::gruplar() {
+                    ui.label(RichText::new(grup).size(T_BUILD).color(p.soluk).strong());
+                    for m in MODLAR.iter().filter(|m| m.grup == grup) {
+                        self.mod_cipi(ui, m, p);
+                    }
+                    ui.add_space(8.0);
+                }
+            });
+        });
+
+        if let Some(g) = &guncelleme {
+            ui.add_space(6.0);
+            hairline(ui, p.kenar);
+            ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(format!("● Yeni sürüm v{} mevcut", g.version))
-                        .size(11.0)
+                        .size(T_SMALL)
                         .color(p.uyari)
                         .strong(),
                 );
-                if ui.button("Güncelle").clicked() {
+                if self.indiriliyor {
+                    ui.add_enabled(false, egui::Button::new("İndiriliyor…"));
+                } else if ui.add(birincil_dugme("Güncelle", p)).clicked() {
                     self.guncelleme_baslat();
                 }
             });
         }
-        ui.separator();
     }
 
-    fn mod_panel(&mut self, ui: &mut Ui) {
-        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
-        ui.label(RichText::new("HESAPLAMA MODLARI").size(11.0).color(p.soluk).strong());
-        ui.add_space(4.0);
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for grup in modes::gruplar() {
-                ui.label(RichText::new(grup).size(10.0).color(p.vurgu).strong());
-                for m in MODLAR.iter().filter(|m| m.grup == grup) {
-                    self.mod_dugmesi(ui, m, p.birincil, p.metin);
-                }
-                ui.add_space(6.0);
-            }
-        });
-    }
-
-    fn mod_dugmesi(&mut self, ui: &mut Ui, m: &ModeDef, birincil: Color32, metin: Color32) {
+    fn mod_cipi(&mut self, ui: &mut Ui, m: &ModeDef, p: Palet) {
         let aktif = self.mode == m.id;
-        let b = egui::Button::new(RichText::new(m.etiket).size(12.0).color(if aktif { Color32::WHITE } else { metin }))
-            .fill(if aktif { birincil } else { Color32::TRANSPARENT })
-            .min_size(Vec2::new(ui.available_width().max(80.0) - 8.0, 24.0));
+        let b = egui::Button::new(
+            RichText::new(m.etiket)
+                .size(T_SMALL)
+                .color(if aktif { Color32::WHITE } else { p.ikinci }),
+        )
+        .fill(if aktif { p.birincil } else { Color32::TRANSPARENT })
+        .stroke(Stroke::new(1.0, if aktif { p.birincil } else { p.kenar }))
+        .corner_radius(CornerRadius::same(3));
         if ui.add(b).clicked() {
             self.mode = m.id.to_string();
             let e = self.girdi();
@@ -517,70 +662,18 @@ impl FhApp {
         }
     }
 
-    fn sonuc_panel(&mut self, ui: &mut Ui) {
-        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
-        let st = self.state.settings.clone();
-        let res = self.result.clone();
-        ui.label(RichText::new("SONUÇ").size(11.0).color(p.soluk).strong());
-        ui.separator();
-        let Some(r) = res else {
-            ui.label(RichText::new("Geçerli bir sonuç yok.\nGirdi değerlerini kontrol edin.")
-                .size(12.0).color(p.soluk));
-            return;
-        };
-        ui.label(RichText::new(modes::mod_etiketi(&self.mode)).size(12.0).color(p.ikinci));
-        ui.add_space(2.0);
-        let ana = para_bicimi(&r.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
-        ui.label(RichText::new(ana.clone()).size(28.0).color(p.birincil).strong());
-        if !r.alt.is_empty() {
-            let alt = para_bicimi(&r.alt, st.precision, &st.currency_symbol, st.show_currency_symbol);
-            ui.label(RichText::new(format!("Diğer sonuç: {alt}")).size(14.0).color(p.vurgu));
-        }
-        ui.add_space(6.0);
-        ui.label(RichText::new(r.detay.as_str()).size(12.0).color(p.ikinci));
-
-        if self.kopyalandi.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
-            ui.colored_label(p.basari, "✓ Panoya kopyalandı");
-        }
-        ui.separator();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("sonuc_satirlari").striped(true).show(ui, |ui| {
-                for (etiket, deger) in &r.satirlar {
-                    ui.label(RichText::new(etiket).size(11.0).color(p.ikinci));
-                    let d = satir_bicimi(etiket, deger, st.precision, &st.currency_symbol, st.show_currency_symbol);
-                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(RichText::new(d).size(11.0).color(p.metin));
-                    });
-                    ui.end_row();
-                }
-            });
-        });
-        ui.add_space(6.0);
-        ui.horizontal(|ui| {
-            if ui.button("Panoya kopyala").clicked() {
-                if let Ok(mut cb) = arboard::Clipboard::new() {
-                    let _ = cb.set_text(self.sonuc_metni());
-                }
-                self.kopyalandi = Some(Instant::now());
-            }
-            if ui.button("Yazdır / önizle").clicked() {
-                self.yazdir();
-            }
-            if ui.button("Geçmişe kaydet").clicked() {
-                self.gecmis_kaydet();
-            }
-        });
-    }
+    // ---------- sol: girdi alanı ----------
 
     fn girdi_panel(&mut self, ui: &mut Ui) {
         let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let mode = self.mode.clone();
         let def = modes::mod_def(&mode);
         let mut temizle = false;
+
         ui.horizontal(|ui| {
-            ui.label(RichText::new(modes::mod_etiketi(&mode)).size(18.0).color(p.metin).strong());
-            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                if ui.button("Alanları temizle").clicked() {
+            ui.label(RichText::new("GİRDİ").size(T_BUILD).color(p.soluk).strong());
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui.add(ikincil_dugme("Temizle", p)).clicked() {
                     temizle = true;
                 }
             });
@@ -590,24 +683,47 @@ impl FhApp {
             let e = self.girdi();
             modes::varsayilanlari_doldur(e, &mode);
         }
-        ui.separator();
+        ui.add_space(2.0);
+        ui.label(RichText::new(modes::mod_etiketi(&mode)).size(T_TITLE).color(p.metin).strong());
+        ui.add_space(5.0);
+
+        // Durum çizgisi: yeşil doğrulandı / kırmızı girdi hatası / soluk hazır.
+        let (durum_rengi, durum_metni) = if self.result.is_some() {
+            (p.basari, "● Canlı hesaplama")
+        } else if self.girdi_dolu() {
+            (p.hata, "● Girdi bekleniyor")
+        } else {
+            (p.soluk, "● Hazır")
+        };
+        ui.label(RichText::new(durum_metni).size(T_BUILD).color(durum_rengi).strong());
+
+        ui.add_space(9.0);
+        hairline(ui, p.kenar);
+        ui.add_space(10.0);
+
         let Some(def) = def else { return; };
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for f in def.alanlar {
-                ui.label(RichText::new(f.etiket).size(12.0).color(p.ikinci).strong());
+            for (n, f) in def.alanlar.iter().enumerate() {
+                if n > 0 {
+                    ui.add_space(9.0);
+                }
+                ui.label(RichText::new(f.etiket).size(T_SMALL).color(p.ikinci).strong());
+                ui.add_space(3.0);
                 let inp = self.state.inputs.entry(mode.clone()).or_default();
                 match f.tur {
                     crate::modes::FieldKind::Metin => {
                         let t = egui::TextEdit::singleline(inp.get_mut(f.alan))
                             .hint_text(f.ipucu)
+                            .font(FontId::monospace(T_BODY))
                             .desired_width(f32::INFINITY);
                         ui.add(t);
                     }
                     crate::modes::FieldKind::CokSatir => {
                         let t = egui::TextEdit::multiline(inp.get_mut(f.alan))
                             .hint_text(f.ipucu)
+                            .font(FontId::monospace(T_BODY))
                             .desired_width(f32::INFINITY)
-                            .desired_rows(8);
+                            .desired_rows(6);
                         ui.add(t);
                     }
                     crate::modes::FieldKind::Secim | crate::modes::FieldKind::PaySecim => {
@@ -635,25 +751,409 @@ impl FhApp {
                             });
                     }
                 }
-                ui.add_space(7.0);
             }
         });
-        ui.separator();
+
+        ui.add_space(10.0);
+        hairline(ui, p.kenar);
+        ui.add_space(9.0);
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Yedek al").clicked() {
+            if ui.add(ikincil_dugme("Yedek al", p)).clicked() {
                 self.yedek_al();
             }
-            if ui.button("Yedek yükle").clicked() {
+            if ui.add(ikincil_dugme("Yedek yükle", p)).clicked() {
                 self.yedek_yukle();
             }
-            if mode == "batch" && ui.button("e-Fatura CSV içe aktar").clicked() {
+            if mode == "batch" && ui.add(ikincil_dugme("e-Fatura CSV", p)).clicked() {
                 self.efatura_ice();
             }
-            if mode == "donem" && ui.button("Dönemi arşive kaydet").clicked() {
+            if mode == "donem" && ui.add(ikincil_dugme("Dönemi arşive kaydet", p)).clicked() {
                 self.donemi_kaydet();
             }
         });
     }
+
+    // ---------- sağ: sonuç bileti ----------
+
+    fn sonuc_panel(&mut self, ui: &mut Ui) {
+        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
+        let st = self.state.settings.clone();
+        let res = self.result.clone();
+        let bos = !self.girdi_dolu();
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            let bilet = Frame::new()
+                .fill(p.yuzey)
+                .stroke(Stroke::new(1.0, p.kenar))
+                .corner_radius(CornerRadius::same(6))
+                .shadow(Shadow {
+                    offset: [0, 6],
+                    blur: 18,
+                    spread: 0,
+                    color: Color32::from_black_alpha(90),
+                })
+                .inner_margin(Margin::symmetric(22, 20));
+            bilet.show(ui, |ui| {
+                // Başlık: bilet kimliği + seçili mod rozeti (mavi = seçim).
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("SONUÇ BİLETİ").size(T_BUILD).color(p.soluk).strong());
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        egui::Frame::new()
+                            .fill(p.birincil.gamma_multiply(0.16))
+                            .corner_radius(CornerRadius::same(3))
+                            .inner_margin(Margin::symmetric(9, 3))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new(modes::mod_etiketi(&self.mode))
+                                        .size(T_SMALL)
+                                        .color(p.birincil)
+                                        .strong(),
+                                );
+                            });
+                    });
+                });
+                ui.add_space(9.0);
+                hairline(ui, p.kenar);
+                ui.add_space(16.0);
+
+                if let Some(r) = &res {
+                    ui.label(RichText::new("ANA TUTAR").size(T_BUILD).color(p.soluk).strong());
+                    ui.add_space(2.0);
+                    let ana = para_bicimi(&r.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
+                    let bilet_genis = ui.available_width();
+                    let ana_boyut = if bilet_genis < 300.0 {
+                        23.0
+                    } else if bilet_genis < 480.0 {
+                        30.0
+                    } else {
+                        T_AMOUNT
+                    };
+                    ui.label(RichText::new(ana).size(ana_boyut).color(p.metin).strong().monospace());
+                    if !r.alt.is_empty() {
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Diğer sonuç").size(T_SMALL).color(p.soluk));
+                            let alt = para_bicimi(&r.alt, st.precision, &st.currency_symbol, st.show_currency_symbol);
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                ui.label(RichText::new(alt).size(T_LEAD).color(p.ikinci).monospace());
+                            });
+                        });
+                    }
+                } else if bos {
+                    // Boş durum: öğretici.
+                    ui.label(RichText::new("Tutarı yazdıkça sonuç burada görünür.").size(T_LEAD).color(p.ikinci));
+                    ui.add_space(5.0);
+                    ui.label(
+                        RichText::new("Soldaki alana örn. 1.234,56 yazın; döküm ve doğrulama anında güncellenir.")
+                            .size(T_SMALL)
+                            .color(p.soluk),
+                    );
+                } else {
+                    // Hata durumu: sorun + kurtarma yolu.
+                    ui.label(RichText::new("Hesaplanamadı").size(T_LEAD).color(p.hata).strong());
+                    ui.add_space(5.0);
+                    ui.label(
+                        RichText::new("Tutar ve oran alanlarını kontrol edin; sayısal değerler 1.234,56 biçiminde olmalı.")
+                            .size(T_SMALL)
+                            .color(p.ikinci),
+                    );
+                }
+
+                ui.add_space(18.0);
+                perforasyon(ui, p);
+                ui.add_space(16.0);
+
+                if let Some(r) = &res {
+                    ui.label(RichText::new("HESAP DÖKÜMÜ").size(T_BUILD).color(p.soluk).strong());
+                    ui.add_space(7.0);
+                    if r.satirlar.is_empty() {
+                        ui.label(RichText::new("Bu hesabın ek satırı yok.").size(T_SMALL).color(p.soluk));
+                    } else {
+                        let genis = ui.available_width();
+                        let sol = genis * 0.54;
+                        let sag = genis - sol - 10.0;
+                        for (etiket, deger) in &r.satirlar {
+                            hairline(ui, p.kenar.gamma_multiply(0.65));
+                            ui.horizontal(|ui| {
+                                hucre(ui, sol, etiket.clone(), p.ikinci, false, false);
+                                ui.add_space(10.0);
+                                let d = satir_bicimi(
+                                    etiket, deger, st.precision, &st.currency_symbol, st.show_currency_symbol,
+                                );
+                                hucre(ui, sag, d, p.metin, true, true);
+                            });
+                        }
+                        hairline(ui, p.kenar.gamma_multiply(0.65));
+                    }
+                    ui.add_space(14.0);
+
+                    if !r.detay.is_empty() {
+                        dugme_cercevesi(p).fill(p.yuksek).show(ui, |ui| {
+                            ui.label(RichText::new(r.detay.as_str()).size(T_SMALL).color(p.ikinci));
+                        });
+                    }
+                } else {
+                    ui.label(RichText::new("HESAP DÖKÜMÜ").size(T_BUILD).color(p.soluk).strong());
+                    ui.add_space(7.0);
+                    ui.label(RichText::new("—").size(T_BODY).color(p.soluk).monospace());
+                }
+
+                ui.add_space(16.0);
+                hairline(ui, p.kenar);
+                ui.add_space(11.0);
+                ui.horizontal_wrapped(|ui| {
+                    if self.kopyalandi.is_some_and(|t| t.elapsed() < Duration::from_secs(2)) {
+                        ui.label(RichText::new("✓ Panoya kopyalandı").size(T_SMALL).color(p.basari).strong());
+                        ui.add_space(6.0);
+                    }
+                    let hazir = res.is_some();
+                    if ui.add_enabled(hazir, birincil_dugme("Panoya kopyala", p)).clicked() {
+                        if let Ok(mut cb) = arboard::Clipboard::new() {
+                            let _ = cb.set_text(self.sonuc_metni());
+                        }
+                        self.kopyalandi = Some(Instant::now());
+                    }
+                    if ui.add_enabled(hazir, ikincil_dugme("Yazdır / önizle", p)).clicked() {
+                        self.yazdir();
+                    }
+                    if ui.add_enabled(hazir, ikincil_dugme("Geçmişe kaydet", p)).clicked() {
+                        self.gecmis_kaydet();
+                    }
+                });
+            });
+        });
+    }
+
+    // ---------- alt: kapı paneli ----------
+
+    fn kapi_panel(&mut self, ui: &mut Ui) {
+        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
+        let st = self.state.settings.clone();
+
+        ui.horizontal(|ui| {
+            for (ad, idx) in [("GEÇMİŞ", 0usize), ("DÖNEM", 1), ("TAKVİM", 2)] {
+                let aktif = self.kapi_sekmesi == idx;
+                let b = egui::Button::new(
+                    RichText::new(ad)
+                        .size(T_SMALL)
+                        .color(if aktif { p.birincil } else { p.soluk })
+                        .strong(),
+                )
+                .fill(if aktif { p.birincil.gamma_multiply(0.14) } else { Color32::TRANSPARENT })
+                .stroke(Stroke::new(1.0, if aktif { p.birincil } else { Color32::TRANSPARENT }))
+                .corner_radius(CornerRadius::same(3));
+                if ui.add(b).clicked() {
+                    self.kapi_sekmesi = idx;
+                }
+                ui.add_space(4.0);
+            }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                match self.kapi_sekmesi {
+                    0 => {
+                        if ui.add(ikincil_dugme("Temizle", p)).clicked() {
+                            self.state.history.clear();
+                            self.state.kaydet();
+                            self.bildir("Geçmiş temizlendi");
+                        }
+                        if ui.add(ikincil_dugme("CSV", p)).clicked() {
+                            self.gecmis_csv();
+                        }
+                    }
+                    1 => {
+                        let kayitlar: Vec<DonemRecord> =
+                            self.state.donemler.iter().map(|d| d.kayit()).collect();
+                        let ozet = beyan_ozeti(&kayitlar, st.precision, &st.currency_symbol, st.show_currency_symbol);
+                        if ui.add(ikincil_dugme("Beyan özeti", p)).clicked() {
+                            self.onizleme_baslik = "Beyan Özeti".to_string();
+                            self.onizleme_metin = ozet;
+                            self.p.onizleme = true;
+                        }
+                        let csv = donem_csv(&kayitlar);
+                        if ui.add(ikincil_dugme("CSV", p)).clicked() {
+                            self.csv_yaz(csv, "donemler.csv", "Dönem CSV indirildi");
+                        }
+                    }
+                    _ => {
+                        ui.label(RichText::new("statik VUK takvimi").size(T_BUILD).color(p.soluk));
+                    }
+                }
+            });
+        });
+        ui.add_space(6.0);
+        hairline(ui, p.kenar);
+        ui.add_space(6.0);
+
+        egui::ScrollArea::vertical().show(ui, |ui| match self.kapi_sekmesi {
+            0 => self.kapi_gecmis(ui, &p, &st),
+            1 => self.kapi_donem(ui, &p, &st),
+            _ => self.kapi_takvim(ui, &p),
+        });
+    }
+
+    fn kapi_gecmis(&mut self, ui: &mut Ui, p: &Palet, st: &Settings) {
+        let mut secilecek = None;
+        let g = ui.available_width();
+        let c1 = g * 0.15;
+        let c2 = g * 0.19;
+        let c3 = g * 0.19;
+        let c4 = (g - c1 - c2 - c3 - 24.0).max(60.0);
+
+        ui.horizontal(|ui| {
+            hucre(ui, c1, "TARİH".into(), p.soluk, false, false);
+            ui.add_space(8.0);
+            hucre(ui, c2, "MOD".into(), p.soluk, false, false);
+            ui.add_space(8.0);
+            hucre(ui, c3, "TUTAR".into(), p.soluk, false, true);
+            ui.add_space(8.0);
+            hucre(ui, c4, "DETAY".into(), p.soluk, false, false);
+        });
+        hairline(ui, p.kenar);
+
+        if self.state.history.is_empty() {
+            ui.add_space(10.0);
+            ui.label(
+                RichText::new("Henüz kayıt yok — sonuç biletindeki 'Geçmişe kaydet' ile buraya ekleyin.")
+                    .size(T_SMALL)
+                    .color(p.soluk),
+            );
+            return;
+        }
+
+        let toplam = self.state.history.len();
+        for e in self.state.history.iter().take(60) {
+            let tarih = chrono::DateTime::from_timestamp(e.timestamp, 0)
+                .map(|d| d.format("%d.%m %H:%M").to_string())
+                .unwrap_or_default();
+            let deger = para_bicimi(&e.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
+            ui.horizontal(|ui| {
+                let b = egui::Button::new(RichText::new(tarih).size(T_SMALL).color(p.birincil).monospace())
+                    .frame(false)
+                    .fill(Color32::TRANSPARENT);
+                if ui.add(b).clicked() {
+                    secilecek = Some((e.mode.clone(), e.inputs.clone()));
+                }
+                ui.add_space(8.0);
+                hucre(ui, c2, modes::mod_etiketi(&e.mode).to_string(), p.ikinci, false, false);
+                ui.add_space(8.0);
+                hucre(ui, c3, deger, p.metin, true, true);
+                ui.add_space(8.0);
+                hucre(ui, c4, e.detay.clone(), p.soluk, false, false);
+            });
+            hairline(ui, p.kenar.gamma_multiply(0.6));
+        }
+        if toplam > 60 {
+            ui.label(RichText::new(format!("+{} kayıt daha", toplam - 60)).size(T_BUILD).color(p.soluk));
+        }
+        if let Some((m, i)) = secilecek {
+            self.mode = m.clone();
+            self.state.inputs.insert(m, i);
+            self.bildir("Kayıt geri yüklendi");
+        }
+    }
+
+    fn kapi_donem(&mut self, ui: &mut Ui, p: &Palet, st: &Settings) {
+        let filtre = self.cari_filtre.clone();
+        let kayitlar: Vec<&DonemKayit> = self
+            .state
+            .donemler
+            .iter()
+            .filter(|d| filtre.is_empty() || d.cari == filtre)
+            .collect();
+        let g = ui.available_width();
+        let c1 = g * 0.14;
+        let c2 = g * 0.24;
+        let c3 = g * 0.20;
+        let c4 = (g - c1 - c2 - c3 - 24.0).max(60.0);
+
+        ui.horizontal(|ui| {
+            hucre(ui, c1, "DÖNEM".into(), p.soluk, false, false);
+            ui.add_space(8.0);
+            hucre(ui, c2, "CARİ".into(), p.soluk, false, false);
+            ui.add_space(8.0);
+            hucre(ui, c3, "NET".into(), p.soluk, false, true);
+            ui.add_space(8.0);
+            hucre(ui, c4, "DURUM".into(), p.soluk, false, false);
+        });
+        hairline(ui, p.kenar);
+
+        if kayitlar.is_empty() {
+            ui.add_space(10.0);
+            ui.label(
+                RichText::new("Arşivde dönem yok — 'Dönem KDV' modundan kayıt ekleyin.")
+                    .size(T_SMALL)
+                    .color(p.soluk),
+            );
+            return;
+        }
+        for d in kayitlar.iter().take(60) {
+            let cari = self
+                .state
+                .cariler
+                .iter()
+                .find(|c| c.id == d.cari)
+                .map(|c| c.name.clone())
+                .unwrap_or_else(|| if d.cari.is_empty() { "—".into() } else { d.cari.clone() });
+            let net = para_bicimi(&d.net, st.precision, &st.currency_symbol, st.show_currency_symbol);
+            let (durum, renk) = if d.odenecek { ("● Ödenecek", p.uyari) } else { ("● Devreden", p.basari) };
+            ui.horizontal(|ui| {
+                hucre(ui, c1, d.id.clone(), p.birincil, true, false);
+                ui.add_space(8.0);
+                hucre(ui, c2, cari, p.ikinci, false, false);
+                ui.add_space(8.0);
+                hucre(ui, c3, net, p.metin, true, true);
+                ui.add_space(8.0);
+                hucre(ui, c4, durum.into(), renk, false, false);
+            });
+            hairline(ui, p.kenar.gamma_multiply(0.6));
+        }
+    }
+
+    fn kapi_takvim(&mut self, ui: &mut Ui, p: &Palet) {
+        let bugun = chrono::Local::now().date_naive();
+        let kayitlar = takvim_listesi(bugun);
+        let g = ui.available_width();
+        let c1 = g * 0.14;
+        let c2 = g * 0.44;
+        let c3 = g * 0.18;
+        let c4 = (g - c1 - c2 - c3 - 24.0).max(60.0);
+
+        ui.horizontal(|ui| {
+            hucre(ui, c1, "TARİH".into(), p.soluk, false, false);
+            ui.add_space(8.0);
+            hucre(ui, c2, "BEYAN / ÖDEME".into(), p.soluk, false, false);
+            ui.add_space(8.0);
+            hucre(ui, c3, "DÖNEM".into(), p.soluk, false, false);
+            ui.add_space(8.0);
+            hucre(ui, c4, "KALAN".into(), p.soluk, false, true);
+        });
+        hairline(ui, p.kenar);
+
+        if kayitlar.is_empty() {
+            ui.add_space(10.0);
+            ui.label(RichText::new("Yaklaşan kayıt yok.").size(T_SMALL).color(p.soluk));
+            return;
+        }
+        for k in kayitlar.iter().take(60) {
+            let gun = gun_kaldi(&k.tarih, bugun);
+            let (kalan, renk) = if (0..=7).contains(&gun) {
+                (format!("{gun} gün"), p.uyari)
+            } else {
+                ("—".to_string(), p.soluk)
+            };
+            ui.horizontal(|ui| {
+                hucre(ui, c1, k.tarih.clone(), p.birincil, true, false);
+                ui.add_space(8.0);
+                hucre(ui, c2, k.ad.clone(), p.ikinci, false, false);
+                ui.add_space(8.0);
+                hucre(ui, c3, k.donemi.clone(), p.soluk, false, false);
+                ui.add_space(8.0);
+                hucre(ui, c4, kalan, renk, true, true);
+            });
+            hairline(ui, p.kenar.gamma_multiply(0.6));
+        }
+    }
+
+    // ---------- pencereler ----------
 
     fn donemi_kaydet(&mut self) {
         let mode = self.mode.clone();
@@ -717,13 +1217,17 @@ impl FhApp {
         if let Some((metin, at)) = &self.toast {
             if at.elapsed() < Duration::from_secs(3) {
                 let metin = metin.clone();
+                let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
                 egui::Window::new("Bildirim")
                     .title_bar(false)
                     .resizable(false)
                     .collapsible(false)
+                    .frame(pencere_cercevesi(p))
                     .anchor(Align2::RIGHT_BOTTOM, Vec2::new(-16.0, -16.0))
                     .show(ctx, |ui| {
-                        ui.label(RichText::new(metin).size(12.0));
+                        ui.add_space(2.0);
+                        ui.label(RichText::new(metin).size(T_BODY));
+                        ui.add_space(2.0);
                     });
             }
         }
@@ -731,35 +1235,44 @@ impl FhApp {
 
     fn gecmis_penceresi(&mut self, ctx: &Context) {
         let st = self.state.settings.clone();
+        let p = theme::palet(theme::koyu_mu(&st.theme));
         let secilecek = std::cell::RefCell::new(None);
         let mut open = self.p.gecmis;
         egui::Window::new("Geçmiş · son 100 kayıt")
             .open(&mut open)
+            .frame(pencere_cercevesi(p))
             .default_size((540.0, 460.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button("CSV indir").clicked() {
+                    if ui.add(ikincil_dugme("CSV indir", p)).clicked() {
                         self.gecmis_csv();
                     }
-                    if ui.button("Geçmişi temizle").clicked() {
+                    if ui.add(ikincil_dugme("Geçmişi temizle", p)).clicked() {
                         self.state.history.clear();
                         self.state.kaydet();
                         self.bildir("Geçmiş temizlendi");
                     }
-                    ui.label(RichText::new(format!("{} kayıt", self.state.history.len())).color(theme::palet(theme::koyu_mu(&st.theme)).soluk));
+                    ui.label(RichText::new(format!("{} kayıt", self.state.history.len())).size(T_SMALL).color(p.soluk));
                 });
-                ui.separator();
+                ui.add_space(6.0);
+                hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if self.state.history.is_empty() {
-                        ui.label("Henüz kayıt yok. Sonuç panelinden 'Geçmişe kaydet' ile ekleyin.");
+                        ui.add_space(10.0);
+                        ui.label(RichText::new("Henüz kayıt yok. Sonuç biletinden 'Geçmişe kaydet' ile ekleyin.")
+                            .size(T_SMALL).color(p.soluk));
                     }
                     for e in &self.state.history {
                         let tarih = chrono::DateTime::from_timestamp(e.timestamp, 0)
                             .map(|d| d.format("%d.%m %H:%M").to_string())
                             .unwrap_or_default();
                         let deger = para_bicimi(&e.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
-                        let b = egui::Button::new(format!("{tarih}  ·  {}  ·  {deger}", modes::mod_etiketi(&e.mode)))
-                            .min_size(Vec2::new(ui.available_width().max(100.0) - 10.0, 24.0));
+                        let b = egui::Button::new(
+                            RichText::new(format!("{tarih}  ·  {}  ·  {deger}", modes::mod_etiketi(&e.mode)))
+                                .size(T_SMALL).color(p.ikinci),
+                        )
+                        .fill(Color32::TRANSPARENT)
+                        .min_size(Vec2::new(ui.available_width().max(100.0) - 10.0, 24.0));
                         if ui.add(b).clicked() {
                             *secilecek.borrow_mut() = Some((e.mode.clone(), e.inputs.clone()));
                         }
@@ -777,7 +1290,6 @@ impl FhApp {
 
     fn ayarlar_penceresi(&mut self, ctx: &Context) {
         let tema = self.state.settings.theme.clone();
-        let sembol = self.state.settings.currency_symbol.clone();
         let goster = self.state.settings.show_currency_symbol;
         let hass = self.state.settings.precision;
         let olcek = self.state.settings.font_scale;
@@ -785,9 +1297,10 @@ impl FhApp {
         let mut open = self.p.ayarlar;
         egui::Window::new("Ayarlar")
             .open(&mut open)
-            .default_size((420.0, 380.0))
+            .frame(pencere_cercevesi(p))
+            .default_size((430.0, 390.0))
             .show(ctx, |ui| {
-                ui.label(RichText::new("Tema").size(12.0).color(p.ikinci).strong());
+                ui.label(RichText::new("Tema").size(T_SMALL).color(p.ikinci).strong());
                 ui.horizontal(|ui| {
                     for (ad, val) in [("Koyu", "dark"), ("Açık", "light"), ("Sistem", "system")] {
                         if ui.selectable_label(tema == val, ad).clicked() {
@@ -796,19 +1309,23 @@ impl FhApp {
                         }
                     }
                 });
-                ui.separator();
+                ui.add_space(8.0);
+                hairline(ui, p.kenar);
+                ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Yazı ölçeği").size(12.0).color(p.ikinci).strong());
-                    if ui.button("A−").clicked() {
+                    ui.label(RichText::new("Yazı ölçeği").size(T_SMALL).color(p.ikinci).strong());
+                    if ui.add(ikincil_dugme("A−", p)).clicked() {
                         self.font_degistir(-0.05);
                     }
-                    ui.label(RichText::new(format!("{:.2}×", olcek)).size(12.0).color(p.birincil));
-                    if ui.button("A+").clicked() {
+                    ui.label(RichText::new(format!("{:.2}×", olcek)).size(T_SMALL).color(p.birincil).monospace());
+                    if ui.add(ikincil_dugme("A+", p)).clicked() {
                         self.font_degistir(0.05);
                     }
                 });
-                ui.separator();
-                ui.label(RichText::new("Hassasiyet").size(12.0).color(p.ikinci).strong());
+                ui.add_space(8.0);
+                hairline(ui, p.kenar);
+                ui.add_space(8.0);
+                ui.label(RichText::new("Hassasiyet").size(T_SMALL).color(p.ikinci).strong());
                 ui.horizontal(|ui| {
                     for h in [0usize, 2, 4] {
                         if ui.selectable_label(hass == h, format!("{h} hane")).clicked() {
@@ -817,15 +1334,19 @@ impl FhApp {
                         }
                     }
                 });
-                ui.separator();
+                ui.add_space(8.0);
+                hairline(ui, p.kenar);
+                ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.state.settings.show_currency_symbol, "Para simgesini göster");
                     ui.add(egui::TextEdit::singleline(&mut self.state.settings.currency_symbol)
                         .hint_text("₺").desired_width(50.0));
                 });
-                let _ = (sembol, goster);
-                ui.separator();
-                ui.label(RichText::new("Ayarlar otomatik kaydedilir · %APPDATA%/FinansalHesaplayici").size(10.0).color(p.soluk));
+                let _ = goster;
+                ui.add_space(10.0);
+                hairline(ui, p.kenar);
+                ui.label(RichText::new("Ayarlar otomatik kaydedilir · %APPDATA%/FinansalHesaplayici")
+                    .size(T_BUILD).color(p.soluk));
             });
         self.p.ayarlar = open;
     }
@@ -837,22 +1358,25 @@ impl FhApp {
         let mut open = self.p.takvim;
         egui::Window::new("Vergi Takvimi")
             .open(&mut open)
-            .default_size((520.0, 460.0))
+            .frame(pencere_cercevesi(p))
+            .default_size((540.0, 460.0))
             .show(ctx, |ui| {
-                ui.label(RichText::new("Yaklaşan beyan ve ödeme tarihleri (statik VUK takvimi)").size(11.0).color(p.soluk));
-                ui.separator();
+                ui.label(RichText::new("Yaklaşan beyan ve ödeme tarihleri (statik VUK takvimi)")
+                    .size(T_SMALL).color(p.soluk));
+                ui.add_space(6.0);
+                hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for k in kayitlar.iter().take(80) {
                         let gun = gun_kaldi(&k.tarih, bugun);
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(k.tarih.as_str()).size(12.0).color(p.birincil).monospace());
-                            ui.label(RichText::new(k.ad.as_str()).size(12.0).color(p.metin).strong());
+                            ui.label(RichText::new(k.tarih.as_str()).size(T_SMALL).color(p.birincil).monospace());
+                            ui.label(RichText::new(k.ad.as_str()).size(T_BODY).color(p.metin).strong());
                             if (0..=7).contains(&gun) {
-                                ui.label(RichText::new(format!("{gun} gün kaldı")).size(10.0).color(p.uyari).strong());
+                                ui.label(RichText::new(format!("{gun} gün kaldı")).size(T_BUILD).color(p.uyari).strong());
                             }
                         });
-                        ui.label(RichText::new(format!("{} — {}", k.donemi, k.aciklama)).size(10.0).color(p.soluk));
-                        ui.separator();
+                        ui.label(RichText::new(format!("{} — {}", k.donemi, k.aciklama)).size(T_SMALL).color(p.soluk));
+                        hairline(ui, p.kenar.gamma_multiply(0.6));
                     }
                 });
             });
@@ -862,14 +1386,16 @@ impl FhApp {
     fn cariler_penceresi(&mut self, ctx: &Context) {
         let idler: Vec<String> = self.state.cariler.iter().map(|c| c.id.clone()).collect();
         let aktif = self.state.active_cari.clone();
+        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let mut open = self.p.cariler;
         egui::Window::new("Cari Kartlar")
             .open(&mut open)
-            .default_size((420.0, 420.0))
+            .frame(pencere_cercevesi(p))
+            .default_size((430.0, 420.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.add(egui::TextEdit::singleline(&mut self.yeni_cari).hint_text("Cari adı").desired_width(180.0));
-                    if ui.button("Ekle").clicked() {
+                    if ui.add(birincil_dugme("Ekle", p)).clicked() {
                         let ad = self.yeni_cari.trim().to_string();
                         if !ad.is_empty() {
                             let id = format!("c{}", chrono::Local::now().timestamp_nanos_opt().unwrap_or(1));
@@ -880,7 +1406,8 @@ impl FhApp {
                         }
                     }
                 });
-                ui.separator();
+                ui.add_space(6.0);
+                hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for id in &idler {
                         let cari = self.state.cariler.iter().find(|c| &c.id == id).cloned();
@@ -891,12 +1418,13 @@ impl FhApp {
                             if ui.selectable_label(aktif == c.id, c.name.as_str()).clicked() {
                                 sec = true;
                             }
-                            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                                if ui.button("Sil").clicked() {
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if ui.add(ikincil_dugme("Sil", p)).clicked() {
                                     sil = true;
                                 }
                             });
                         });
+                        hairline(ui, p.kenar.gamma_multiply(0.6));
                         if sec {
                             self.state.active_cari = c.id.clone();
                             self.state.kaydet();
@@ -935,10 +1463,11 @@ impl FhApp {
         let mut open = self.p.donemler;
         egui::Window::new("Dönem KDV Arşivi")
             .open(&mut open)
-            .default_size((600.0, 500.0))
+            .frame(pencere_cercevesi(p))
+            .default_size((620.0, 500.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label("Cari filtresi:");
+                    ui.label(RichText::new("Cari filtresi:").size(T_SMALL).color(p.ikinci));
                     egui::ComboBox::from_id_salt("cari-filtre")
                         .selected_text(if filtre.is_empty() { "Tümü".to_string() }
                             else { cariler.iter().find(|c| c.id == filtre).map(|c| c.name.clone()).unwrap_or(filtre.clone()) })
@@ -954,11 +1483,11 @@ impl FhApp {
                         });
                     let mut csv_istendi = false;
                     let mut ozet_istendi = false;
-                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                        if ui.button("Beyan özeti").clicked() {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui.add(ikincil_dugme("Beyan özeti", p)).clicked() {
                             ozet_istendi = true;
                         }
-                        if ui.button("CSV indir").clicked() {
+                        if ui.add(ikincil_dugme("CSV indir", p)).clicked() {
                             csv_istendi = true;
                         }
                     });
@@ -971,9 +1500,11 @@ impl FhApp {
                         self.p.onizleme = true;
                     }
                 });
-                ui.separator();
+                ui.add_space(6.0);
+                hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if gruplar.is_empty() {
+                        ui.add_space(10.0);
                         ui.label("Arşivde dönem yok. 'Dönem KDV' modundan kayıt ekleyin.");
                     }
                     for (yil, kayitlar, ozet) in &gruplar {
@@ -982,7 +1513,7 @@ impl FhApp {
                             ozet.sayi,
                             para_bicimi(&ozet.net, st.precision, &st.currency_symbol, st.show_currency_symbol)
                         );
-                        egui::CollapsingHeader::new(RichText::new(baslik).size(13.0).color(p.metin).strong())
+                        egui::CollapsingHeader::new(RichText::new(baslik).size(T_BODY).color(p.metin).strong())
                             .default_open(true)
                             .show(ui, |ui| {
                                 ui.label(RichText::new(format!(
@@ -991,20 +1522,20 @@ impl FhApp {
                                     para_bicimi(&ozet.indirilecek, st.precision, &st.currency_symbol, st.show_currency_symbol),
                                     para_bicimi(&ozet.odenecek_net, st.precision, &st.currency_symbol, st.show_currency_symbol),
                                     para_bicimi(&ozet.devreden_net, st.precision, &st.currency_symbol, st.show_currency_symbol),
-                                )).size(11.0).color(p.ikinci));
-                                ui.separator();
+                                )).size(T_SMALL).color(p.ikinci));
+                                hairline(ui, p.kenar);
                                 for k in kayitlar {
                                     ui.horizontal(|ui| {
-                                        ui.label(RichText::new(&k.id).size(11.0).color(p.birincil).monospace());
+                                        ui.label(RichText::new(&k.id).size(T_SMALL).color(p.birincil).monospace());
                                         let durum = if k.odenecek { "Ödenecek" } else { "Devreden" };
-                                        ui.label(RichText::new(durum).size(10.0).color(if k.odenecek { p.hata } else { p.basari }));
+                                        ui.label(RichText::new(durum).size(T_BUILD).color(if k.odenecek { p.uyari } else { p.basari }));
                                         ui.add_space(ui.available_width().max(0.0));
                                         let v = para_bicimi(&k.net, st.precision, &st.currency_symbol, st.show_currency_symbol);
-                                        ui.label(RichText::new(v).size(11.0).color(p.metin));
+                                        ui.label(RichText::new(v).size(T_SMALL).color(p.metin).monospace());
                                     });
                                 }
                             });
-                        ui.add_space(4.0);
+                        ui.add_space(5.0);
                     }
                 });
             });
@@ -1013,27 +1544,34 @@ impl FhApp {
 
     fn palet_penceresi(&mut self, ctx: &Context) {
         let idxs = self.filtreli_komutlar();
+        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let mut secilen = None;
         let mut open = self.p.palet;
         egui::Window::new("Komut Paleti · Ctrl+K")
             .open(&mut open)
+            .frame(pencere_cercevesi(p))
             .default_size((500.0, 440.0))
             .anchor(Align2::CENTER_TOP, Vec2::new(0.0, 70.0))
             .show(ctx, |ui| {
                 ui.add(egui::TextEdit::singleline(&mut self.palet_sorgu)
                     .hint_text("Komut ara… (↑↓ gezin, Enter seç, Esc kapat)")
                     .desired_width(f32::INFINITY));
-                ui.separator();
+                ui.add_space(6.0);
+                hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().max_height(340.0).show(ui, |ui| {
                     if idxs.is_empty() {
-                        ui.label("Eşleşen komut yok.");
+                        ui.label(RichText::new("Eşleşen komut yok.").size(T_SMALL).color(p.soluk));
                     }
                     for (n, &idx) in idxs.iter().enumerate() {
                         let c = &self.komutlar[idx];
                         let aktif = n == self.palet_sec;
-                        let b = egui::Button::new(format!("{}   · {}", c.ad, c.kategori))
-                            .fill(if aktif { theme::palet(theme::koyu_mu(&self.state.settings.theme)).birincil } else { Color32::TRANSPARENT })
-                            .min_size(Vec2::new(ui.available_width().max(100.0) - 8.0, 24.0));
+                        let b = egui::Button::new(
+                            RichText::new(format!("{}   · {}", c.ad, c.kategori))
+                                .size(T_SMALL)
+                                .color(if aktif { Color32::WHITE } else { p.ikinci }),
+                        )
+                        .fill(if aktif { p.birincil } else { Color32::TRANSPARENT })
+                        .min_size(Vec2::new(ui.available_width().max(100.0) - 8.0, 24.0));
                         if ui.add(b).clicked() {
                             secilen = Some(idx);
                         }
@@ -1056,14 +1594,15 @@ impl FhApp {
         egui::Window::new("Mini Hesaplayıcı")
             .open(&mut open)
             .resizable(true)
-            .default_size((250.0, 130.0))
+            .frame(pencere_cercevesi(p))
+            .default_size((260.0, 130.0))
             .show(ctx, |ui| {
-                ui.label(RichText::new(modes::mod_etiketi(&self.mode)).size(11.0).color(p.soluk));
+                ui.label(RichText::new(modes::mod_etiketi(&self.mode)).size(T_BUILD).color(p.soluk));
                 if let Some(r) = res {
                     let v = para_bicimi(&r.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
-                    ui.label(RichText::new(v).size(22.0).color(p.birincil).strong());
+                    ui.label(RichText::new(v).size(24.0).color(p.metin).strong().monospace());
                 } else {
-                    ui.label("—");
+                    ui.label(RichText::new("—").size(24.0).color(p.soluk).monospace());
                 }
             });
         self.p.widget = open;
@@ -1072,18 +1611,21 @@ impl FhApp {
     fn onizleme_penceresi(&mut self, ctx: &Context) {
         let baslik = self.onizleme_baslik.clone();
         let metin = self.onizleme_metin.clone();
+        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let mut open = self.p.onizleme;
         egui::Window::new(baslik.as_str())
             .open(&mut open)
+            .frame(pencere_cercevesi(p))
             .default_size((560.0, 400.0))
             .show(ctx, |ui| {
-                if ui.button("Panoya kopyala").clicked() {
+                if ui.add(ikincil_dugme("Panoya kopyala", p)).clicked() {
                     if let Ok(mut cb) = arboard::Clipboard::new() {
                         let _ = cb.set_text(metin.clone());
                     }
                     self.bildir("Özet panoya kopyalandı");
                 }
-                ui.separator();
+                ui.add_space(6.0);
+                hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     ui.add(egui::TextEdit::multiline(&mut metin.clone()).desired_width(f32::INFINITY));
                 });
@@ -1099,11 +1641,61 @@ impl eframe::App for FhApp {
         self.tema_guncelle(&ctx);
         self.hesapla();
         self.guncelleme_durumunu_kontrol();
+        let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
 
-        // egui panelleri kök Ui'de ve CentralPanel'den ÖNCE gösterilmelidir;
-        // aksi halde üst panel merkez panelin içine gömülür.
-        egui::Panel::top("ust_panel_v3").show(ui, |ui| self.ust_panel(ui));
-        egui::CentralPanel::default().show(ui, |ui| self.panelleri_goster(ui));
+        // Paneller kök Ui'de ve CentralPanel'den ÖNCE gösterilir; aksi halde
+        // üst panel merkez panelin içine gömülür.
+        egui::Panel::top("kimlik_seridi")
+            .resizable(false)
+            .show_separator_line(false)
+            .frame(
+                Frame::new()
+                    .fill(p.yuzey)
+                    .stroke(Stroke::new(1.0, p.kenar))
+                    .inner_margin(Margin::symmetric(16, 9)),
+            )
+            .show(ui, |ui| self.ust_panel(ui));
+
+        // Dar ekranlarda girdi paneli orantılı küçülür; 1366px'de ~%34.
+        let tara = (ctx.content_rect().width() * 0.34).clamp(268.0, 430.0);
+        egui::Panel::left("girdi_paneli")
+            .resizable(false)
+            .exact_size(tara)
+            .show_separator_line(false)
+            .frame(
+                Frame::new()
+                    .fill(p.yuzey)
+                    .stroke(Stroke::new(1.0, p.kenar))
+                    .inner_margin(Margin::symmetric(15, 13)),
+            )
+            .show(ui, |ui| self.girdi_panel(ui));
+
+        egui::CentralPanel::default()
+            .frame(Frame::new().fill(p.arka).inner_margin(Margin::symmetric(16, 14)))
+            .show(ui, |ui| {
+                // Kapı paneli: Panel::bottom yüksekliği uygulamadığı için merkez
+                // panel içinde kesin yükseklikle ayrılır (bilet üstte, tablo altta).
+                let yukseklik = ui.available_height();
+                let kapi_y = (yukseklik * 0.42).clamp(170.0, 270.0);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(ui.available_width(), yukseklik - kapi_y - 8.0),
+                    egui::Layout::top_down(Align::Min),
+                    |ui| self.sonuc_panel(ui),
+                );
+                ui.add_space(8.0);
+                ui.allocate_ui_with_layout(
+                    Vec2::new(ui.available_width(), kapi_y),
+                    egui::Layout::top_down(Align::Min),
+                    |ui| {
+                        Frame::new()
+                            .fill(p.yuzey)
+                            .stroke(Stroke::new(1.0, p.kenar))
+                            .inner_margin(Margin::symmetric(14, 9))
+                            .show(ui, |ui| self.kapi_panel(ui));
+                    },
+                );
+            });
+
         self.pencereleri_goster(&ctx);
     }
 }

@@ -14,6 +14,8 @@ fn main() -> eframe::Result<()> {
             .with_title("Finansal Hesaplayıcı")
             .with_inner_size([1280.0, 740.0])
             .with_min_inner_size([820.0, 560.0]),
+        // Bozuk/14x14 kaydedilmiş pencere boyutu sonraki açılışları gizliyordu.
+        persist_window: false,
         ..Default::default()
     };
     eframe::run_native(
