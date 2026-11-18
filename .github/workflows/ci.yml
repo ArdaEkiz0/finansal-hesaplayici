@@ -39,6 +39,20 @@ jobs:
           if ("v$v" -ne "$env:GITHUB_REF_NAME") { throw "Etiket $env:GITHUB_REF_NAME, Cargo.toml v$v ile uyumsuz — surumu yukseltin" }
           "version=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Inno Setup 6 (kurulum exe icin)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $adaylar = @(
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          )
+          $bulunan = $adaylar | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $bulunan) { throw "ISCC.exe kurulumdan sonra bulunamadi" }
+          "Bulunan: $bulunan"
+
       - name: Surum dosyalarini hazirla
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -54,8 +68,12 @@ jobs:
           Copy-Item -Force $exe "$stage\Finansal-Hesaplayici-$v-portable.exe"
 
           # NSIS degil Inno Setup ile tek tik kurulum exe'si.
-          $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { throw "Inno Setup 6 (ISCC.exe) bulunamadi" }
+          $iscc = @(
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) bulunamadi" }
           & $iscc "Kurulum\FH_kurulum.iss" "/DSurum=$v"
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup derlemesi basarisiz" }
           $setup = "target\installer\Finansal-Hesaplayici-$v-setup.exe"
