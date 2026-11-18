@@ -1,0 +1,12 @@
+[package]
+name = "fh-data"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+rust_decimal = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }

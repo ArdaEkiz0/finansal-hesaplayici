@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/fh-core",
+    "crates/fh-data",
+    "crates/fh-ui",
+    "crates/fh-updater",
+]
+
+[workspace.package]
+version = "5.0.0"
+edition = "2024"
+authors = ["Arda M. Ekiz"]
+license = "MIT"
+description = "Turk mali hesaplayici - Rust native"
+
+[workspace.dependencies]
+rust_decimal = { version = "1", features = ["serde", "maths"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+ureq = { version = "2", features = ["json"] }
+hex = "0.4"

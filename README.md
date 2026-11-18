@@ -1,79 +1,38 @@
-<p align="center">
-  <img src="public/logo.svg" alt="Finansal Hesaplayıcı" width="120">
-</p>
+# Finansal Hesaplayıcı — Rust
 
-<h1 align="center">Finansal Hesaplayıcı</h1>
+Türk mali hesaplamaları için sıfırdan Rust ile yazılmış, çevrimdışı çalışan masaüstü uygulaması (v5.0.0).
+Electron sürümünün (v4.8.0) tüm özelliklerini karşılar: 15 hesaplama modu, dönem arşivi, cari kartlar,
+vergi takvimi, e-fatura CSV içe aktarma, güvenli yedek al/yükle, tema ve yazı ölçeği, komut paleti,
+güncelleyici (SHA-256 doğrulamalı) ve tek tık kurulum.
 
-<p align="center">
-  Türk vergi ve mali hesapları için tamamen çevrimdışı masaüstü uygulaması<br>
-  Electron + React + TypeScript • decimal.js hassasiyeti • Aurora Ledger arayüzü<br>
-  <small>Developer: Arda M. Ekiz</small>
-</p>
+## Yapı
 
-## İndir
-
-En güncel sürüm: [Releases](https://github.com/ArdaEkiz0/finansal-hesaplayici/releases) sayfasından indir.
-
-| Dosya | Ne zaman? |
+| Crate | İş |
 |---|---|
-| `Finansal-Hesaplayici-X.Y.Z-kurulum.exe` | Kalıcı kurulum: Başlat menüsü + masaüstü kısayolu, Denetim Masası'ndan kaldırılabilir |
-| `Finansal-Hesaplayici-X.Y.Z-portable.exe` | Kurulum istemeyen tek dosya — USB'den çalıştır |
+| `fh-core` | 15 hesaplama modu, `rust_decimal` para matematiği, Türkçe biçim/para yazısı |
+| `fh-data` | Vergi takvimi, dönem arşivi, yedek sanitizasyonu, CSV, e-fatura ayrıştırma |
+| `fh-updater` | GitHub sürüm kontrolü, SHA-256 bütünlük, host allowlist |
+| `fh-ui` | eframe/egui arayüz, tema, klavye, widget, yazdırma |
 
-Uygulama içinde **Ayarlar → Güncelleme → Denetle** ile kendi kendini güncelleyebilir.
-
-> Not: Sürüm imzasızdır; Windows SmartScreen ilk çalıştırmada "更多信息 → Çalıştır" diyebilir.
-
-## Neler yapar?
-
-- **16 hesap modu** — KDV (hariç/dahil, %1/%10/%20 + özel oran), Dönem KDV, Stopaj, Tevkifat, Gecikme faizi, Amortisman, Döviz (TCMB), Marj, Kâr oranı, İndirim, Yüzde, Bileşik, Fiyat, Karşılaştır, Toplu
-- **Dönem arşivi + devreden zinciri** — ay kapanışları, geçmiş dönem devreden KDV otomatik taşınır
-- **Cari kartlar** — dönem ve kayıtlar cari bazında izlenir
-- **E-fatura CSV içe aktarma** — matrah/KDV sütunlarını tanıyıp toplar
-- **Vergi takvimi** — KDV (28), Muhtasar & Prim (26), Damga (26), Ba-Bs ve geçici vergi son günleri, "kaç gün kaldı" rozetleriyle
-- **Beyan özeti** — dönemden yazdırılabilir KDV özeti kartı (ön kontrol aracı, resmi belge değildir)
-- **Yedek al / geri yükle** — tüm veriler tek JSON; bilgisayar değişimi için birebir
-- **Yüzücü widget** — ayrı, boyutlandırılabilir mini hesap makinesi (her zaman üstte)
-- **Komut paleti** — `Ctrl+K` ile her mod ve panele tek tıkla
-- **Tema** — Koyu / Açık / Sistem + yazı ölçeği (A−/A+)
-
-Tüm hesaplar **çevrimdışı** çalışır; yalnızca döviz kuru ve güncelleme denetimi internet ister.
+Ortak API sözleşmesi: `CONTRACT.md`.
 
 ## Geliştirme
 
-```bash
-npm install
-npm run dev          # tarayıcı önizleme (localhost:5173)
-npm test             # vitest — 42 test
-npm run build        # tsc + vite
-npm run dist         # portable + kurulum exe (release/)
+```powershell
+cargo test --workspace
+cargo build --release
+.\target\release\Finansal Hesaplayici.exe
 ```
 
-Etiket push'la yayın: `git tag vX.Y.Z; git push origin vX.Y.Z` → CI test eder, paketleri, GitHub Release'e yükler.
+Kurulum exe'si (Inno Setup 6):
 
-## Proje yapısı
-
-```
-src/
-  core/engine.ts       # decimal.js hesaplama motoru + TR sayı formatı
-  data/                # oranlar (tax), dönem (donem), e-fatura, vergi takvimi (takvim)
-  store/useStore.ts    # Zustand — tek durum deposu, localStorage'a yazar
-  components/          # Aurora Ledger arayüzü (mod seçici, keypad, paneller, modallar)
-  lib/persist.ts       # kalıcılık (sürüm anahtarı v2)
-electron/
-  main.ts              # pencere, widget, güncelleyici, TCMB kuru
-  preload.ts           # güvenli IPC köprüsü
-tests/                 # vitest — SMMM senaryoları, dönem, e-fatura, takvim
-docs/index.html        # tanıtım sayfası
+```powershell
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" "Kurulum\FH_kurulum.iss"
 ```
 
-## Teknik notlar
+## Tasarım kuralları
 
-- **decimal.js** — para hesaplarında kayan nokta hatası yok
-- **TR sayı formatı** — `1.234.567,89`
-- **Güncel oran denetimi** — yıl değişince oranlar için tazelik uyarısı
-- **Tek örnek** — aynı anda iki ana pencere açılmaz
-- **Kod imzası yok** — sertifika alınırsa SmartScreen uyarısı kalkar
-
-## Lisans
-
-MIT
+- Para hesabı daima `Decimal`, `ROUND_HALF_UP`; gösterim `1.234.567,89`.
+- Kullanıcı verisi `%APPDATA%` altında; yedek dosyaları sanitizasyondan geçer.
+- Güncellemeler SHA-256 ile doğrulanır; allowlist dışı host reddedilir.
+- Kod imzalama sertifikası olmadığı için SmartScreen uyarısı görünebilir.
