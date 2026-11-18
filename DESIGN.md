@@ -16,7 +16,7 @@ Koyu: derin lacivert (`#0a0f1c`) zemin, `#101827` yüzey, ince ızgara dokusu, m
 - **Sol:** 15 mod, dört grup halinde dikey navigasyon; aktif satırda cyan şerit + mavi zemin; kaydırma belirgin, yatay kırpma yok.
 - **Orta:** geniş çalışma alanı; mod başlığı, durum satırı, etiketli 36px alanlar, yedek/CSV eylemleri, "çalışma notu" kartı (alan sayısı, biçim ipucu, kısayol).
 - **Sağ:** sonuç alanı; 48px ana tutar, okunur döküm tablosu, doğrulama/birim şeridi, kopyala/yazdır/kaydet. Boş durum öğretici metinli.
-- **Alt:** tam genişlikte kayıt paneli (Geçmiş / Dönem / Takvim), okunur tablo, bilgilendirici boş durum, CSV/Temizle eylemleri. Kalan yükseklik tamamen bu panele verilir; altta boşluk kalmaz.
+- **Alt:** tam genişlikte kayıt paneli (Geçmiş / Dönem / Takvim), okunur tablo, bilgilendirici boş durum, CSV/Temizle eylemleri. Kalan yükseklik tamamen bu panele verilir; en altta tema renginde durum şeridi (sürüm + çevrimdışı bilgisi) yer alır; pencere boşlukları tema zemin rengiyle boyanır.
 - **Dar (<1040px):** üçüncü sütun kapanır, sonuç çalışma alanının altına iner.
 
 ## Durumlar

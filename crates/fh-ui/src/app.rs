@@ -1879,7 +1879,30 @@ impl eframe::App for FhApp {
             },
         );
 
+        // Kalan boşluk (varsa) tema renginde alt durum şeridi olarak doldurulur.
+        let kalans = ui.available_height();
+        if kalans > 2.0 {
+            Frame::new().fill(p.yuzey).stroke(kenar)
+                .inner_margin(Margin::symmetric(16, 4))
+                .show(ui, |ui| {
+                    ui.add_space((kalans - 14.0).max(0.0));
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(format!("v{SURUM} · çevrimdışı"))
+                            .size(T_BUILD).color(p.soluk));
+                        ui.add_space(ui.available_width().max(0.0));
+                        ui.label(RichText::new("Yerel hesaplama · veri cihazda")
+                            .size(T_BUILD).color(p.soluk));
+                    });
+                });
+        }
+
         self.pencereleri_goster(&ctx);
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        // Pencere boşlukları siyah kalmasın: temanın zemin rengiyle boyanır.
+        let c = theme::palet(theme::koyu_mu(&self.state.settings.theme)).arka;
+        [c.r() as f32 / 255.0, c.g() as f32 / 255.0, c.b() as f32 / 255.0, 1.0]
     }
 }
 
