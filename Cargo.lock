@@ -948,7 +948,7 @@ checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
 
 [[package]]
 name = "fh-core"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "rust_decimal",
  "serde",
@@ -956,7 +956,7 @@ dependencies = [
 
 [[package]]
 name = "fh-data"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "chrono",
  "rust_decimal",
@@ -965,7 +965,7 @@ dependencies = [
 
 [[package]]
 name = "fh-ui"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "fh-updater"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "hex",
  "serde_json",

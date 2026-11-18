@@ -103,24 +103,27 @@ pub fn temizle_yedek(v: &Value) -> Option<TemizYedek> {
     }
 
     let s = v.get("settings").filter(|x| x.is_object());
-    let show_currency_symbol = s
-        .and_then(|x| x.get("showCurrencySymbol"))
+    // Eski Electron yedeklerinde alan adları camelCase, bazı el yazımı
+    // yedeklerde ise snake_case olabilir. Üç biçim de aynı şekilde okunur.
+    let ayar = |ad: &str| s.and_then(|x| x.get(ad));
+    let show_currency_symbol = ayar("showCurrencySymbol")
+        .or_else(|| ayar("show_currency_symbol"))
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    let precision = s
-        .and_then(|x| x.get("precision"))
+    let precision = ayar("precision")
         .and_then(Value::as_f64)
         .filter(|n| n.fract() == 0.0 && matches!(*n as i64, 0 | 2 | 4))
         .map(|n| n as usize)
         .unwrap_or(2);
-    let font_scale = s
-        .and_then(|x| x.get("fontScale"))
+    let font_scale = ayar("fontScale")
+        .or_else(|| ayar("font_scale"))
         .and_then(Value::as_f64)
         .filter(|f| f.is_finite() && *f >= 0.85 && *f <= 1.25)
         .unwrap_or(1.0);
     let theme = v
         .get("theme")
         .and_then(Value::as_str)
+        .or_else(|| ayar("theme").and_then(Value::as_str))
         .filter(|t| ["dark", "light", "system"].contains(t))
         .unwrap_or("dark")
         .to_string();
@@ -150,6 +153,7 @@ pub fn temizle_yedek(v: &Value) -> Option<TemizYedek> {
         cariler,
         active_cari: v
             .get("activeCari")
+            .or_else(|| v.get("active_cari"))
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string(),
@@ -267,6 +271,35 @@ mod tests {
         assert_eq!(t.font_scale, 1.1);
         assert_eq!(t.theme, "light");
         assert_eq!(t.active_cari, "c1");
+    }
+
+    #[test]
+    fn eski_ve_snake_case_ayar_adlari_okunur() {
+        // Eski Electron: tema settings içinde, diğer alanlar camelCase.
+        let eski = temizle_yedek(&json!({
+            "history": [],
+            "settings": {"showCurrencySymbol": false, "precision": 4,
+                          "fontScale": 1.2, "theme": "light"},
+            "activeCari": "eski"
+        })).unwrap();
+        assert_eq!(eski.theme, "light");
+        assert_eq!(eski.font_scale, 1.2);
+        assert_eq!(eski.precision, 4);
+        assert!(!eski.show_currency_symbol);
+        assert_eq!(eski.active_cari, "eski");
+
+        // El yazımı yedekler: snake_case alan adları.
+        let yeni = temizle_yedek(&json!({
+            "cariler": [],
+            "settings": {"show_currency_symbol": false, "precision": 0,
+                          "font_scale": 0.9, "theme": "system"},
+            "active_cari": "yeni"
+        })).unwrap();
+        assert_eq!(yeni.theme, "system");
+        assert_eq!(yeni.font_scale, 0.9);
+        assert_eq!(yeni.precision, 0);
+        assert!(!yeni.show_currency_symbol);
+        assert_eq!(yeni.active_cari, "yeni");
     }
 
     #[test]

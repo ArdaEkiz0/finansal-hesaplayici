@@ -1,40 +1,28 @@
-# DESIGN — Finansal Hesaplayıcı (v5.1.0)
+# DESIGN — Finansal Hesaplayıcı (v5.2.0)
 
-Operate yüzeyi: SMMM'nin masaüstünde hızlı, güvenilir ve Türkçe hesap yapması. Görsel dünya, HCV kataloğundan gelen "bilet + kapı paneli" yönüdür (seed:a400ba98b7ca3361): koyu zemin, ince çizgiler, tablo rakamları, renk yalnızca duruma ayrılmıştır.
+Operate yüzeyi. Kullanıcı "bilet + kapı paneli" düzenini reddetti; yerine **premium finans konsolu** kuruldu. Ekran doldurulur, boş alan bırakılmaz; tipografi ve hiyerarşi öne çıkar.
 
-## Palet
+## Yön
 
-| Rol | Koyu | Açık |
-|---|---|---|
-| Zemin | `#0a0f1c` | `#f6f8fc` |
-| Yüzey | `#101827` | `#ffffff` |
-| Birincil metin | `#eef2f8` | `#101729` |
-| İkincil metin | `#c6cfdd` | `#3d4a61` |
-| Eylem / seçim | `#2f7bff` | `#2563eb` |
-| Uyarı / son gün | `#f5a524` | `#f0a62e` |
-| Doğrulama | `#10b981` | `#10b981` |
-| Hata | `#f4536e` | `#f4536e` |
-| Ayırıcı | rgba(148,175,255,.10) | rgba(16,23,42,.10) |
+Koyu: derin lacivert (`#0a0f1c`) zemin, `#101827` yüzey, ince ızgara dokusu, mavi eylem + cyan seçim şeridi, amber uyarı, yeşil doğrulama. Açık: sıcak kâğıt (`#faf8f4`) zemin, koyu mürekkep (`#18202f`), aynı mavi/cyan vurgu — yalnız renk terslemesi değil, ayrı yüzey/gölge/kenar dili. İki tema da gerçek ekranda doğrulandı: `C:\Users\ozel\AppData\Local\Temp\opencode\v52-real-dark.png` ve `v52-real-light.png`.
 
 ## Tipografi
 
-Tek aile, sabit ölçek: başlık 19, mod cipi 12, gövde 13, etiket 11, tablo 11, bilet ana tutarı 30 (sabit genişlikli rakamlar). Yazı ölçeği A−/A+ ile 0.85–1.25 aralığında değişir. Döndürülmüş yazı yok (egui 0.37 kısıtı).
+Ürün başlığı 26–28, mod başlığı 23, gövde/alan etiketi 12–14.5, alanlar 36px yüksekliğinde monospace, sonuçta ana tutar 48px monospace + cyan alt çizgi. Sayılar sabit genişlikli. A−/A+ yazı ölçeği 0.85–1.25 çalışır. egui 0.37'de döndürülmüş yazı yok.
 
-## Kompozisyon
+## Yapı
 
-- **Üst kimlik şeridi:** ürün adı + sürüm + çevrimdışı rozeti; sıralı araç düğmeleri (⌘K, A+, A−, Widget, Ayarlar, Takvim, Cari, Dönemler, Geçmiş); altında yatay kaydırmalı, gruplu 15 mod şeridi.
-- **Sol girdi paneli:** mod başlığı, "Hazır" durum noktası, etiketli geniş girişler, hesaplama yönü seçici, yedek al/yükle eylemleri.
-- **Sonuç bileti:** "SONUÇ BİLETİ" etiketi, büyük ana tutar, perforasyon ayırıcı, hesap dökümü tablosu, not kutusu; kopyala / yazdır-önizle / geçmişe kaydet eylemleri.
-- **Kapı paneli:** biletin altında kesin yükseklikte; GEÇMİŞ / DÖNEM / TAKVİM sekmeleri, tablo başlıkları (tarih, mod, tutar, detay), boş durum öğretici metni, yaklaşan son gün için amber rozet.
+- **Üst:** kimlik bloğu (ad + sürüm + "çevrimdışı finans konsolu") ve araç düğmeleri (⌘K, A+, A−, Widget, Ayarlar, Takvim, Cari, Dönemler, Geçmiş). Güncelleme bildirimi burada.
+- **Sol:** 15 mod, dört grup halinde dikey navigasyon; aktif satırda cyan şerit + mavi zemin; kaydırma belirgin, yatay kırpma yok.
+- **Orta:** geniş çalışma alanı; mod başlığı, durum satırı, etiketli 36px alanlar, yedek/CSV eylemleri, "çalışma notu" kartı (alan sayısı, biçim ipucu, kısayol).
+- **Sağ:** sonuç alanı; 48px ana tutar, okunur döküm tablosu, doğrulama/birim şeridi, kopyala/yazdır/kaydet. Boş durum öğretici metinli.
+- **Alt:** tam genişlikte kayıt paneli (Geçmiş / Dönem / Takvim), okunur tablo, bilgilendirici boş durum, CSV/Temizle eylemleri. Kalan yükseklik tamamen bu panele verilir; altta boşluk kalmaz.
+- **Dar (<1040px):** üçüncü sütun kapanır, sonuç çalışma alanının altına iner.
 
-## Durumlar ve etkileşim
+## Durumlar
 
-Tüm düğmelerin varsayılan/hover/devre dışı durumları tutarlı. Sonuç yokken eylemler devre dışı; boş geçmişte öğretici metin; hata durumunda onarıcı mesaj; güncelleme indirilirken yükleniyor çizgisi. Klavye: Ctrl+K komut paleti, enter ile hesaplama. Motion: yalnızca durum geçişlerinde kısa geçişler; sahne açılışı yok.
-
-## Uyarlama
-
-1366×768 ve üzeri: sol panel ~%34, sonuç bileti + kapı paneli kalan alan. Dar (<1040px) ekranda araç etiketleri kısalır, mod şeridi yatay kaydırılır; 600px altında bilet dökümü kaydırma gerektirir (taşma yok).
+Tüm kontrollerde default / hover / focus / seçim / devre dışı ayrımı; 6px köşe, 1px hairline kenar, yumuşak gölge. Amber yalnız son-gün uyarısı, yeşil doğrulama, kırmızı hata. Hareket yalnızca durum geçişlerinde kısa geçiş.
 
 ## Finish review
 
-Gerçek pencere ekran görüntüsü `C:\Users\ozel\AppData\Local\Temp\opencode\gui-v51d.png` incelendi: üst araç çubuğu taşmıyor, kapı paneli ve sekmeleri görünür, bilet okunaklı, kontrast yeterli. 238 test (15 mod dahil) ve release derlemesi temiz. Bilinen sınırlar: sistem teması koyuya düşer, widget uygulama içi paneldir, native yazdırma yerine metin önizleme vardır. Karar: tasarım sözleşmesi karşılandı, yayına uygun.
+248 test (15 modun tamamı, yedek/CSV/takvim/ayarlar geri uyumu, `compound` panic düzeltmesi) ve release derlemesi temiz. Koyu + açık ekran görüntüleri okundu: taşma/kırpma yok, paneller ekranı dolduruyor, temalar ayrı kimlik. Bilinen sınırlar: sistem teması koyuya düşer, widget uygulama içi panel, native yazdırma yerine metin önizleme.

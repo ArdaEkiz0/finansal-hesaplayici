@@ -385,6 +385,53 @@ fn t43_bilinmeyen_mod() {
 }
 
 #[test]
+fn t45_compound_tasmada_panic_yok() {
+    // rust_decimal::powd/exp taşmada panic atar; checked karşılıkları None döner.
+    let g = Girdi {
+        ek: vec!["200".into(), "1".into()],
+        ..girdi("1000", "200", "")
+    };
+    assert_eq!(hesapla("compound", &g), None);
+    // Çok büyük üs: uzun döngü/taşma yerine hızlı red.
+    let g = Girdi {
+        ek: vec!["1000000000".into(), "12".into()],
+        ..girdi("1000", "12", "")
+    };
+    assert_eq!(hesapla("compound", &g), None);
+}
+
+#[test]
+fn t46_compound_negatif_taban_cift_us() {
+    // -150% yıllık, yılda 1 bileşme, 2 yıl → (1-1.5)^2 = 0.25 → 250.
+    // Eski power() negatif tabanı 0 sanıp 0 döndürüyordu.
+    let g = Girdi {
+        ek: vec!["2".into(), "1".into()],
+        ..girdi("1000", "-150", "")
+    };
+    assert_eq!(ana("compound", &g), "250");
+}
+
+#[test]
+fn t47_batch_tevkifat_gecersiz_pay_red() {
+    for pay in [0, 11, -1] {
+        let g = Girdi {
+            tevkifat_kod: "tevkifat".into(),
+            tevkifat_pay: pay,
+            ek: vec!["1000".into()],
+            ..girdi("", "", "20")
+        };
+        assert_eq!(hesapla("batch", &g), None, "pay={pay}");
+    }
+    let g = Girdi {
+        tevkifat_kod: "tevkifat".into(),
+        tevkifat_pay: 5,
+        ek: vec!["10000".into()],
+        ..girdi("", "", "20")
+    };
+    assert_eq!(ana("batch", &g), "11000");
+}
+
+#[test]
 fn t44_tum_modlar_bos_girdi() {
     for m in [
         "kdv",

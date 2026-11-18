@@ -140,6 +140,16 @@ fn y05_csv_hucre_enjeksiyon_onekleri() {
     assert_eq!(csv_satir_uzunlugu(&["a".into(), "b".into()]), "\"a\",\"b\"");
 }
 
+#[test]
+fn y05b_csv_enjeksiyon_bosluk_atlatmali() {
+    // Excel baştaki boşlukları yok sayar; " =1+1" de formül olarak çalışır.
+    for p in [" =1+1", "   @SUM(1)", "\n=2+2", " \r+HYPERLINK(\"x\")"] {
+        let h = csv_hucre(p);
+        assert!(h.starts_with("\"'"), "{p:?} → {h}");
+    }
+    assert_eq!(csv_hucre("  güvenli"), "\"  güvenli\"");
+}
+
 fn csv_satir_uzunlugu(hucreler: &[String]) -> String {
     fh_data::csv_satir(hucreler)
 }

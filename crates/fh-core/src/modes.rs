@@ -95,24 +95,22 @@ fn chained(
     (price, dp2(original - price), steps)
 }
 
+/// Üs alma. `rust_decimal`ın `powd`/`exp` metotları taşmada **panic** atar;
+/// `checked_*` karşılıkları `None` döner. Ayrıca negatif taban ve tam sayı
+/// üs için `powd` doğru işaretli sonucu verir (eski kod burada 0 döndürüyordu).
 fn power(base: Decimal, exponent: Decimal) -> Option<Decimal> {
-    if base <= Decimal::ZERO {
-        if exponent < Decimal::ZERO || exponent.fract() != Decimal::ZERO {
+    // Çok büyük tam üsler.checked_powu içinde uzun döngüye/taşmaya yol açar.
+    if exponent.abs() > dec(1000) {
+        return None;
+    }
+    if exponent.fract() != Decimal::ZERO {
+        // Kesirli üs yalnızca pozitif taban için tanımlıdır.
+        if base <= Decimal::ZERO {
             return None;
         }
-        return Some(if exponent.is_zero() {
-            Decimal::ONE
-        } else {
-            Decimal::ZERO
-        });
+        return base.checked_ln()?.checked_mul(exponent)?.checked_exp();
     }
-    if let Some(n) = exponent.to_u32() {
-        if exponent == dec(n as i64) {
-            return Some(base.powd(dec(n as i64)));
-        }
-    }
-    // Kesirli üs: ln/exp ile tam Decimal aritmetiği.
-    Some((exponent * base.ln()).exp())
+    base.checked_powd(exponent)
 }
 
 pub(super) fn run(mod_: &str, g: &Girdi) -> Option<HesapSonucu> {
@@ -518,14 +516,17 @@ fn compound(g: &Girdi) -> Option<HesapSonucu> {
     }
     let r = annual / dec(100);
     let n = freq;
-    let base = Decimal::ONE + r / n;
-    let factor = power(base, n * years)?;
-    let fv = dp2(principal * factor);
-    let interest = dp2(fv - principal);
+    let base = Decimal::ONE.checked_add(r.checked_div(n)?)?;
+    let factor = power(base, n.checked_mul(years)?)?;
+    let fv = dp2(principal.checked_mul(factor)?);
+    let interest = dp2(fv.checked_sub(principal)?);
     let effective = if principal.is_zero() {
         Decimal::ZERO
     } else {
-        dp4((fv / principal - Decimal::ONE) * dec(100))
+        dp4(fv
+            .checked_div(principal)?
+            .checked_sub(Decimal::ONE)?
+            .checked_mul(dec(100))?)
     };
     Some(out(
         fv,
@@ -692,6 +693,11 @@ fn batch(g: &Girdi) -> Option<HesapSonucu> {
     } else {
         g.tevkifat_kod.trim().to_ascii_lowercase()
     };
+    // Doğrudan tevkifat modunda olduğu gibi pay 1..=10 dışındaysa sonuç üretilmez;
+    // aksi halde örn. pay=0 sessizce "tevkifat yok" hesaplanırdı.
+    if mode == "tevkifat" && !(1..=10).contains(&g.tevkifat_pay) {
+        return None;
+    }
     let default_rate = parse_tr(&g.oran);
     let lines: Vec<String> = if g.ek.is_empty() {
         g.birinci.lines().map(|s| s.to_string()).collect()

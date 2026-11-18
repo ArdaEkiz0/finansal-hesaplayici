@@ -2,12 +2,15 @@
 //! Electron `src/lib/csv.ts` portu.
 
 /// Excel/Sheets'te formül olarak çalışabilecek değerleri metne çevirir, tırnaklar kaçırılır.
+///
+/// Excel baştaki boşlukları yok sayıp formülü yine değerlendirebildiği için
+/// ilk boşluk-olmayan karakter de kontrol edilir (`" =1+1"` güvenli değildir).
 pub fn csv_hucre(v: &str) -> String {
     let mut s = v.to_string();
-    if matches!(
-        s.chars().next(),
-        Some('=' | '+' | '-' | '@' | '\t' | '\r')
-    ) {
+    let tehlikeli = |c: char| matches!(c, '=' | '+' | '-' | '@' | '\t' | '\r' | '\n');
+    if s.chars().next().is_some_and(tehlikeli)
+        || s.trim_start().chars().next().is_some_and(tehlikeli)
+    {
         s.insert(0, '\'');
     }
     format!("\"{}\"", s.replace('"', "\"\""))
@@ -51,6 +54,15 @@ mod tests {
     fn cift_tirnak_kacirilir() {
         assert_eq!(csv_hucre(r#"a"b"#), "\"a\"\"b\"");
         assert_eq!(csv_hucre("=A\"1"), "\"'=A\"\"1\"");
+    }
+
+    #[test]
+    fn bosluk_sonrasi_formul_de_apostroflanir() {
+        // REGRESYON: Excel baştaki boşlukları atlayıp formülü çalıştırır.
+        for p in [" =1+1", "  +SUM(A1)", "\t @cmd", "\n-1+1", "  \t=2+2"] {
+            assert!(csv_hucre(p).starts_with("\"'"), "{p:?}");
+        }
+        assert_eq!(csv_hucre("  normal"), "\"  normal\"");
     }
 
     #[test]

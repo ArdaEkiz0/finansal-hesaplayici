@@ -364,23 +364,31 @@ pub fn para_bicimi(machine: &str, precision: usize, sembol: &str, goster: bool) 
     }
 }
 
-/// Etiketi `%` içerse de değeri para olan satırlar (fh-core `modes.rs` üretir).
-/// Bunlar yüzde olarak biçimlendirilirse `%200,00` gibi yanlış bir çıktı oluşur.
-const YUZDE_ETIKETLI_PARA_SATIRLARI: [&str; 2] = ["% KDV", "% Kesinti"];
+/// Yalnızca bu satırların değeri gerçek yüzdedir (fh-core `row_raw` ile üretir).
+/// Etiketinde `%` geçen her satır yüzde değildir: `"%20 KDV"` bir para tutarı,
+/// `"Adım 1 (%10)"` bir ara fiyattır. İçerik (`contains`) ile karar vermek
+/// `"%200,00"` gibi yanlış çıktı üretiyordu; açık liste kullanılır.
+const YUZDE_SATIRLARI: [&str; 5] = [
+    "Gerçek Marj",
+    "Marj Karşılığı",
+    "Etkin İndirim",
+    "Değişim %",
+    "Efektif Oran",
+];
+
+/// Sayı olmayan (metin/sayıç) satırlar para olarak biçimlendirilmemeli.
+const HAM_SATIRLAR: [&str; 2] = ["İşlem kodu", "Geçerli satır"];
 
 /// Sonuç tablosu satırı: gerçek yüzde satırları `%`, diğerleri para olarak gösterilir.
 pub fn satir_bicimi(label: &str, value: &str, precision: usize, sembol: &str, goster: bool) -> String {
+    let etiket = label.trim();
+    if HAM_SATIRLAR.iter().any(|s| s.eq_ignore_ascii_case(etiket)) {
+        return value.to_string();
+    }
     let Some(d) = fh_core::parse_tr(value) else {
         return value.to_string();
     };
-    let etiket = label.trim();
-    let yuzde_mi = !YUZDE_ETIKETLI_PARA_SATIRLARI.contains(&etiket)
-        && (etiket.contains('%')
-            || etiket.contains("Oran")
-            || etiket.contains("Marj")
-            || etiket.contains("Değişim")
-            || etiket.contains("Efektif"));
-    if yuzde_mi {
+    if YUZDE_SATIRLARI.iter().any(|s| s.eq_ignore_ascii_case(etiket)) {
         format!("%{}", fh_core::format_tr(d, precision))
     } else {
         para_bicimi(value, precision, sembol, goster)
@@ -424,6 +432,25 @@ mod tests {
         assert_eq!(satir_bicimi("% Kesinti", "150", 2, "₺", true), "150,00 ₺");
         // Gerçek yüzde satırları yüzde olarak kalmalı.
         assert_eq!(satir_bicimi("Efektif oran", "12.5", 2, "₺", true), "%12,50");
+    }
+
+    #[test]
+    fn satir_bicimi_etiketinde_yuzde_olan_para_satirlari() {
+        // REGRESYON: "%20 KDV" ve "Adım 1 (%10)" para tutarıdır; eski
+        // `etiket.contains('%')` kuralı bunları "%200,00" / "%900,00" yapardı.
+        assert_eq!(satir_bicimi("%20 KDV", "2000", 2, "₺", true), "2.000,00 ₺");
+        assert_eq!(satir_bicimi("Adım 1 (%10)", "900", 2, "₺", true), "900,00 ₺");
+        assert_eq!(satir_bicimi("Adım 2 (%5)", "855", 2, "₺", true), "855,00 ₺");
+        // Gerçek yüzde satırları etiketinde % olmasa bile yüzde kalır.
+        assert_eq!(satir_bicimi("Marj Karşılığı", "12.5", 2, "₺", true), "%12,50");
+        assert_eq!(satir_bicimi("Etkin İndirim", "19", 2, "₺", false), "%19,00");
+    }
+
+    #[test]
+    fn satir_bicimi_sayic_satiri_para_degil() {
+        // Toplu hesapta "Geçerli satır: 2" sayıdır; "2,00 ₺" yanlıştır.
+        assert_eq!(satir_bicimi("Geçerli satır", "2", 2, "₺", true), "2");
+        assert_eq!(satir_bicimi("İşlem kodu", "4A", 2, "₺", true), "4A");
     }
 
     #[test]
@@ -539,6 +566,25 @@ mod tests {
         assert_eq!(geri.history[0].ana, "250");
         assert_eq!(geri.history[0].detay, "eski detay");
         assert_eq!(geri.settings.precision, 4);
+    }
+
+    #[test]
+    fn eski_ayar_ve_theme_alanlari_appstate_uzerinde_korunur() {
+        // Eski yedekte theme üst düzeyde değil settings içinde olabilir.
+        let mut yedek = ornek_state().yedek_degeri();
+        yedek["theme"] = Value::Null;
+        yedek["settings"] = json!({
+            "theme": "system", "showCurrencySymbol": false,
+            "precision": 0, "fontScale": 0.9
+        });
+        yedek["activeCari"] = json!("c2");
+        let geri = AppState::from_backup(&yedek).unwrap();
+        assert_eq!(geri.settings.theme, "system");
+        assert_eq!(geri.settings.precision, 0);
+        assert_eq!(geri.settings.font_scale, 0.9);
+        assert!(!geri.settings.show_currency_symbol);
+        assert_eq!(geri.active_cari, "c2");
+        assert_eq!(geri.settings.currency_symbol, "$"); // ekstra korunur
     }
 
     #[test]
