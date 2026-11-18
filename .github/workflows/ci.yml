@@ -130,10 +130,10 @@ jobs:
           )
           foreach ($f in $files) { if (-not (Test-Path $f)) { throw "Eksik release dosyasi: $f" } }
 
-          gh release view $tag > $null 2>&1
+          gh release view $tag --repo $env:GITHUB_REPOSITORY > $null 2>&1
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $files --clobber
+            gh release upload $tag $files --clobber --repo $env:GITHUB_REPOSITORY
           } else {
-            gh release create $tag $files --title "Finansal Hesaplayici $tag" --generate-notes
+            gh release create $tag $files --title "Finansal Hesaplayici $tag" --generate-notes --repo $env:GITHUB_REPOSITORY
           }
           if ($LASTEXITCODE -ne 0) { throw "gh release komutu basarisiz" }
