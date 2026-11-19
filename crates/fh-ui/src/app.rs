@@ -59,6 +59,7 @@ pub(super) fn mod_ofseti(ilindeks: usize, satir_yuksekligi: f32) -> f32 {
 }
 
 /// İlk görünür mod indeksini `[0, toplam - gorunur]` aralığına sınırlar.
+#[allow(dead_code)] // sayfalama kaldırıldı; saf testlerde korunur
 pub(super) fn mod_indeksi_sinirla(idx: usize, toplam: usize, gorunur: usize) -> usize {
     idx.min(toplam.saturating_sub(gorunur))
 }
@@ -94,8 +95,6 @@ pub struct FhApp {
     pub widget_kopyalandi: Option<Instant>,
     /// Sayısal tuş takımının hedefi: 0 = ilk, 1 = ikinci metin alanı.
     pub widget_alan: usize,
-    /// Mod listesinde ↑/↓ ile kaydırılan ilk mod indeksi (sayfa değil, satır).
-    pub mod_kaydirma: usize,
     /// Kaydedilen widget konumu bu açılışta bir kez uygulandı mı?
     pub widget_konum_uygulandi: bool,
     pub son_tema: String,
@@ -233,7 +232,6 @@ impl FhApp {
             widget_arama: String::new(),
             widget_kopyalandi: None,
             widget_alan: 0,
-            mod_kaydirma: 0,
             widget_konum_uygulandi: false,
             son_tema,
             son_olcek,
@@ -781,38 +779,28 @@ impl FhApp {
         resp
     }
 
-    fn mod_nav_panel(&mut self, ui: &mut Ui, _panel_yukseklik: f32) {
+    fn mod_nav_panel(&mut self, ui: &mut Ui, panel_yukseklik: f32) {
         let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
 
-        // Klavye: ↑/↓ global kısayol, ama başka bir widget (özellikle metin alanı)
-        // odaktayken müdahale etme — ok tuşları o widget'ın olmalı.
+        // Klavye: ↑/↓ yalnızca başka bir widget (özellikle metin alanı) odaktayken
+        // müdahale etme — ok tuşları o widget'ın olmalı.
         let (klavye_yukari, klavye_asagi) = if ui.memory(|m| m.focused()).is_none() {
             ui.input(|i| (i.key_pressed(Key::ArrowUp), i.key_pressed(Key::ArrowDown)))
         } else {
             (false, false)
         };
+        let mut yukari = klavye_yukari;
+        let mut asagi = klavye_asagi;
 
         ui.horizontal(|ui| {
             ui.label(RichText::new("MODÜLLER").size(T_SMALL).color(p.soluk).strong());
             ui.add_space(4.0);
             if ui.button("↑").clicked() {
-                self.mod_kaydirma = self.mod_kaydirma.saturating_sub(GORUNUR_SATIR);
+                yukari = true;
             }
             if ui.button("↓").clicked() {
-                self.mod_kaydirma = mod_indeksi_sinirla(
-                    self.mod_kaydirma + GORUNUR_SATIR,
-                    MODLAR.len(),
-                    GORUNUR_SATIR,
-                );
+                asagi = true;
             }
-            let sayfa = self.mod_kaydirma / GORUNUR_SATIR + 1;
-            let sayfa_sayisi = (MODLAR.len() + GORUNUR_SATIR - 1) / GORUNUR_SATIR;
-            ui.label(
-                RichText::new(format!("{sayfa}/{sayfa_sayisi} sayfa"))
-                    .size(T_BUILD)
-                    .color(p.soluk)
-                    .monospace(),
-            );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(
                     RichText::new(format!("{} mod", MODLAR.len()))
@@ -826,49 +814,73 @@ impl FhApp {
         hairline(ui, p.kenar);
         ui.add_space(6.0);
 
-        // Fare tekerleği: panel üzerindeyken sayfayı değiştir (eşik 30px).
-        let tekerlek = ui.input(|i| i.smooth_scroll_delta.y);
-        if tekerlek.abs() > 30.0 {
-            let adim = GORUNUR_SATIR as f32 * SATIR_YUKSEKLIGI;
-            self.mod_kaydirma = mod_indeksi_sinirla(
-                (self.mod_kaydirma as f32 + (tekerlek / adim).round() * GORUNUR_SATIR as f32) as usize,
-                MODLAR.len(),
-                GORUNUR_SATIR,
-            );
-        }
+        // Tek sayfalık liste: 20 modun tamamı tek ScrollArea içinde. Kaydırmayı
+        // egui yönetir — fare tekerleği ve kaydırma çubuğu doğal çalışır.
+        // ↑/↓ düğmeleri ve klavye ok tuşları yalnızca ScrollArea içinden
+        // `scroll_with_delta` ile ofseti değiştirir. `scroll_to_me` her kare
+        // çağrıldığında listeyi başa çekiyor, zorlanan `vertical_scroll_offset`
+        // ise egui'nin iç state'i tarafından geri alınıyordu; ikisi de yok.
+        //
+        // egui 0.37'nin kinetic kaydırma fiziği (decay_time / rubber_band)
+        // ofseti her kare biraz geri çekiyor, fare tekerleğiyle kaydırma
+        // "tutmuyordu". Bu panelde kinetic kaydırmayı kapatıyoruz: ofset
+        // anında ve kalıcı uygulanır.
+        let kaydirma_y = (panel_yukseklik - 74.0).max(modes::MOD_NAV_MIN_HEIGHT);
+        let adim = GORUNUR_SATIR as f32 * SATIR_YUKSEKLIGI * 0.5;
 
-        if klavye_yukari {
-            self.mod_kaydirma = self.mod_kaydirma.saturating_sub(GORUNUR_SATIR);
-        }
-        if klavye_asagi {
-            self.mod_kaydirma = mod_indeksi_sinirla(
-                self.mod_kaydirma + GORUNUR_SATIR,
-                MODLAR.len(),
-                GORUNUR_SATIR,
-            );
-        }
+        ui.scope(|ui| {
+            ui.style_mut().spacing.scroll.kinetic.decay_time = 0.0;
+            ui.style_mut().spacing.scroll.kinetic.rubber_band = false;
 
-        // Sayfalama: ScrollArea'nın offset'i her kare sıfırlanıp ↑/↓ çalışmıyordu.
-        // Artık yalnızca aktif sayfanın 8 modu çizilir — kaydırma kesindir.
-        let ilk = self.mod_kaydirma;
-        let son = (ilk + GORUNUR_SATIR).min(MODLAR.len());
-        let gorunen = &MODLAR[ilk..son];
-        let mut grup_onceki = "";
-        for m in gorunen {
-            if m.grup != grup_onceki {
-                ui.add_space(5.0);
-                ui.label(RichText::new(m.grup.to_uppercase()).size(T_BUILD).color(p.aksan).strong());
-                ui.add_space(2.0);
-                grup_onceki = m.grup;
-            }
-            let _ = self.mod_satiri(ui, m, p);
-            ui.add_space(3.0);
-        }
-        ui.add_space(8.0);
-        hairline(ui, p.kenar);
-        ui.add_space(6.0);
-        ui.label(RichText::new("Tüm hesaplamalar yerel ve çevrimdışıdır.")
-            .size(T_BUILD).color(p.soluk));
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .max_height(kaydirma_y)
+                .animated(false)
+                .show(ui, |ui| {
+                    // egui'de negatif delta içeriği yukarı taşır = aşağı kaydırır
+                    // (bkz. Ui::scroll_with_delta dokümanı: `scroll_delta.y -= 64.0`).
+                    if yukari {
+                        ui.scroll_with_delta(Vec2::new(0.0, adim));
+                    }
+                    if asagi {
+                        ui.scroll_with_delta(Vec2::new(0.0, -adim));
+                    }
+
+                    for grup in modes::gruplar() {
+                        let sayi = MODLAR.iter().filter(|m| m.grup == grup).count();
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(grup.to_uppercase())
+                                    .size(T_BUILD)
+                                    .color(p.aksan)
+                                    .strong(),
+                            );
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                ui.label(
+                                    RichText::new(sayi.to_string())
+                                        .size(T_BUILD)
+                                        .color(p.soluk)
+                                        .monospace(),
+                                );
+                            });
+                        });
+                        ui.add_space(2.0);
+                        for m in MODLAR.iter().filter(|m| m.grup == grup) {
+                            let _ = self.mod_satiri(ui, m, p);
+                            ui.add_space(3.0);
+                        }
+                    }
+                    ui.add_space(10.0);
+                    hairline(ui, p.kenar);
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new("Tüm hesaplamalar yerel ve çevrimdışıdır.")
+                            .size(T_BUILD)
+                            .color(p.soluk),
+                    );
+                });
+        });
     }
 
     // ---------- merkez: girdi çalışma alanı ----------
