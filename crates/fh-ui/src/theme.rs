@@ -92,6 +92,29 @@ fn karisim(a: Color32, b: Color32, t: f32) -> Color32 {
     )
 }
 
+/// Kompakt widget kartının dolgusu: panel yüzeyinden bir tık yükseltilmiş.
+/// Mevcut paletin `yuzey`/`yuksek` renklerini karıştırır; yeni kimlik katmaz.
+pub fn widget_kart(koyu: bool) -> Color32 {
+    let p = palet(koyu);
+    karisim(p.yuzey, p.yuksek, if koyu { 0.55 } else { 0.35 })
+}
+
+/// Widget başlığındaki ince cyan vurgu çizgisi (odak/aktif göstergesi).
+pub fn widget_vurgu_cizgi(koyu: bool) -> Stroke {
+    Stroke::new(2.0, palet(koyu).aksan)
+}
+
+/// Widget kenarı: tema genelindeki 1px hairline kuralıyla aynı.
+pub fn widget_kenar(koyu: bool) -> Stroke {
+    Stroke::new(1.0, palet(koyu).kenar)
+}
+
+/// Widget hover durumu: (dolgu, kenar). Temanın mavi hover kimliğini kullanır.
+pub fn widget_hover(koyu: bool) -> (Color32, Color32) {
+    let p = palet(koyu);
+    (p.birincil.gamma_multiply(0.18), p.birincil)
+}
+
 /// Panel içine çok hafif dikey gradyan + ızgara dokusu çizer.
 /// İçerik eklenmeden ÖNCE çağrılır; boyamalar içeriğin altında kalır.
 pub fn doku(ui: &mut Ui, koyu: bool) {

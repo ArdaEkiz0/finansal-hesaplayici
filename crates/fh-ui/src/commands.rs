@@ -45,6 +45,8 @@ pub fn komutlar() -> Vec<Komut> {
         Komut { ad: "Yazıyı büyüt (A+)".into(), kategori: "Görünüm", eylem: Eylem::FontBuyut },
         Komut { ad: "Yazıyı küçült (A−)".into(), kategori: "Görünüm", eylem: Eylem::FontKucult },
         Komut { ad: "Mini widget'ı aç/kapat".into(), kategori: "Görünüm", eylem: Eylem::Widget },
+        Komut { ad: "Widget'ı sadeleştir / genişlet".into(), kategori: "Görünüm", eylem: Eylem::Widget },
+        Komut { ad: "Widget'ı üste sabitle / alta al".into(), kategori: "Görünüm", eylem: Eylem::Widget },
         Komut { ad: "Yedek al".into(), kategori: "Veri", eylem: Eylem::YedekAl },
         Komut { ad: "Yedek yükle".into(), kategori: "Veri", eylem: Eylem::YedekYukle },
         Komut { ad: "Geçmişi CSV dışa aktar".into(), kategori: "Veri", eylem: Eylem::GecmisCsv },
@@ -205,6 +207,35 @@ mod tests {
             assert!(
                 bulunan.iter().any(|&i| l[i].eylem == Eylem::Mod(id)),
                 "{sorgu} → {id} komutu bulunamadı"
+            );
+        }
+    }
+
+    #[test]
+    fn widget_komutlari_yalnizca_mevcut_eyleme_bagli() {
+        // Yeni Eylem varyantı eklenmez; app.rs'deki tek Widget kolu kullanılır.
+        let l = komutlar();
+        let widgetlar: Vec<_> = l
+            .iter()
+            .filter(|c| turkce_kucuk(&c.ad).contains("widget"))
+            .collect();
+        assert!(widgetlar.len() >= 2, "widget için en az 2 palette girdisi olmalı");
+        for c in widgetlar {
+            assert_eq!(c.eylem, Eylem::Widget, "{} geçersiz widget eylemi", c.ad);
+            assert_eq!(c.kategori, "Görünüm");
+        }
+        assert!(!filtrele(&l, "widget").is_empty(), "widget araması sonuç vermeli");
+    }
+
+    #[test]
+    fn komut_adlari_tekil() {
+        let l = komutlar();
+        for c in &l {
+            assert_eq!(
+                l.iter().filter(|x| x.ad == c.ad).count(),
+                1,
+                "yinelenen komut adı: {}",
+                c.ad
             );
         }
     }

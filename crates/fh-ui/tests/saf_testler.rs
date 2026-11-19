@@ -36,6 +36,7 @@ fn ornek() -> AppState {
         cariler: vec![model::Cari { id: "c1".into(), name: "Müşteri A".into() }],
         active_cari: "c1".into(),
         inputs: Default::default(),
+        widget: model::WidgetAyarlari::default(),
     }
 }
 

@@ -30,6 +30,10 @@ use crate::model::{
 use crate::modes::{self, MODLAR, ModeDef};
 use crate::theme::{self, Palet};
 
+/// Bağımsız mini hesaplayıcı; görünüm durumu `AppState::widget` içinde kalıcıdır.
+#[path = "widget.rs"]
+mod widget;
+
 // Tipografi ölçeği — tek yerden yönetilir, yazı ölçeği zoom ile katlanır.
 // Hiçbir metin 12px altına inmez; gövde ve tablo satırları ≥14px okunur.
 const T_BUILD: f32 = 12.0;
@@ -48,7 +52,6 @@ pub struct Pencereler {
     pub cariler: bool,
     pub donemler: bool,
     pub palet: bool,
-    pub widget: bool,
     pub onizleme: bool,
 }
 
@@ -66,6 +69,10 @@ pub struct FhApp {
     pub onizleme_metin: String,
     pub toast: Option<(String, Instant)>,
     pub kopyalandi: Option<Instant>,
+    /// Widget mod seçicisindeki arama metni (kalıcı state'e ait değil).
+    pub widget_arama: String,
+    /// Widget kopyalama bildiriminin zamanı.
+    pub widget_kopyalandi: Option<Instant>,
     pub son_tema: String,
     pub son_olcek: f64,
     /// Kapı panelinde açık sekme: 0 geçmiş, 1 dönem, 2 takvim.
@@ -198,6 +205,8 @@ impl FhApp {
             onizleme_metin: String::new(),
             toast: None,
             kopyalandi: None,
+            widget_arama: String::new(),
+            widget_kopyalandi: None,
             son_tema,
             son_olcek,
             kapi_sekmesi: 0,
@@ -347,9 +356,10 @@ impl FhApp {
     }
 
     fn kisayollar(&mut self, ctx: &Context) {
-        let (ctrl_k, esc, enter, up, down) = ctx.input(|i| {
+        let (ctrl_k, ctrl_shift_w, esc, enter, up, down) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::K) && i.modifiers.ctrl,
+                i.key_pressed(egui::Key::W) && i.modifiers.ctrl && i.modifiers.shift,
                 i.key_pressed(egui::Key::Escape),
                 i.key_pressed(egui::Key::Enter),
                 i.key_pressed(egui::Key::ArrowUp),
@@ -363,6 +373,11 @@ impl FhApp {
                 self.palet_sec = 0;
             }
         }
+        // Ctrl+Shift+W: mini hesaplayıcıyı aç/kapat (kalıcı widget durumu).
+        if ctrl_shift_w {
+            self.state.widget.aktif = !self.state.widget.aktif;
+            self.state.kaydet();
+        }
         if esc {
             self.p.gecmis = false;
             self.p.ayarlar = false;
@@ -371,7 +386,10 @@ impl FhApp {
             self.p.donemler = false;
             self.p.onizleme = false;
             self.p.palet = false;
-            self.p.widget = false;
+            if self.state.widget.aktif {
+                self.state.widget.aktif = false;
+                self.state.kaydet();
+            }
         }
         if self.p.palet {
             let n = self.filtreli_komutlar().len();
@@ -419,7 +437,10 @@ impl FhApp {
             Eylem::Ayarlar => self.p.ayarlar = true,
             Eylem::Cariler => self.p.cariler = true,
             Eylem::Donemler => self.p.donemler = true,
-            Eylem::Widget => self.p.widget = !self.p.widget,
+            Eylem::Widget => {
+                self.state.widget.aktif = !self.state.widget.aktif;
+                self.state.kaydet();
+            }
             Eylem::Yazdir => self.yazdir(),
         }
     }
@@ -658,8 +679,9 @@ impl FhApp {
                 if self.arac_dugmesi(ui, l_ay, self.p.ayarlar, p).clicked() {
                     self.p.ayarlar = !self.p.ayarlar;
                 }
-                if self.arac_dugmesi(ui, l_w, self.p.widget, p).clicked() {
-                    self.p.widget = !self.p.widget;
+                if self.arac_dugmesi(ui, l_w, self.state.widget.aktif, p).clicked() {
+                    self.state.widget.aktif = !self.state.widget.aktif;
+                    self.state.kaydet();
                 }
                 if self.arac_dugmesi(ui, l_am, false, p).clicked() {
                     self.font_degistir(-0.05);
@@ -1396,8 +1418,8 @@ impl FhApp {
         if self.p.palet {
             self.palet_penceresi(ctx);
         }
-        if self.p.widget {
-            self.widget_penceresi(ctx);
+        if self.state.widget.aktif {
+            widget::goster(self, ctx);
         }
         if self.p.onizleme {
             self.onizleme_penceresi(ctx);
@@ -1772,28 +1794,6 @@ impl FhApp {
             self.komut_calistir(e);
             self.p.palet = false;
         }
-    }
-
-    fn widget_penceresi(&mut self, ctx: &Context) {
-        let res = self.result.clone();
-        let st = self.state.settings.clone();
-        let p = theme::palet(theme::koyu_mu(&st.theme));
-        let mut open = self.p.widget;
-        egui::Window::new("Mini Hesaplayıcı")
-            .open(&mut open)
-            .resizable(true)
-            .frame(pencere_cercevesi(p))
-            .default_size((260.0, 130.0))
-            .show(ctx, |ui| {
-                ui.label(RichText::new(modes::mod_etiketi(&self.mode)).size(T_BUILD).color(p.soluk));
-                if let Some(r) = res {
-                    let v = para_bicimi(&r.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
-                    ui.label(RichText::new(v).size(24.0).color(p.metin).strong().monospace());
-                } else {
-                    ui.label(RichText::new("—").size(24.0).color(p.soluk).monospace());
-                }
-            });
-        self.p.widget = open;
     }
 
     fn onizleme_penceresi(&mut self, ctx: &Context) {

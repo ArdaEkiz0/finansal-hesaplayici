@@ -33,6 +33,74 @@ pub const PENCERE_AYARLARI: PencereAyarlari = PencereAyarlari {
     min_inner_size: [640.0, 480.0],
 };
 
+/// Mini widget'ın kalıcı ayarları. Yedek JSON'unda üst düzey `widget`
+/// nesnesi olarak tutulur; eksik/bozuk alanlar güvenli varsayılana düşer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WidgetAyarlari {
+    pub aktif: bool,
+    pub kompakt: bool,
+    /// `mod` Rust anahtar sözcüğüdür; raw identifier gerekir. Serde anahtarı
+    /// `#[serde(rename)]` ile sabitlenir (JSON'da her zaman "mod").
+    #[serde(rename = "mod")]
+    pub r#mod: String,
+    pub genislik: f32,
+    pub yukseklik: f32,
+    pub ustte: bool,
+}
+
+impl Default for WidgetAyarlari {
+    fn default() -> Self {
+        Self {
+            aktif: false,
+            kompakt: false,
+            r#mod: "kdv".to_string(),
+            genislik: 340.0,
+            yukseklik: 300.0,
+            ustte: true,
+        }
+    }
+}
+
+/// Widget boyutları için makul aralık; dışındaki değerler varsayılana döner.
+pub const WIDGET_GENISLIK_ARALIGI: (f32, f32) = (200.0, 1200.0);
+pub const WIDGET_YUKSEKLIK_ARALIGI: (f32, f32) = (160.0, 900.0);
+
+impl WidgetAyarlari {
+    /// Yedek değerinden güvenli okuma. Nesne değilse tam varsayılan döner;
+    /// alan alan tip/sınır kontrolü yapılır, bozuk alan varsayılana düşer.
+    pub fn from_value(v: &Value) -> Self {
+        let vars = Self::default();
+        let Some(obj) = v.as_object() else {
+            return vars;
+        };
+        let bool_alan = |ad: &str, varsayilan: bool| -> bool {
+            obj.get(ad).and_then(Value::as_bool).unwrap_or(varsayilan)
+        };
+        let mod_ = obj
+            .get("mod")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && s.chars().count() <= 32)
+            .unwrap_or(vars.r#mod.as_str())
+            .to_string();
+        let sayi = |ad: &str, varsayilan: f32, aralik: (f32, f32)| -> f32 {
+            obj.get(ad)
+                .and_then(Value::as_f64)
+                .map(|n| n as f32)
+                .filter(|n| n.is_finite() && *n >= aralik.0 && *n <= aralik.1)
+                .unwrap_or(varsayilan)
+        };
+        Self {
+            aktif: bool_alan("aktif", vars.aktif),
+            kompakt: bool_alan("kompakt", vars.kompakt),
+            r#mod: mod_,
+            genislik: sayi("genislik", vars.genislik, WIDGET_GENISLIK_ARALIGI),
+            yukseklik: sayi("yukseklik", vars.yukseklik, WIDGET_YUKSEKLIK_ARALIGI),
+            ustte: bool_alan("ustte", vars.ustte),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     /// "dark" | "light" | "system"
@@ -202,6 +270,9 @@ pub struct AppState {
     pub cariler: Vec<Cari>,
     pub active_cari: String,
     pub inputs: std::collections::HashMap<String, InputState>,
+    /// Mini widget ayarları. Eski `FhApp::p.widget: bool` alanının yerini alır;
+    /// yedekte üst düzey `widget` nesnesi olarak saklanır.
+    pub widget: WidgetAyarlari,
 }
 
 fn value_or<T: serde::de::DeserializeOwned>(v: &Value) -> Option<T> {
@@ -308,6 +379,7 @@ impl AppState {
             cariler: t.cariler.iter().filter_map(value_or).collect(),
             active_cari: t.active_cari,
             inputs,
+            widget: v.get("widget").map(WidgetAyarlari::from_value).unwrap_or_default(),
         })
     }
 
@@ -335,6 +407,7 @@ impl AppState {
             cariler: Vec::new(),
             active_cari: String::new(),
             inputs: std::collections::HashMap::new(),
+            widget: WidgetAyarlari::default(),
         };
         let Ok(metin) = std::fs::read_to_string(Self::dosya_yolu()) else {
             return fallback;
@@ -367,6 +440,10 @@ impl AppState {
                 }
             }
             obj.insert("inputs".to_string(), Value::Object(inputs));
+            obj.insert(
+                "widget".to_string(),
+                serde_json::to_value(&self.widget).unwrap_or_else(|_| json!({})),
+            );
         }
         v
     }
@@ -553,6 +630,14 @@ mod tests {
             ],
             active_cari: "c1".into(),
             inputs,
+            widget: WidgetAyarlari {
+                aktif: true,
+                kompakt: true,
+                r#mod: "stopaj".into(),
+                genislik: 420.0,
+                yukseklik: 360.0,
+                ustte: false,
+            },
         }
     }
 
@@ -578,6 +663,7 @@ mod tests {
         assert_eq!(geri.donemler, state.donemler);
         assert_eq!(geri.cariler, state.cariler);
         assert_eq!(geri.active_cari, "c1");
+        assert_eq!(geri.widget, state.widget, "widget ayarları round-trip'te korunmalı");
         assert_eq!(geri.inputs.get("kdv").unwrap().secim, "haric");
         assert_eq!(geri.inputs.get("kdv").unwrap().oran, "20");
     }
