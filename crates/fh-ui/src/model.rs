@@ -65,6 +65,11 @@ impl Default for WidgetAyarlari {
 pub const WIDGET_GENISLIK_ARALIGI: (f32, f32) = (200.0, 1200.0);
 pub const WIDGET_YUKSEKLIK_ARALIGI: (f32, f32) = (160.0, 900.0);
 
+/// Ayrı widget viewport'unun egui layer/pencere kimliği (sabit, yerelleştirilmez).
+pub const WIDGET_VIEWPORT_ID: &str = "fh-widget";
+/// Widget viewport'unun mutlak alt sınırı [genişlik, yükseklik] (piksel).
+pub const WIDGET_MIN_SIZE: [f32; 2] = [220.0, 120.0];
+
 impl WidgetAyarlari {
     /// Yedek değerinden güvenli okuma. Nesne değilse tam varsayılan döner;
     /// alan alan tip/sınır kontrolü yapılır, bozuk alan varsayılana düşer.

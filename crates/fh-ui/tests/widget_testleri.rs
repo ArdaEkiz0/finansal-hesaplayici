@@ -212,3 +212,158 @@ fn theme_widget_yardimcilari_paletle_tutarly() {
     assert_eq!(theme::widget_hover(true).1, koyu.birincil);
     assert_eq!(theme::widget_hover(false).1, acik.birincil);
 }
+
+// ---- Yeni: ayrı widget viewport sabitleri + saf doğrulamalar ----
+
+#[test]
+fn widget_viewport_id_sabiti_dogrulanir() {
+    assert_eq!(model::WIDGET_VIEWPORT_ID, "fh-widget");
+    assert!(!model::WIDGET_VIEWPORT_ID.is_empty());
+    assert_eq!(model::WIDGET_VIEWPORT_ID, model::WIDGET_VIEWPORT_ID.trim());
+    assert!(!model::WIDGET_VIEWPORT_ID.chars().any(char::is_whitespace));
+    assert_eq!(
+        model::WIDGET_VIEWPORT_ID.to_ascii_lowercase(),
+        model::WIDGET_VIEWPORT_ID,
+        "kimlik yerelleştirilmemiş ASCII olmalı"
+    );
+}
+
+#[test]
+fn widget_min_size_sabiti_dogrulanir() {
+    let [w, h] = model::WIDGET_MIN_SIZE;
+    assert_eq!(w, 220.0);
+    assert_eq!(h, 120.0);
+    assert!(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0);
+    assert!(w > h, "widget yatayda daha geniş olmalı");
+    let d = WidgetAyarlari::default();
+    assert!(d.genislik >= w && d.yukseklik >= h, "varsayılan boyut alt sınırı karşılamalı");
+}
+
+#[test]
+fn widget_viewport_sabitleri_kaliciligi_bozmaz() {
+    let w = ornek_widget();
+    let yedek = state(w.clone()).yedek_degeri();
+    let metin = serde_json::to_string(&yedek).unwrap();
+    // Sabitler JSON alanı değildir; yedeğe sızmazlar.
+    assert!(!metin.contains(model::WIDGET_VIEWPORT_ID));
+    assert!(!metin.contains("viewport"));
+    // BOM'suz ve BOM'lu yollardan widget ayarları aynı geri gelir.
+    let bomsuz = AppState::metinden_yukle(&metin).unwrap().widget;
+    let bomlu = AppState::metinden_yukle(&format!("\u{feff}{metin}")).unwrap().widget;
+    assert_eq!(bomsuz, w);
+    assert_eq!(bomlu, w);
+    assert!(bomlu.genislik >= model::WIDGET_MIN_SIZE[0]);
+    assert!(bomlu.yukseklik >= model::WIDGET_MIN_SIZE[1]);
+}
+
+#[test]
+fn widget_ayarlari_json_round_trip_bomlu_ve_bomsuz() {
+    let w = ornek_widget();
+    let metin = serde_json::to_string(&w).unwrap();
+    assert_eq!(serde_json::from_str::<WidgetAyarlari>(&metin).unwrap(), w);
+    for bomlu in [false, true] {
+        let yedek_metin = serde_json::to_string_pretty(&state(w.clone()).yedek_degeri()).unwrap();
+        let giris = if bomlu { format!("\u{feff}{yedek_metin}") } else { yedek_metin };
+        let geri = AppState::metinden_yukle(&giris).unwrap().widget;
+        assert_eq!(geri.aktif, w.aktif);
+        assert_eq!(geri.kompakt, w.kompakt);
+        assert_eq!(geri.r#mod, w.r#mod);
+        assert_eq!(geri.genislik, w.genislik);
+        assert_eq!(geri.yukseklik, w.yukseklik);
+        assert_eq!(geri.ustte, w.ustte);
+    }
+}
+
+#[test]
+fn widget_bozuk_alanlar_tek_tek_varsayilana_duser() {
+    let w = ornek_widget();
+    let temel = serde_json::to_value(&w).unwrap();
+    let d = WidgetAyarlari::default();
+    let bozuk = json!({"beklenmeyen": "nesne"});
+    let kontrol = |alan: &str, beklenen: WidgetAyarlari| {
+        let mut v = temel.clone();
+        v[alan] = bozuk.clone();
+        assert_eq!(WidgetAyarlari::from_value(&v), beklenen, "{alan} alanı varsayılana düşmeli");
+    };
+    kontrol("aktif", WidgetAyarlari { aktif: d.aktif, ..w.clone() });
+    kontrol("kompakt", WidgetAyarlari { kompakt: d.kompakt, ..w.clone() });
+    kontrol("mod", WidgetAyarlari { r#mod: d.r#mod.clone(), ..w.clone() });
+    kontrol("genislik", WidgetAyarlari { genislik: d.genislik, ..w.clone() });
+    kontrol("yukseklik", WidgetAyarlari { yukseklik: d.yukseklik, ..w.clone() });
+    kontrol("ustte", WidgetAyarlari { ustte: d.ustte, ..w.clone() });
+}
+
+#[test]
+fn widget_sinir_degerleri_kapsamli() {
+    let (gl, gh) = WIDGET_GENISLIK_ARALIGI;
+    let (yl, yh) = WIDGET_YUKSEKLIK_ARALIGI;
+    let oku = |g: f64, y: f64| WidgetAyarlari::from_value(&json!({"genislik": g, "yukseklik": y}));
+    let d = WidgetAyarlari::default();
+
+    let w = oku(gl as f64, yl as f64);
+    assert_eq!((w.genislik, w.yukseklik), (gl, yl), "alt uçlar dahil");
+    let w = oku(gh as f64, yh as f64);
+    assert_eq!((w.genislik, w.yukseklik), (gh, yh), "üst uçlar dahil");
+
+    let w = oku(gl as f64 - 0.01, yl as f64 - 0.01);
+    assert_eq!((w.genislik, w.yukseklik), (d.genislik, d.yukseklik));
+    let w = oku(gh as f64 + 0.01, yh as f64 + 0.01);
+    assert_eq!((w.genislik, w.yukseklik), (d.genislik, d.yukseklik));
+
+    let [minw, minh] = model::WIDGET_MIN_SIZE;
+    assert!(minw >= gl && minw <= gh);
+    assert!(minh <= yl);
+
+    let mod32 = "x".repeat(32);
+    assert_eq!(WidgetAyarlari::from_value(&json!({"mod": mod32})).r#mod, mod32);
+    let mod33 = "x".repeat(33);
+    assert_eq!(WidgetAyarlari::from_value(&json!({"mod": mod33})).r#mod, "kdv");
+}
+
+#[test]
+fn widget_viewport_frame_paletten_turetilir() {
+    use eframe::egui::{CornerRadius, Margin, Stroke};
+    for koyu in [true, false] {
+        let p = theme::palet(koyu);
+        let f = theme::widget_viewport_frame(p);
+        assert_eq!(f.fill, p.yuzey);
+        assert_eq!(f.stroke, Stroke::NONE, "viewport çerçevesiz olmalı");
+        assert_eq!(f.outer_margin, Margin::ZERO);
+        assert_eq!(f.inner_margin, Margin::same(6));
+        assert_eq!(f.corner_radius, CornerRadius::same(6));
+    }
+}
+
+#[test]
+fn widget_viewport_frame_tema_kimligini_bozmaz() {
+    use eframe::egui::Color32;
+    let koyu = theme::palet(true);
+    let acik = theme::palet(false);
+    assert_eq!(koyu.arka, Color32::from_rgb(0x08, 0x0e, 0x1b));
+    assert_eq!(acik.arka, Color32::from_rgb(0xf3, 0xef, 0xe6));
+    assert_ne!(koyu.arka, acik.arka);
+    let fk = theme::widget_viewport_frame(koyu);
+    let fa = theme::widget_viewport_frame(acik);
+    assert_eq!(fk.fill, koyu.yuzey);
+    assert_eq!(fa.fill, acik.yuzey);
+    assert_ne!(fk.fill, fa.fill);
+}
+
+#[test]
+fn komut_paleti_widget_girdileri_tekil_ve_aralanabilir() {
+    let l = komutlar();
+    let widgetlar: Vec<_> = l.iter().filter(|c| c.eylem == Eylem::Widget).collect();
+    assert_eq!(widgetlar.len(), 3);
+    for c in &widgetlar {
+        assert!(!c.ad.is_empty());
+        assert_eq!(c.kategori, "Görünüm");
+        assert!(filtrele(&l, &c.ad).iter().any(|&i| l[i].ad == c.ad));
+        assert!(filtrele(&l, "widget").iter().any(|&i| l[i].ad == c.ad));
+        assert_eq!(widgetlar.iter().filter(|x| x.ad == c.ad).count(), 1, "yinelenen ad: {}", c.ad);
+    }
+    for c in &l {
+        if turkce_kucuk(&c.ad).contains("widget") {
+            assert_eq!(c.eylem, Eylem::Widget, "{} beklenmeyen widget eylemi", c.ad);
+        }
+    }
+}

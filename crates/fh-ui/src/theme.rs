@@ -115,6 +115,19 @@ pub fn widget_hover(koyu: bool) -> (Color32, Color32) {
     (p.birincil.gamma_multiply(0.18), p.birincil)
 }
 
+/// Ayrı widget viewport'u için çerçevesiz dolgu/stil yardımcısı.
+///
+/// Ana pencere çerçevesinin aksine dış kenar, gölge veya ayrı bir renk kimliği
+/// yoktur: yalnızca mevcut paletin `yuzey` rengiyle dolgu, sabit iç boşluk ve
+/// köşe yuvarlaklığı vardır. Böylece koyu/açık tema kimliği bozulmaz.
+pub fn widget_viewport_frame(p: Palet) -> egui::Frame {
+    egui::Frame::NONE
+        .inner_margin(Margin::same(6))
+        .corner_radius(CornerRadius::same(6))
+        .fill(p.yuzey)
+        .stroke(Stroke::NONE)
+}
+
 /// Panel içine çok hafif dikey gradyan + ızgara dokusu çizer.
 /// İçerik eklenmeden ÖNCE çağrılır; boyamalar içeriğin altında kalır.
 pub fn doku(ui: &mut Ui, koyu: bool) {

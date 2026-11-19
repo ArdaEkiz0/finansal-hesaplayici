@@ -1418,9 +1418,6 @@ impl FhApp {
         if self.p.palet {
             self.palet_penceresi(ctx);
         }
-        if self.state.widget.aktif {
-            widget::goster(self, ctx);
-        }
         if self.p.onizleme {
             self.onizleme_penceresi(ctx);
         }
@@ -1972,6 +1969,35 @@ impl eframe::App for FhApp {
         );
 
         self.pencereleri_goster(&ctx);
+
+        // Widget gerçek bir OS penceresi (immediate viewport). Ana pencere
+        // minimize edilse de bu viewport açık kalır; yalnızca kalıcı `aktif`
+        // durumu onu gösterir. `aktif=false` ise pencere bir sonraki karede
+        // kapanır (CancelClose gönderilmez).
+        if self.state.widget.aktif {
+            let kompakt = self.state.widget.kompakt;
+            let (genislik, yukseklik) = widget::etkili_boyut(
+                kompakt,
+                self.state.widget.genislik,
+                self.state.widget.yukseklik,
+            );
+            let ustte = self.state.widget.ustte;
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of(crate::model::WIDGET_VIEWPORT_ID),
+                egui::ViewportBuilder::default()
+                    .with_title("Finansal Hesaplayıcı · Widget")
+                    .with_inner_size([genislik, yukseklik])
+                    .with_min_inner_size(crate::model::WIDGET_MIN_SIZE)
+                    .with_decorations(false)
+                    .with_resizable(true)
+                    .with_window_level(if ustte {
+                        egui::WindowLevel::AlwaysOnTop
+                    } else {
+                        egui::WindowLevel::Normal
+                    }),
+                |ui, _class| self.widget_viewport_ui(ui),
+            );
+        }
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
