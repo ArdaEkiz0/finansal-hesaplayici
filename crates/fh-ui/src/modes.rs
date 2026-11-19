@@ -44,6 +44,7 @@ pub const SEC_PAY: &[(&str, &str)] = &[
 /// Mod navigasyon panelindeki dikey kaydırma alanının asgari görünür yüksekliği (px).
 /// `app.rs::mod_nav_panel` bu değerle `ScrollArea::max_height` sınırını ayarlar;
 /// sınır konulmazsa fare tekerleğiyle kaydırma çalışmaz.
+#[allow(dead_code)] // eski ScrollArea alt sınırı; testlerde korunur
 pub const MOD_NAV_MIN_HEIGHT: f32 = 120.0;
 
 pub const MODLAR: &[ModeDef] = &[
@@ -216,6 +217,7 @@ pub fn mod_etiketi(id: &str) -> &'static str {
     mod_def(id).map(|m| m.etiket).unwrap_or("Bilinmeyen mod")
 }
 
+#[allow(dead_code)] // eski gruplu çizim yardımcısı; testlerde korunur
 pub fn gruplar() -> Vec<&'static str> {
     let mut out = Vec::new();
     for m in MODLAR {

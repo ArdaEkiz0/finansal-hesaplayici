@@ -19,7 +19,7 @@ use fh_core::HesapSonucu;
 use crate::commands::turkce_kucuk;
 use crate::model::{
     HistEntry, InputState, Settings, WidgetAyarlari, WIDGET_GENISLIK_ARALIGI,
-    WIDGET_YUKSEKLIK_ARALIGI, gecmis_ekle, para_bicimi, satir_bicimi,
+    WIDGET_KONUM_ARALIGI, WIDGET_YUKSEKLIK_ARALIGI, gecmis_ekle, para_bicimi, satir_bicimi,
 };
 use crate::modes::{self, FieldKind, MODLAR};
 use crate::theme::{self, Palet};
@@ -35,25 +35,49 @@ const WIDE_SIZE: (f32, f32) = (340.0, 430.0);
 /// `FhApp`'e alan eklemeden (app.rs'e dokunmadan) kareler arası taşınır.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct SurukleDurum {
-    /// Sürükleme başladığı andaki `outer_rect.min`.
+    /// Sürükleme başladığı andaki `outer_rect.min`; sürükleme boyunca SABİT.
+    /// Her kare yeniden okunmaz: gecikmeli viewport güncellemeleri referansı
+    /// kaydırıp sürüklemeyi titretirdi.
     baslangic: [f32; 2],
-    /// Son hesaplanan dış pencere konumu (bir sonraki karenin temeli).
-    mevcut: [f32; 2],
+    /// Başlangıçtan bu yana biriken imleç deltası (piksel).
+    toplam_delta: [f32; 2],
 }
 
-/// Sürükleme sırasında yeni dış pencere konumunu hesaplar (saf yardımcı).
+/// Bir karenin imleç deltasını birikmiş deltaya ekler (saf).
+fn delta_biriktir(toplam: [f32; 2], delta: Vec2) -> [f32; 2] {
+    [toplam[0] + delta.x, toplam[1] + delta.y]
+}
+
+/// Sürüklemenin mutlak dış pencere konumunu üretir (saf yardımcı).
 ///
-/// - `baslangic`: sürükleme başladığı andaki `outer_rect.min`.
+/// - `baslangic`: yalnızca `drag_started` anında alınan `outer_rect.min`.
 /// - `delta`: bu karenin imleç deltası (`pointer.delta()`).
-/// - `mevcut`: önceki karede hesaplanan konum; `None` ise ilk kare ve
-///   `baslangic` temel alınır.
+/// - `onceki_toplam`: o ana kadar biriken delta; `None` = ilk kare.
 ///
-/// `ViewportCommand::StartDrag` yerine `OuterPosition` gönderildiği için
-/// konum her kare mutlak olarak yeniden hesaplanır; winit'in "sol tuş hemen
-/// önce basılmış olmalı" garantisine gerek kalmaz.
-fn konum_uygula(baslangic: [f32; 2], delta: Vec2, mevcut: Option<[f32; 2]>) -> [f32; 2] {
-    let temel = mevcut.unwrap_or(baslangic);
-    [temel[0] + delta.x, temel[1] + delta.y]
+/// `ViewportCommand::StartDrag` yerine `OuterPosition` gönderildiği için konum
+/// her kare `baslangic + toplam_delta` olarak yeniden hesaplanır; winit'in "sol
+/// tuş hemen önce basılmış olmalı" garantisine gerek kalmaz. Sonuç geçerli
+/// konum aralığına kısıtlanır: bozuk/büyük bir delta pencereyi ekran dışına
+/// sürmez ve kaydedilen konum her zaman `konum_gecerli` ile uyumlu kalır.
+fn konum_uygula(
+    baslangic: [f32; 2],
+    delta: Vec2,
+    onceki_toplam: Option<[f32; 2]>,
+) -> [f32; 2] {
+    let (lo, hi) = WIDGET_KONUM_ARALIGI;
+    let toplam = onceki_toplam.unwrap_or([0.0, 0.0]);
+    let eksen = |bas: f32, top: f32, d: f32| {
+        let v = bas + top + d;
+        if v.is_finite() {
+            v.clamp(lo, hi)
+        } else {
+            bas.clamp(lo, hi)
+        }
+    };
+    [
+        eksen(baslangic[0], toplam[0], delta.x),
+        eksen(baslangic[1], toplam[1], delta.y),
+    ]
 }
 
 /// Kompakt görünüm ALWAYS küçük kalır: kaydedilmiş büyük boyut "yoluma giriyor".
@@ -265,6 +289,9 @@ impl FhApp {
         let mut tus_eylemleri: Vec<TusEylemi> = Vec::new();
         // Manuel sürükleme bu kare aktifse (veya bittiği kareyse) alttaki
         // outer_rect konum kaydı atlanır; konum zaten sürükleme kodu yazar.
+        // Kimlik closure dışında da tutulur: imleç sabit kalan karelerde
+        // oturumun sürdüğünü kare sonunda tekrar sorgulamak için.
+        let surukle_id = egui::Id::NULL.with("fh-widget-manuel-surukle");
         let mut surukle_aktif = false;
 
         // Onaylı paletle çerçevesiz zemin dolgusu (ayrı viewport kimliği).
@@ -275,10 +302,17 @@ impl FhApp {
                 let toplam_genislik = ui.available_width();
 
                 // Sağdaki düğmeler için yer ayır; geri kalan tüm şerit
-                // (logo + mod adı + boşluk) sürükleme alanıdır. Düğme
-                // aralığı daraltılır ki kompakt modda da >=100px kalsın.
+                // (logo + mod adı + boşluk) sürükleme alanıdır. Kompakt modda
+                // 220px sabit viewport bu şeridi tam 100px bırakır. Geniş
+                // modda başlığın tüm boşluğu kullanılır; pencere daraltıldığında
+                // .max(100) düğmelerin üstüne binmesin diye 0'a kısılır.
                 let dugme_yeri = if kompakt { 108.0 } else { 156.0 };
-                let surukle_genislik = (toplam_genislik - dugme_yeri).max(100.0);
+                let bosluk = toplam_genislik - dugme_yeri;
+                let surukle_genislik = if kompakt {
+                    bosluk.max(100.0)
+                } else {
+                    bosluk.max(0.0)
+                };
                 let surukle_rect = Rect::from_min_size(
                     baslangic_nokta,
                     Vec2::new(surukle_genislik, 26.0),
@@ -302,58 +336,76 @@ impl FhApp {
                     );
                 }
 
-                // Manuel sürükleme: StartDrag kaldırıldı. Sürükleme başladığı
-                // anda dış konumu sakla, her kare pointer deltasını ekle ve
-                // mutlak OuterPosition komutu gönder (winit onayına gerek yok).
+                // Manuel sürükleme: StartDrag kaldırıldı. Başlangıç konumu bir
+                // kez alınır; her kare `baslangic + birikmiş delta` mutlak
+                // OuterPosition olarak gönderilir. Sürükleme olmayan karelerde
+                // OuterPosition GÖNDERİLMEZ — aksi halde pencere aynı konuma
+                // yapışır / titreme olur.
                 let ctx = ui.ctx();
-                let surukle_id = egui::Id::NULL.with("fh-widget-manuel-surukle");
 
                 if surukle.drag_started() {
                     let baslangic = ctx
                         .input(|i| i.viewport().outer_rect.map(|r| [r.min.x, r.min.y]))
-                        .unwrap_or_else(|| self.state.widget.konum.unwrap_or([0.0, 0.0]));
+                        .filter(|k| WidgetAyarlari::konum_gecerli(*k))
+                        .or_else(|| {
+                            self.state
+                                .widget
+                                .konum
+                                .filter(|k| WidgetAyarlari::konum_gecerli(*k))
+                        })
+                        .unwrap_or([0.0, 0.0]);
                     ctx.data_mut(|d| {
                         d.insert_temp(
                             surukle_id,
                             SurukleDurum {
                                 baslangic,
-                                mevcut: baslangic,
+                                toplam_delta: [0.0, 0.0],
                             },
                         );
                     });
+                    surukle_aktif = true;
                 }
                 if surukle.dragged() {
-                    let onceki: SurukleDurum = ctx
-                        .data(|d| d.get_temp(surukle_id))
+                    let durum = ctx
+                        .data(|d| d.get_temp::<SurukleDurum>(surukle_id))
                         .unwrap_or_else(|| {
-                            let baslangic = self.state.widget.konum.unwrap_or([0.0, 0.0]);
+                            let baslangic = self
+                                .state
+                                .widget
+                                .konum
+                                .filter(|k| WidgetAyarlari::konum_gecerli(*k))
+                                .unwrap_or([0.0, 0.0]);
                             SurukleDurum {
                                 baslangic,
-                                mevcut: baslangic,
+                                toplam_delta: [0.0, 0.0],
                             }
                         });
                     let delta = ctx.input(|i| i.pointer.delta());
-                    let mevcut = konum_uygula(onceki.baslangic, delta, Some(onceki.mevcut));
+                    let toplam_delta = delta_biriktir(durum.toplam_delta, delta);
+                    let konum = konum_uygula(durum.baslangic, delta, Some(durum.toplam_delta));
                     ctx.data_mut(|d| {
                         d.insert_temp(
                             surukle_id,
                             SurukleDurum {
-                                baslangic: onceki.baslangic,
-                                mevcut,
+                                baslangic: durum.baslangic,
+                                toplam_delta,
                             },
                         );
                     });
                     ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(Pos2::new(
-                        mevcut[0], mevcut[1],
+                        konum[0], konum[1],
                     )));
-                    // Kalıcılık: sürükleme sırasında da güncel konum tutulur;
-                    // disk yazımı sürükleme bitince yapılır.
-                    self.state.widget.konum = Some(mevcut);
+                    // Bellekte güncel tutulur; disk yazımı yalnızca drag bitiminde.
+                    self.state.widget.konum = Some(konum);
                     surukle_aktif = true;
                 }
                 if surukle.drag_stopped() {
                     if let Some(durum) = ctx.data(|d| d.get_temp::<SurukleDurum>(surukle_id)) {
-                        self.state.widget.konum = Some(durum.mevcut);
+                        // Son konum bir kez hesaplanıp kalıcı duruma yazılır;
+                        // sürükleme boyunca hiç disk yazımı yapılmadı.
+                        let konum =
+                            konum_uygula(durum.baslangic, Vec2::ZERO, Some(durum.toplam_delta));
+                        self.state.widget.konum = Some(konum);
                         self.state.kaydet();
                     }
                     ctx.data_mut(|d| {
@@ -918,6 +970,16 @@ impl FhApp {
             }
         }
 
+        // İmleç sabit kaldığı için `dragged()`'ın ateşlenmediği karelerde de
+        // oturum açıksa konum kaydını atla: bir kare geride kalan outer_rect
+        // sürükleme sonucunun üzerine yazmasın.
+        if ui
+            .ctx()
+            .data(|d| d.get_temp::<SurukleDurum>(surukle_id).is_some())
+        {
+            surukle_aktif = true;
+        }
+
         // Konum kalıcılığı: dış dikdörtgenin min köşesini kaydet. Komut
         // gönderilmediği ve repaint istenmediği için döngü oluşmaz. Manuel
         // sürükleme sırasında konum yukarıda yazılır; outer_rect bir kare
@@ -961,6 +1023,8 @@ mod tests {
         assert_eq!(etkili_boyut(false, 300.0, 200.0), (300.0, 200.0));
     }
 
+    // ---- konum_uygula / delta_biriktir saf testleri (12) ----
+
     #[test]
     fn konum_ilk_kare_baslangici_kullanir() {
         assert_eq!(
@@ -970,22 +1034,10 @@ mod tests {
     }
 
     #[test]
-    fn konum_sonraki_kareleri_biriktirir() {
-        let b = [100.0, 200.0];
-        let k1 = konum_uygula(b, Vec2::new(10.0, 5.0), None);
-        let k2 = konum_uygula(b, Vec2::new(4.0, -3.0), Some(k1));
-        let k3 = konum_uygula(b, Vec2::new(-2.0, 8.0), Some(k2));
-        assert_eq!(k1, [110.0, 205.0]);
-        assert_eq!(k2, [114.0, 202.0]);
-        assert_eq!(k3, [112.0, 210.0]);
-    }
-
-    #[test]
-    fn konum_sifir_delta_birakir() {
-        assert_eq!(konum_uygula([50.0, 60.0], Vec2::ZERO, None), [50.0, 60.0]);
+    fn konum_pozitif_delta_saga_asagi_tasir() {
         assert_eq!(
-            konum_uygula([50.0, 60.0], Vec2::ZERO, Some([80.0, 90.0])),
-            [80.0, 90.0]
+            konum_uygula([100.0, 200.0], Vec2::new(15.0, 25.0), None),
+            [115.0, 225.0]
         );
     }
 
@@ -998,23 +1050,109 @@ mod tests {
     }
 
     #[test]
-    fn konum_toplam_delta_tek_kare_ile_ayni() {
-        let b = [10.0, 20.0];
-        let adimli = konum_uygula(
-            b,
-            Vec2::new(-2.0, 3.0),
-            Some(konum_uygula(b, Vec2::new(12.0, -7.0), None)),
-        );
-        let tek = konum_uygula(b, Vec2::new(10.0, -4.0), None);
-        assert_eq!(adimli, tek);
-    }
-
-    #[test]
-    fn konum_mevcut_verilirse_baslangic_yok_sayilir() {
-        // Sürükleme devam ediyorsa temel başlangıç değil son konumdur.
+    fn konum_birikmis_delta_baslangica_eklenir() {
+        // Üçüncü argüman birikmiş deltadır; başlangıç asla yok sayılmaz.
         assert_eq!(
             konum_uygula([0.0, 0.0], Vec2::new(5.0, 5.0), Some([100.0, 100.0])),
             [105.0, 105.0]
         );
+        assert_eq!(
+            konum_uygula([50.0, 70.0], Vec2::new(5.0, -5.0), Some([100.0, 100.0])),
+            [155.0, 165.0]
+        );
+    }
+
+    #[test]
+    fn konum_sifir_delta_yeni_toplami_degistirmez() {
+        assert_eq!(konum_uygula([50.0, 60.0], Vec2::ZERO, None), [50.0, 60.0]);
+        assert_eq!(
+            konum_uygula([50.0, 60.0], Vec2::ZERO, Some([80.0, 90.0])),
+            [130.0, 150.0]
+        );
+    }
+
+    #[test]
+    fn konum_cok_kare_birikimi_dogru() {
+        let b = [100.0, 200.0];
+        let mut toplam = [0.0, 0.0];
+        let adimlar = [
+            Vec2::new(10.0, 5.0),
+            Vec2::new(4.0, -3.0),
+            Vec2::new(-2.0, 8.0),
+        ];
+        let beklenen = [[110.0, 205.0], [114.0, 202.0], [112.0, 210.0]];
+        for (delta, bek) in adimlar.iter().zip(beklenen.iter()) {
+            let konum = konum_uygula(b, *delta, Some(toplam));
+            assert_eq!(konum, *bek);
+            toplam = delta_biriktir(toplam, *delta);
+        }
+        assert_eq!(toplam, [12.0, 10.0]);
+    }
+
+    #[test]
+    fn konum_adimli_ve_tek_kare_esitligi() {
+        let b = [10.0, 20.0];
+        let t1 = delta_biriktir([0.0, 0.0], Vec2::new(12.0, -7.0));
+        let adimli = konum_uygula(b, Vec2::new(-2.0, 3.0), Some(t1));
+        let tek = konum_uygula(b, Vec2::new(10.0, -4.0), None);
+        assert_eq!(adimli, tek);
+        assert_eq!(adimli, [20.0, 16.0]);
+    }
+
+    #[test]
+    fn konum_kaydedilmis_baslangictan_devam_eder() {
+        // Yeni oturum önceki konumu başlangıç olarak alır; sıfır delta o konumu korur.
+        let kayitli = [420.0, -120.0];
+        assert_eq!(konum_uygula(kayitli, Vec2::ZERO, None), kayitli);
+        assert_eq!(
+            konum_uygula(kayitli, Vec2::new(3.0, -9.0), None),
+            [423.0, -129.0]
+        );
+    }
+
+    #[test]
+    fn konum_ust_sinira_kisitlanir() {
+        let (_, hi) = WIDGET_KONUM_ARALIGI;
+        let b = [hi - 5.0, hi - 5.0];
+        assert_eq!(konum_uygula(b, Vec2::new(50.0, 50.0), None), [hi, hi]);
+        // Birikmiş delta ile birlikte de taşma kısıtlanır.
+        assert_eq!(
+            konum_uygula([0.0, 0.0], Vec2::new(5.0, 5.0), Some([hi, hi])),
+            [hi, hi]
+        );
+    }
+
+    #[test]
+    fn konum_alt_sinira_kisitlanir() {
+        let (lo, _) = WIDGET_KONUM_ARALIGI;
+        let b = [lo + 5.0, lo + 5.0];
+        assert_eq!(konum_uygula(b, Vec2::new(-50.0, -50.0), None), [lo, lo]);
+        assert_eq!(
+            konum_uygula([0.0, 0.0], Vec2::new(-5.0, -5.0), Some([lo, lo])),
+            [lo, lo]
+        );
+    }
+
+    #[test]
+    fn konum_eksenler_bagimsiz_kisitlanir() {
+        let (lo, hi) = WIDGET_KONUM_ARALIGI;
+        assert_eq!(
+            konum_uygula([hi - 1.0, 200.0], Vec2::new(10.0, -5.0), None),
+            [hi, 195.0]
+        );
+        assert_eq!(
+            konum_uygula([200.0, lo + 1.0], Vec2::new(-5.0, -10.0), None),
+            [195.0, lo]
+        );
+    }
+
+    #[test]
+    fn delta_biriktir_saf_ve_negatif() {
+        assert_eq!(delta_biriktir([0.0, 0.0], Vec2::new(3.0, -4.0)), [3.0, -4.0]);
+        assert_eq!(
+            delta_biriktir([10.0, 20.0], Vec2::new(-2.5, 0.5)),
+            [7.5, 20.5]
+        );
+        assert_eq!(delta_biriktir([10.0, 20.0], Vec2::ZERO), [10.0, 20.0]);
     }
 }
