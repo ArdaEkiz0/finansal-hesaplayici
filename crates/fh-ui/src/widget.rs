@@ -31,6 +31,31 @@ use super::{FhApp, T_BODY, T_SMALL, birincil_dugme, hairline, ikincil_dugme};
 const COMPACT_SIZE: (f32, f32) = (220.0, 160.0);
 const WIDE_SIZE: (f32, f32) = (340.0, 430.0);
 
+/// Manuel sürükleme için `egui::Context::data` içinde tutulan geçici durum.
+/// `FhApp`'e alan eklemeden (app.rs'e dokunmadan) kareler arası taşınır.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct SurukleDurum {
+    /// Sürükleme başladığı andaki `outer_rect.min`.
+    baslangic: [f32; 2],
+    /// Son hesaplanan dış pencere konumu (bir sonraki karenin temeli).
+    mevcut: [f32; 2],
+}
+
+/// Sürükleme sırasında yeni dış pencere konumunu hesaplar (saf yardımcı).
+///
+/// - `baslangic`: sürükleme başladığı andaki `outer_rect.min`.
+/// - `delta`: bu karenin imleç deltası (`pointer.delta()`).
+/// - `mevcut`: önceki karede hesaplanan konum; `None` ise ilk kare ve
+///   `baslangic` temel alınır.
+///
+/// `ViewportCommand::StartDrag` yerine `OuterPosition` gönderildiği için
+/// konum her kare mutlak olarak yeniden hesaplanır; winit'in "sol tuş hemen
+/// önce basılmış olmalı" garantisine gerek kalmaz.
+fn konum_uygula(baslangic: [f32; 2], delta: Vec2, mevcut: Option<[f32; 2]>) -> [f32; 2] {
+    let temel = mevcut.unwrap_or(baslangic);
+    [temel[0] + delta.x, temel[1] + delta.y]
+}
+
 /// Kompakt görünüm ALWAYS küçük kalır: kaydedilmiş büyük boyut "yoluma giriyor".
 /// Geniş görünümde kullanıcı boyutu serbestçe ayarlayabilir.
 pub(super) fn etkili_boyut(kompakt: bool, genislik: f32, yukseklik: f32) -> (f32, f32) {
@@ -103,14 +128,15 @@ fn tus_dugme(ui: &mut Ui, metin: &str, p: Palet, koyu: bool, genis: f32) -> bool
 }
 
 /// Onaylı paletten ₺ rozeti (döndürülmüş yazı veya yeni grafik yok).
-fn logo(ui: &mut Ui, p: Palet) {
-    let (r, _) = ui.allocate_exact_size(Vec2::new(22.0, 22.0), Sense::hover());
+/// Sürükleme alanının içinde, etkileşim yakalamadan çizilir: merkez doğrudan
+/// verilir, `allocate_exact_size` ile cursor ilerletilmez.
+fn logo(ui: &mut Ui, merkez: Pos2, p: Palet) {
     ui.painter()
-        .circle_filled(r.center(), 10.0, p.birincil.gamma_multiply(0.22));
+        .circle_filled(merkez, 10.0, p.birincil.gamma_multiply(0.22));
     ui.painter()
-        .circle_stroke(r.center(), 10.0, Stroke::new(1.0, p.aksan));
+        .circle_stroke(merkez, 10.0, Stroke::new(1.0, p.aksan));
     ui.painter().text(
-        r.center(),
+        merkez,
         Align2::CENTER_CENTER,
         "₺",
         FontId::proportional(12.0),
@@ -237,45 +263,107 @@ impl FhApp {
         let mut geri_yukle: Option<(String, InputState)> = None;
         let mut alan_odakta = false;
         let mut tus_eylemleri: Vec<TusEylemi> = Vec::new();
+        // Manuel sürükleme bu kare aktifse (veya bittiği kareyse) alttaki
+        // outer_rect konum kaydı atlanır; konum zaten sürükleme kodu yazar.
+        let mut surukle_aktif = false;
 
         // Onaylı paletle çerçevesiz zemin dolgusu (ayrı viewport kimliği).
         theme::widget_viewport_frame(p).show(ui, |ui| {
             // ---- özel başlık: logo, mod adı, sürükleme alanı, üstte/kompakt/kapat ----
             ui.horizontal(|ui| {
-                logo(ui, p);
-                ui.add_space(4.0);
+                let baslangic_nokta = ui.cursor().min;
+                let toplam_genislik = ui.available_width();
+
+                // Sağdaki düğmeler için yer ayır; geri kalan tüm şerit
+                // (logo + mod adı + boşluk) sürükleme alanıdır. Düğme
+                // aralığı daraltılır ki kompakt modda da >=100px kalsın.
+                let dugme_yeri = if kompakt { 108.0 } else { 156.0 };
+                let surukle_genislik = (toplam_genislik - dugme_yeri).max(100.0);
+                let surukle_rect = Rect::from_min_size(
+                    baslangic_nokta,
+                    Vec2::new(surukle_genislik, 26.0),
+                );
+                let surukle = ui.allocate_rect(surukle_rect, Sense::drag());
+
+                // Logo ve mod adı sürükleme alanının üstüne çizilir; kendi
+                // widget'ları olmadığı için tıklama sürüklemeye geçer.
+                logo(
+                    ui,
+                    Pos2::new(surukle_rect.min.x + 11.0, surukle_rect.center().y),
+                    p,
+                );
                 if !kompakt {
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(ui.available_width().min(120.0), 24.0),
-                        Layout::left_to_right(Align::Center),
-                        |ui| {
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(modes::mod_etiketi(&mod_id))
-                                        .size(T_BODY)
-                                        .color(p.metin)
-                                        .strong(),
-                                )
-                                .wrap_mode(TextWrapMode::Truncate),
-                            );
-                        },
+                    ui.painter().text(
+                        Pos2::new(surukle_rect.min.x + 30.0, surukle_rect.center().y),
+                        Align2::LEFT_CENTER,
+                        modes::mod_etiketi(&mod_id),
+                        FontId::proportional(T_BODY),
+                        p.metin,
                     );
-                } else {
-                    // Kompakt başlıkta metin yok: ikonlar çakışmaz.
-                    ui.add_space(2.0);
                 }
 
-                // Başlıktaki boş alan pencereyi sürükler (OS çubuğu kapalı).
-                let bosluk = (ui.available_width() - 172.0).max(8.0);
-                let surukle = ui.allocate_rect(
-                    Rect::from_min_size(ui.cursor().min, Vec2::new(bosluk, 26.0)),
-                    Sense::drag(),
-                );
+                // Manuel sürükleme: StartDrag kaldırıldı. Sürükleme başladığı
+                // anda dış konumu sakla, her kare pointer deltasını ekle ve
+                // mutlak OuterPosition komutu gönder (winit onayına gerek yok).
+                let ctx = ui.ctx();
+                let surukle_id = egui::Id::NULL.with("fh-widget-manuel-surukle");
+
                 if surukle.drag_started() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                    let baslangic = ctx
+                        .input(|i| i.viewport().outer_rect.map(|r| [r.min.x, r.min.y]))
+                        .unwrap_or_else(|| self.state.widget.konum.unwrap_or([0.0, 0.0]));
+                    ctx.data_mut(|d| {
+                        d.insert_temp(
+                            surukle_id,
+                            SurukleDurum {
+                                baslangic,
+                                mevcut: baslangic,
+                            },
+                        );
+                    });
+                }
+                if surukle.dragged() {
+                    let onceki: SurukleDurum = ctx
+                        .data(|d| d.get_temp(surukle_id))
+                        .unwrap_or_else(|| {
+                            let baslangic = self.state.widget.konum.unwrap_or([0.0, 0.0]);
+                            SurukleDurum {
+                                baslangic,
+                                mevcut: baslangic,
+                            }
+                        });
+                    let delta = ctx.input(|i| i.pointer.delta());
+                    let mevcut = konum_uygula(onceki.baslangic, delta, Some(onceki.mevcut));
+                    ctx.data_mut(|d| {
+                        d.insert_temp(
+                            surukle_id,
+                            SurukleDurum {
+                                baslangic: onceki.baslangic,
+                                mevcut,
+                            },
+                        );
+                    });
+                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(Pos2::new(
+                        mevcut[0], mevcut[1],
+                    )));
+                    // Kalıcılık: sürükleme sırasında da güncel konum tutulur;
+                    // disk yazımı sürükleme bitince yapılır.
+                    self.state.widget.konum = Some(mevcut);
+                    surukle_aktif = true;
+                }
+                if surukle.drag_stopped() {
+                    if let Some(durum) = ctx.data(|d| d.get_temp::<SurukleDurum>(surukle_id)) {
+                        self.state.widget.konum = Some(durum.mevcut);
+                        self.state.kaydet();
+                    }
+                    ctx.data_mut(|d| {
+                        d.remove_temp::<SurukleDurum>(surukle_id);
+                    });
+                    surukle_aktif = true;
                 }
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
                     // Kapat: tek düğme, kalıcı duruma yazar.
                     if ikon_dugme(ui, "×", p, koyu, false, true) {
                         self.state.widget.aktif = false;
@@ -831,8 +919,10 @@ impl FhApp {
         }
 
         // Konum kalıcılığı: dış dikdörtgenin min köşesini kaydet. Komut
-        // gönderilmediği ve repaint istenmediği için döngü oluşmaz.
-        if !konum_uygulandi_bu_kare {
+        // gönderilmediği ve repaint istenmediği için döngü oluşmaz. Manuel
+        // sürükleme sırasında konum yukarıda yazılır; outer_rect bir kare
+        // geride kalabileceğinden burada üzerine yazılmasın.
+        if !konum_uygulandi_bu_kare && !surukle_aktif {
             let yeni_konum = ui
                 .ctx()
                 .input(|i| i.viewport().outer_rect.map(|r| [r.min.x, r.min.y]));
@@ -869,5 +959,62 @@ mod tests {
         assert_eq!(etkili_boyut(true, 300.0, 200.0), COMPACT_SIZE);
         assert_eq!(etkili_boyut(false, 119.0, 200.0), WIDE_SIZE);
         assert_eq!(etkili_boyut(false, 300.0, 200.0), (300.0, 200.0));
+    }
+
+    #[test]
+    fn konum_ilk_kare_baslangici_kullanir() {
+        assert_eq!(
+            konum_uygula([100.0, 200.0], Vec2::new(10.0, -5.0), None),
+            [110.0, 195.0]
+        );
+    }
+
+    #[test]
+    fn konum_sonraki_kareleri_biriktirir() {
+        let b = [100.0, 200.0];
+        let k1 = konum_uygula(b, Vec2::new(10.0, 5.0), None);
+        let k2 = konum_uygula(b, Vec2::new(4.0, -3.0), Some(k1));
+        let k3 = konum_uygula(b, Vec2::new(-2.0, 8.0), Some(k2));
+        assert_eq!(k1, [110.0, 205.0]);
+        assert_eq!(k2, [114.0, 202.0]);
+        assert_eq!(k3, [112.0, 210.0]);
+    }
+
+    #[test]
+    fn konum_sifir_delta_birakir() {
+        assert_eq!(konum_uygula([50.0, 60.0], Vec2::ZERO, None), [50.0, 60.0]);
+        assert_eq!(
+            konum_uygula([50.0, 60.0], Vec2::ZERO, Some([80.0, 90.0])),
+            [80.0, 90.0]
+        );
+    }
+
+    #[test]
+    fn konum_negatif_delta_sola_yukari_tasir() {
+        assert_eq!(
+            konum_uygula([300.0, 300.0], Vec2::new(-25.0, -40.0), None),
+            [275.0, 260.0]
+        );
+    }
+
+    #[test]
+    fn konum_toplam_delta_tek_kare_ile_ayni() {
+        let b = [10.0, 20.0];
+        let adimli = konum_uygula(
+            b,
+            Vec2::new(-2.0, 3.0),
+            Some(konum_uygula(b, Vec2::new(12.0, -7.0), None)),
+        );
+        let tek = konum_uygula(b, Vec2::new(10.0, -4.0), None);
+        assert_eq!(adimli, tek);
+    }
+
+    #[test]
+    fn konum_mevcut_verilirse_baslangic_yok_sayilir() {
+        // Sürükleme devam ediyorsa temel başlangıç değil son konumdur.
+        assert_eq!(
+            konum_uygula([0.0, 0.0], Vec2::new(5.0, 5.0), Some([100.0, 100.0])),
+            [105.0, 105.0]
+        );
     }
 }
