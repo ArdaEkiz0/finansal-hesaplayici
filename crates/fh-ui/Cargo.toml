@@ -35,3 +35,7 @@ chrono = { workspace = true }
 dirs = "7"
 rfd = "0.15"
 arboard = "3"
+
+[build-dependencies]
+# Windows exe'sine ikon + sürüm/şirket bilgisi kaynağı ekler (profesyonel Özellikler).
+winres = "0.1"

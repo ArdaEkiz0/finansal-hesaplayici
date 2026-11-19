@@ -5,10 +5,11 @@
 
 #define MyAppName "Finansal Hesaplayici"
 #ifndef Surum
-  #define Surum "5.2.3"
+  #define Surum "5.2.4"
 #endif
 #define MyAppVersion Surum
-#define MyAppPublisher "Arda M. Ekiz"
+#define MyAppPublisher "Arda Mehmet Ekiz"
+#define MyAppCopyright "Copyright © 2026 Arda Mehmet Ekiz"
 #define MyAppExe "Finansal Hesaplayici.exe"
 #define MyAppId "{{C1D2E3F4-5A6B-7C8D-9E0F-1A2B3C4D5E6F}}"
 
@@ -24,6 +25,12 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoCopyright={#MyAppCopyright}
+VersionInfoDescription={#MyAppName} kurulum
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersion}
 ; lowest = yönetici izni gerekmez, kurulum kullanıcı başınadır.
 PrivilegesRequired=lowest
 DefaultDirName={localappdata}\Programs\{#MyAppName}
