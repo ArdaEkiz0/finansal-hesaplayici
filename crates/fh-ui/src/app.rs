@@ -31,14 +31,14 @@ use crate::modes::{self, MODLAR, ModeDef};
 use crate::theme::{self, Palet};
 
 // Tipografi ölçeği — tek yerden yönetilir, yazı ölçeği zoom ile katlanır.
-// Tablo satırları dahil hiçbir metin 12px altına inmez.
-const T_BUILD: f32 = 10.5;
-const T_SMALL: f32 = 12.0;
-const T_ROW: f32 = 13.5;
-const T_BODY: f32 = 14.5;
-const T_LEAD: f32 = 17.0;
-const T_TITLE: f32 = 21.0;
-const T_AMOUNT: f32 = 48.0;
+// Hiçbir metin 12px altına inmez; gövde ve tablo satırları ≥14px okunur.
+const T_BUILD: f32 = 12.0;
+const T_SMALL: f32 = 13.5;
+const T_ROW: f32 = 14.5;
+const T_BODY: f32 = 15.5;
+const T_LEAD: f32 = 18.5;
+const T_TITLE: f32 = 23.0;
+const T_AMOUNT: f32 = 58.0;
 
 #[derive(Default)]
 pub struct Pencereler {
@@ -95,7 +95,7 @@ fn hairline(ui: &mut Ui, renk: Color32) {
 
 /// Tablo hücresi: sabit genişlik, tek satır, isteğe bağlı sabit genişlikli rakam.
 fn hucre(ui: &mut Ui, genislik: f32, metin: String, renk: Color32, mono: bool, sag: bool) {
-    ui.allocate_ui(Vec2::new(genislik, 24.0), |ui| {
+    ui.allocate_ui(Vec2::new(genislik, 30.0), |ui| {
         let yerlesim = if sag {
             Layout::right_to_left(Align::Center)
         } else {
@@ -144,7 +144,23 @@ fn ikincil_dugme<'a>(ad: &'a str, p: Palet) -> egui::Button<'a> {
         .fill(p.yuksek)
         .stroke(Stroke::new(1.0, p.kenar))
         .corner_radius(CornerRadius::same(6))
-        .min_size(Vec2::new(64.0, 32.0))
+        .min_size(Vec2::new(64.0, 34.0))
+}
+
+/// Üst şeridin sağ ucundaki pencere kontrolü: alta alma, büyüt/küçült, kapat.
+/// Hover/focus/devre-dışı durumları tema widget stillerinden gelir; kapat
+/// glifi hata rengiyle diğer iki kontrolden ayrılır.
+fn pencere_kontrol_dugmesi<'a>(glif: &'a str, p: Palet, kapat: bool) -> egui::Button<'a> {
+    egui::Button::new(
+        RichText::new(glif)
+            .size(if kapat { 18.0 } else { 16.0 })
+            .color(if kapat { p.hata } else { p.ikinci })
+            .strong(),
+    )
+    .fill(p.yuksek)
+    .stroke(Stroke::new(1.0, p.kenar))
+    .corner_radius(CornerRadius::same(5))
+    .min_size(Vec2::new(34.0, 32.0))
 }
 
 impl FhApp {
@@ -549,76 +565,103 @@ impl FhApp {
             if aktif { p.birincil } else { p.kenar },
         ))
         .corner_radius(CornerRadius::same(6))
-        .min_size(Vec2::new(46.0, 30.0));
+        .min_size(Vec2::new(48.0, 32.0));
         ui.add(b)
     }
 
     fn ust_panel(&mut self, ui: &mut Ui) {
         let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let guncelleme = self.guncelleme.lock().ok().and_then(|k| k.clone());
-        let dar = ui.ctx().content_rect().width() < 1040.0;
-        let (l_k, l_ap, l_am, l_w, l_ay, l_tk, l_cr, l_dn, l_gc) = if dar {
+        let genis = ui.ctx().content_rect().width();
+        let dar = genis < 1040.0;
+        // Araç etiketleri, sağ uçtaki pencere kontrollerine yer açmak için
+        // ana düzenden daha erken kısalır; düğmeler hiçbir genişlikte kırpılmaz.
+        let dar_ust = genis < 1180.0;
+        let (l_k, l_ap, l_am, l_w, l_ay, l_tk, l_cr, l_dn, l_gc) = if dar_ust {
             ("⌘K", "A+", "A−", "W", "Ayar", "Tak", "Cari", "Dön", "Geç")
         } else {
             ("⌘K", "A+", "A−", "Widget", "Ayarlar", "Takvim", "Cari", "Dönemler", "Geçmiş")
         };
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new("◈").size(30.0).color(p.birincil).strong());
-            ui.add_space(3.0);
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new("FİNANSAL HESAPLAYICI")
-                        .size(T_TITLE - 1.0)
-                        .color(p.metin)
-                        .strong(),
-                );
-                ui.label(
-                    RichText::new(if dar {
-                        format!("v{SURUM}")
-                    } else {
-                        format!("v{SURUM}  ·  çevrimdışı finans konsolu")
-                    })
-                    .size(T_BUILD)
-                    .color(p.soluk)
-                    .monospace(),
-                );
-            });
+            // Başlık sabit alana alınır: araç düğmeleri taşsa da üstüne binmez.
+            let baslik_genis = if dar { 74.0 } else { 330.0 };
+            ui.allocate_ui_with_layout(
+                Vec2::new(baslik_genis, 42.0),
+                egui::Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.label(RichText::new("◈").size(30.0).color(p.birincil).strong());
+                    ui.add_space(3.0);
+                    ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new(if dar { "FH" } else { "FİNANSAL HESAPLAYICI" })
+                                .size(if dar { T_TITLE - 4.0 } else { T_TITLE - 1.0 })
+                                .color(p.metin)
+                                .strong(),
+                        );
+                        ui.label(
+                            RichText::new(if dar {
+                                format!("v{SURUM}")
+                            } else {
+                                format!("v{SURUM}  ·  çevrimdışı finans konsolu")
+                            })
+                            .size(T_BUILD)
+                            .color(p.soluk)
+                            .monospace(),
+                        );
+                    });
+                },
+            );
 
-            ui.add_space(16.0);
+            ui.add_space(10.0);
             // Tek satır, sıralı yerleştirme: dar ekranda kısa etiketlere düşer,
             // hiçbir düğme kırpılmaz.
-            {
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                // Pencere kontrolleri ÖNCE eklenir: right_to_left'te ilk eklenen
+                // sağ uçta kalır, taşan araç düğmeleri onu iter/çıkarmaz.
+                let maksimize = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+                if ui.add(pencere_kontrol_dugmesi("×", p, true)).clicked() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+                let buyut_glif = if maksimize { "❐" } else { "□" };
+                if ui.add(pencere_kontrol_dugmesi(buyut_glif, p, false)).clicked() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!maksimize));
+                }
+                if ui.add(pencere_kontrol_dugmesi("─", p, false)).clicked() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                }
+
+                // Araç düğmeleri ters sırayla: görünür sıra ⌘K A+ A− … Geçmiş.
+                if self.arac_dugmesi(ui, l_gc, self.p.gecmis, p).clicked() {
+                    self.p.gecmis = !self.p.gecmis;
+                }
+                if self.arac_dugmesi(ui, l_dn, self.p.donemler, p).clicked() {
+                    self.p.donemler = !self.p.donemler;
+                }
+                if self.arac_dugmesi(ui, l_cr, self.p.cariler, p).clicked() {
+                    self.p.cariler = !self.p.cariler;
+                }
+                if self.arac_dugmesi(ui, l_tk, self.p.takvim, p).clicked() {
+                    self.p.takvim = !self.p.takvim;
+                }
+                if self.arac_dugmesi(ui, l_ay, self.p.ayarlar, p).clicked() {
+                    self.p.ayarlar = !self.p.ayarlar;
+                }
+                if self.arac_dugmesi(ui, l_w, self.p.widget, p).clicked() {
+                    self.p.widget = !self.p.widget;
+                }
+                if self.arac_dugmesi(ui, l_am, false, p).clicked() {
+                    self.font_degistir(-0.05);
+                }
+                if self.arac_dugmesi(ui, l_ap, false, p).clicked() {
+                    self.font_degistir(0.05);
+                }
                 if self.arac_dugmesi(ui, l_k, self.p.palet, p).clicked() {
                     self.p.palet = !self.p.palet;
                     self.palet_sorgu.clear();
                     self.palet_sec = 0;
                 }
-                if self.arac_dugmesi(ui, l_ap, false, p).clicked() {
-                    self.font_degistir(0.05);
-                }
-                if self.arac_dugmesi(ui, l_am, false, p).clicked() {
-                    self.font_degistir(-0.05);
-                }
-                if self.arac_dugmesi(ui, l_w, self.p.widget, p).clicked() {
-                    self.p.widget = !self.p.widget;
-                }
-                if self.arac_dugmesi(ui, l_ay, self.p.ayarlar, p).clicked() {
-                    self.p.ayarlar = !self.p.ayarlar;
-                }
-                if self.arac_dugmesi(ui, l_tk, self.p.takvim, p).clicked() {
-                    self.p.takvim = !self.p.takvim;
-                }
-                if self.arac_dugmesi(ui, l_cr, self.p.cariler, p).clicked() {
-                    self.p.cariler = !self.p.cariler;
-                }
-                if self.arac_dugmesi(ui, l_dn, self.p.donemler, p).clicked() {
-                    self.p.donemler = !self.p.donemler;
-                }
-                if self.arac_dugmesi(ui, l_gc, self.p.gecmis, p).clicked() {
-                    self.p.gecmis = !self.p.gecmis;
-                }
-            }
+            });
         });
 
         ui.add_space(6.0);
@@ -654,7 +697,7 @@ impl FhApp {
                 .strong(),
         )
         .corner_radius(CornerRadius::same(6))
-        .min_size(Vec2::new(ui.available_width().max(120.0), 34.0));
+        .min_size(Vec2::new(ui.available_width().max(120.0), 40.0));
         if aktif {
             b = b
                 .fill(p.birincil.gamma_multiply(0.16))
@@ -793,24 +836,24 @@ impl FhApp {
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             for (n, f) in def.alanlar.iter().enumerate() {
                 if n > 0 {
-                    ui.add_space(12.0);
+                    ui.add_space(14.0);
                 }
                 ui.label(RichText::new(f.etiket).size(T_SMALL).color(p.ikinci).strong());
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 let inp = self.state.inputs.entry(mode.clone()).or_default();
                 match f.tur {
                     crate::modes::FieldKind::Metin => {
                         let t = egui::TextEdit::singleline(inp.get_mut(f.alan))
                             .hint_text(f.ipucu)
                             .font(FontId::monospace(T_BODY));
-                        ui.add_sized(Vec2::new(ui.available_width(), 36.0), t);
+                        ui.add_sized(Vec2::new(ui.available_width(), 44.0), t);
                     }
                     crate::modes::FieldKind::CokSatir => {
                         let t = egui::TextEdit::multiline(inp.get_mut(f.alan))
                             .hint_text(f.ipucu)
                             .font(FontId::monospace(T_BODY))
                             .desired_width(ui.available_width())
-                            .desired_rows(5);
+                            .desired_rows(6);
                         ui.add(t);
                     }
                     crate::modes::FieldKind::Secim | crate::modes::FieldKind::PaySecim => {
@@ -828,7 +871,7 @@ impl FhApp {
                             .unwrap_or("—");
                         egui::ComboBox::from_id_salt(format!("{mode}-{:?}", f.alan))
                             .selected_text(etiket)
-                            .width(ui.available_width().max(140.0))
+                            .width(ui.available_width().max(180.0))
                             .show_ui(ui, |ui| {
                                 for (label, value) in secenekler {
                                     let v = value.to_string();
@@ -918,10 +961,10 @@ impl FhApp {
                 ui.add_space(4.0);
                 let ana = para_bicimi(&r.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
                 let genis = ui.available_width();
-                let ana_boyut = if genis < 300.0 {
-                    28.0
-                } else if genis < 420.0 {
-                    38.0
+                let ana_boyut = if genis < 320.0 {
+                    34.0
+                } else if genis < 460.0 {
+                    46.0
                 } else {
                     T_AMOUNT
                 };
@@ -934,7 +977,7 @@ impl FhApp {
                 ui.add_space(6.0);
                 let serit = ui.available_rect_before_wrap();
                 ui.painter().rect_filled(
-                    Rect::from_min_size(serit.min, Vec2::new(serit.width().min(120.0), 3.0)),
+                    Rect::from_min_size(serit.min, Vec2::new(serit.width().min(160.0), 4.0)),
                     CornerRadius::ZERO,
                     p.aksan,
                 );
@@ -1791,14 +1834,14 @@ impl eframe::App for FhApp {
                 Frame::new()
                     .fill(p.yuzey)
                     .stroke(kenar)
-                    .inner_margin(Margin::symmetric(18, 10)),
+                    .inner_margin(Margin::symmetric(18, 12)),
             )
             .show(ui, |ui| self.ust_panel(ui));
 
         // egui 0.37 Panel::right/bottom istenen exact_size'ı uygulamıyor
         // (sonuç paneli 250px'e, kayıt paneli 50px'e sıkışıyordu). Açık yerleşim:
         // ana üç kolon + alt kayıt alanı, kalan yükseklikten paylaşılır.
-        let kapi_y = (yukseklik * 0.26).clamp(170.0, 240.0);
+        let kapi_y = (yukseklik * 0.20).clamp(150.0, 210.0);
         let ana_y = (ui.available_height() - kapi_y).max(340.0);
         // Kalan yüksekliği tamamen kayıt paneline ver: altta siyah boşluk kalmasın.
         let kapi_y = ui.available_height() - ana_y;
@@ -1809,10 +1852,10 @@ impl eframe::App for FhApp {
                 if dar {
                     ui.columns(2, |cols| {
                         Frame::new().fill(p.yuzey).stroke(kenar)
-                            .inner_margin(Margin::symmetric(12, 12))
+                            .inner_margin(Margin::symmetric(14, 14))
                             .show(&mut cols[0], |ui| self.mod_nav_panel(ui));
                         Frame::new().fill(p.arka).stroke(kenar)
-                            .inner_margin(Margin::symmetric(14, 12))
+                            .inner_margin(Margin::symmetric(16, 14))
                             .show(&mut cols[1], |ui| {
                                 theme::doku(ui, koyu);
                                 let ust_y = (ui.available_height() * 0.5).clamp(200.0, 330.0);
@@ -1828,15 +1871,15 @@ impl eframe::App for FhApp {
                 } else {
                     // Sabit oranlar: toplamları tam olarak ui.available_width().
                     let wt = ui.available_width();
-                    let wn = (wt * 0.24).clamp(200.0, 300.0);
-                    let wr = (wt * 0.34).clamp(300.0, 460.0);
+                    let wn = (wt * 0.19).clamp(210.0, 320.0);
+                    let wr = (wt * 0.36).clamp(360.0, 700.0);
                     let wm = (wt - wn - wr).max(240.0);
                     ui.horizontal(|ui| {
                         ui.allocate_ui_with_layout(
                             Vec2::new(wn, ana_y), egui::Layout::top_down(Align::Min),
                             |ui| {
                                 Frame::new().fill(p.yuzey).stroke(kenar)
-                                    .inner_margin(Margin::symmetric(12, 12))
+                                    .inner_margin(Margin::symmetric(14, 14))
                                     .show(ui, |ui| self.mod_nav_panel(ui));
                             },
                         );
@@ -1844,7 +1887,7 @@ impl eframe::App for FhApp {
                             Vec2::new(wm, ana_y), egui::Layout::top_down(Align::Min),
                             |ui| {
                                 Frame::new().fill(p.arka).stroke(kenar)
-                                    .inner_margin(Margin::symmetric(20, 16))
+                                    .inner_margin(Margin::symmetric(24, 20))
                                     .show(ui, |ui| {
                                         theme::doku(ui, koyu);
                                         egui::ScrollArea::vertical().show(ui, |ui| self.girdi_panel(ui));
@@ -1855,7 +1898,7 @@ impl eframe::App for FhApp {
                             Vec2::new(wr, ana_y), egui::Layout::top_down(Align::Min),
                             |ui| {
                                 Frame::new().fill(p.arka).stroke(kenar)
-                                    .inner_margin(Margin::symmetric(18, 14))
+                                    .inner_margin(Margin::symmetric(22, 18))
                                     .show(ui, |ui| {
                                         theme::doku(ui, koyu);
                                         egui::ScrollArea::vertical().show(ui, |ui| self.sonuc_panel(ui));
@@ -1874,7 +1917,7 @@ impl eframe::App for FhApp {
             egui::Layout::top_down(Align::Min),
             |ui| {
                 Frame::new().fill(p.yuzey).stroke(kenar)
-                    .inner_margin(Margin::symmetric(16, 10))
+                    .inner_margin(Margin::symmetric(20, 12))
                     .show(ui, |ui| self.kapi_panel(ui));
             },
         );

@@ -12,6 +12,27 @@ use serde_json::{Value, json};
 pub const SURUM: &str = env!("CARGO_PKG_VERSION");
 pub const GECMIS_SINIRI: usize = 100;
 
+/// Açılış penceresinin saf ayarları. `main.rs` bu değerleri `ViewportBuilder`'a
+/// uygular; testler aynı varsayılanları GUI gerektirmeden doğrulayabilir.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PencereAyarlari {
+    /// İlk açılışta pencere ekranı doldursun (küçük görünen pencere şikâyeti).
+    pub maksimum_acilis: bool,
+    /// Bozuk 14x14 kaydedilmiş boyutun sonraki açılışları gizlemesi engellenir.
+    pub persist_window: bool,
+    /// Maksimum açılış kapalıyken kullanılacak ölçü.
+    pub inner_size: [f32; 2],
+    /// Küçük ekranlarda taşmayı önleyen makul alt sınır.
+    pub min_inner_size: [f32; 2],
+}
+
+pub const PENCERE_AYARLARI: PencereAyarlari = PencereAyarlari {
+    maksimum_acilis: true,
+    persist_window: false,
+    inner_size: [1280.0, 740.0],
+    min_inner_size: [640.0, 480.0],
+};
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     /// "dark" | "light" | "system"
@@ -268,6 +289,7 @@ impl AppState {
             .get("ekstra")
             .and_then(|e| e.get("currency_symbol"))
             .and_then(Value::as_str)
+            .map(str::trim)
             .filter(|s| !s.is_empty() && s.chars().count() <= 4)
             .unwrap_or("₺")
             .to_string();
@@ -295,6 +317,16 @@ impl AppState {
         base.join("FinansalHesaplayici").join("veri.json")
     }
 
+    /// BOM'lu (`U+FEFF`) veya BOM'suz JSON metninden state üretir.
+    /// Saf fonksiyondur: dosya erişimi yoktur; `yukle()` bunu kullanır.
+    /// Bazı editörler/Windows araçları JSON'a BOM ekler; serde_json BOM'u
+    /// geçersiz bayt sayıp tüm dosyayı reddederdi (kullanıcı verisi kaybı).
+    pub fn metinden_yukle(metin: &str) -> Option<Self> {
+        let metin = metin.strip_prefix('\u{feff}').unwrap_or(metin);
+        let value = serde_json::from_str::<Value>(metin).ok()?;
+        Self::from_backup(&value)
+    }
+
     pub fn yukle() -> Self {
         let fallback = Self {
             settings: Settings::default(),
@@ -307,10 +339,7 @@ impl AppState {
         let Ok(metin) = std::fs::read_to_string(Self::dosya_yolu()) else {
             return fallback;
         };
-        let Ok(value) = serde_json::from_str::<Value>(&metin) else {
-            return fallback;
-        };
-        Self::from_backup(&value).unwrap_or(fallback)
+        Self::metinden_yukle(&metin).unwrap_or(fallback)
     }
 
     pub fn yedek_degeri(&self) -> Value {
@@ -630,5 +659,28 @@ mod tests {
         assert_eq!(satir_bicimi("Değişim %", "-96", 2, "₺", false), "%-96,00");
         assert_eq!(satir_bicimi("Kur (1 USD)", "40", 4, "₺", true), "40,0000 ₺");
         assert_eq!(satir_bicimi("Geçersiz", "abc", 2, "₺", true), "abc");
+    }
+
+    #[test]
+    fn metinden_yukle_bomlu_ve_bomsuz() {
+        let state = ornek_state();
+        let metin = serde_json::to_string(&state.yedek_degeri()).unwrap();
+        let bomsuz = AppState::metinden_yukle(&metin).unwrap();
+        let bomlu = AppState::metinden_yukle(&format!("\u{feff}{metin}")).unwrap();
+        assert_eq!(bomsuz.settings, state.settings);
+        assert_eq!(bomlu.settings, state.settings, "BOM'lu dosya da okunmalı");
+        assert_eq!(bomlu.history.len(), state.history.len());
+    }
+
+    #[test]
+    fn yedek_geri_yukleme_round_trip_bomlu() {
+        let state = ornek_state();
+        let metin = serde_json::to_string_pretty(&state.yedek_degeri()).unwrap();
+        let geri = AppState::metinden_yukle(&format!("\u{feff}{metin}")).unwrap();
+        assert_eq!(geri.settings, state.settings);
+        assert_eq!(geri.history, state.history);
+        assert_eq!(geri.donemler, state.donemler);
+        assert_eq!(geri.cariler, state.cariler);
+        assert_eq!(geri.active_cari, state.active_cari);
     }
 }

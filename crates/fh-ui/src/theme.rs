@@ -10,8 +10,8 @@
 //! Ayırıcılar 1px hairline, rakamlar sabit genişliklidir.
 
 use eframe::egui::{
-    self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Pos2, Rect, Stroke, Ui,
-    Visuals,
+    self, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Margin, Pos2, Rect, Stroke,
+    Ui, Vec2, Visuals,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -182,6 +182,28 @@ fn sistem_fontlari(ctx: &egui::Context) {
         }
     }
 
+    // Pencere kontrol glifleri (─ □ ❐ ×) için sembol yüzü. Ailenin SONUNA
+    // eklenir: Latin metinlerin mevcut yüzleri değişmez, yalnızca eksik
+    // glifler bu yüzden karşılanır.
+    for aday in ["C:/Windows/Fonts/seguisym.ttf", "C:/Windows/Fonts/segsym.ttf"] {
+        if let Ok(bayt) = std::fs::read(aday) {
+            fontlar
+                .font_data
+                .insert("Sembol".to_string(), std::sync::Arc::new(FontData::from_owned(bayt)));
+            fontlar
+                .families
+                .entry(FontFamily::Proportional)
+                .or_default()
+                .push("Sembol".to_string());
+            fontlar
+                .families
+                .entry(FontFamily::Monospace)
+                .or_default()
+                .push("Sembol".to_string());
+            break;
+        }
+    }
+
     ctx.set_fonts(fontlar);
 }
 
@@ -252,6 +274,16 @@ pub fn uygula(ctx: &egui::Context, tema: &str, olcek: f64, ilk: bool) {
     visuals.widgets.open.corner_radius = kose;
 
     ctx.set_visuals(visuals);
+
+    // Nefes alan düzen: iki tema aynı ölçüyü kullanır, yalnızca renk kimliği
+    // ayrılır. A−/A+ zoom ile bu ölçüler birlikte büyür/küçülür.
+    ctx.all_styles_mut(|style| {
+        style.spacing.item_spacing = Vec2::new(8.0, 6.0);
+        style.spacing.button_padding = Vec2::new(10.0, 4.0);
+        style.spacing.interact_size = Vec2::new(44.0, 26.0);
+        style.spacing.window_margin = Margin::same(10);
+    });
+
     ctx.set_zoom_factor(olcek as f32);
     if ilk {
         sistem_fontlari(ctx);
