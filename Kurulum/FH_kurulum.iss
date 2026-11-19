@@ -5,7 +5,7 @@
 
 #define MyAppName "Finansal Hesaplayici"
 #ifndef Surum
-  #define Surum "5.2.2"
+  #define Surum "5.2.3"
 #endif
 #define MyAppVersion Surum
 #define MyAppPublisher "Arda M. Ekiz"

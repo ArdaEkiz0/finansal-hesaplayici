@@ -14,6 +14,8 @@ fn main() -> eframe::Result<()> {
     // kullanıcı pencereyi geri restore ettiğinde (maksimum kapalıyken) kullanılır.
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Finansal Hesaplayıcı")
+        // OS başlık çubuğu kaldırılır: üst şeritteki ─ □ × tek kontrol seti olur.
+        .with_decorations(false)
         .with_min_inner_size(p.min_inner_size);
     viewport = if p.maksimum_acilis {
         viewport.with_maximized(true)

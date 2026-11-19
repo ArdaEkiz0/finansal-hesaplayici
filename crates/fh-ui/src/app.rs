@@ -614,6 +614,17 @@ impl FhApp {
             );
 
             ui.add_space(10.0);
+
+            // Başlıktaki boş alan pencereyi sürükler (OS çubuğu kapalı).
+            let surukle_genis = ui.available_width().min(140.0).max(12.0);
+            let surukle = ui.allocate_rect(
+                Rect::from_min_size(ui.cursor().min, Vec2::new(surukle_genis, 36.0)),
+                egui::Sense::drag(),
+            );
+            if surukle.drag_started() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+
             // Tek satır, sıralı yerleştirme: dar ekranda kısa etiketlere düşer,
             // hiçbir düğme kırpılmaz.
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1938,6 +1949,27 @@ impl eframe::App for FhApp {
                     });
                 });
         }
+
+        // OS çubuğu olmadığından sağ alt köşeden yeniden boyutlandırma.
+        let grip = ui.allocate_rect(
+            Rect::from_min_size(
+                ui.cursor().min + Vec2::new(ui.available_width() - 18.0, 0.0),
+                Vec2::new(18.0, 18.0),
+            ),
+            egui::Sense::drag(),
+        );
+        if grip.drag_started() {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::BeginResize(
+                egui::viewport::ResizeDirection::SouthEast,
+            ));
+        }
+        ui.painter().line_segment(
+            [
+                grip.rect.right_bottom() - Vec2::new(2.0, 14.0),
+                grip.rect.right_bottom() - Vec2::new(14.0, 2.0),
+            ],
+            Stroke::new(2.0, p.soluk),
+        );
 
         self.pencereleri_goster(&ctx);
     }
