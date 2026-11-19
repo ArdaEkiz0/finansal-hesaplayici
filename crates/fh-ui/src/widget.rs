@@ -31,8 +31,12 @@ use super::{FhApp, T_BODY, T_SMALL, birincil_dugme, hairline, ikincil_dugme};
 const COMPACT_SIZE: (f32, f32) = (220.0, 160.0);
 const WIDE_SIZE: (f32, f32) = (340.0, 430.0);
 
-/// Kaydedilmiş boyut geçerli aralıktaysa onu, değilse görünüme göre ölçüyü kullanır.
+/// Kompakt görünüm ALWAYS küçük kalır: kaydedilmiş büyük boyut "yoluma giriyor".
+/// Geniş görünümde kullanıcı boyutu serbestçe ayarlayabilir.
 pub(super) fn etkili_boyut(kompakt: bool, genislik: f32, yukseklik: f32) -> (f32, f32) {
+    if kompakt {
+        return COMPACT_SIZE;
+    }
     let (gmin, gmax) = WIDGET_GENISLIK_ARALIGI;
     let (ymin, ymax) = WIDGET_YUKSEKLIK_ARALIGI;
     if genislik.is_finite()
@@ -41,8 +45,6 @@ pub(super) fn etkili_boyut(kompakt: bool, genislik: f32, yukseklik: f32) -> (f32
         && (ymin..=ymax).contains(&yukseklik)
     {
         (genislik, yukseklik)
-    } else if kompakt {
-        COMPACT_SIZE
     } else {
         WIDE_SIZE
     }
@@ -242,21 +244,26 @@ impl FhApp {
             ui.horizontal(|ui| {
                 logo(ui, p);
                 ui.add_space(4.0);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(ui.available_width().min(120.0), 24.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(modes::mod_etiketi(&mod_id))
-                                    .size(T_BODY)
-                                    .color(p.metin)
-                                    .strong(),
-                            )
-                            .wrap_mode(TextWrapMode::Truncate),
-                        );
-                    },
-                );
+                if !kompakt {
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(ui.available_width().min(120.0), 24.0),
+                        Layout::left_to_right(Align::Center),
+                        |ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(modes::mod_etiketi(&mod_id))
+                                        .size(T_BODY)
+                                        .color(p.metin)
+                                        .strong(),
+                                )
+                                .wrap_mode(TextWrapMode::Truncate),
+                            );
+                        },
+                    );
+                } else {
+                    // Kompakt başlıkta metin yok: ikonlar çakışmaz.
+                    ui.add_space(2.0);
+                }
 
                 // Başlıktaki boş alan pencereyi sürükler (OS çubuğu kapalı).
                 let bosluk = (ui.available_width() - 172.0).max(8.0);
@@ -290,15 +297,23 @@ impl FhApp {
                     }
                     // Ana pencereyi küçült; widget viewport'u görünür kalır.
                     // Komut ana ctx'e gönderilir (widget ctx'i değil).
-                    let b = egui::Button::new(
-                        RichText::new("Sadece widget").size(10.0).color(p.ikinci).strong(),
-                    )
-                    .fill(p.yuksek)
-                    .stroke(theme::widget_kenar(koyu))
-                    .corner_radius(CornerRadius::same(5))
-                    .min_size(Vec2::new(70.0, 22.0));
-                    if ui.add(b).clicked() {
-                        main_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                    // Kompakt başlıkta geniş metin düğmesi yerine küçük "W" ikonu:
+                    // mod adıyla çakışmaz, pencereyi büyütmez.
+                    if kompakt {
+                        if ikon_dugme(ui, "W", p, koyu, false, false) {
+                            main_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                        }
+                    } else {
+                        let b = egui::Button::new(
+                            RichText::new("Sadece widget").size(10.0).color(p.ikinci).strong(),
+                        )
+                        .fill(p.yuksek)
+                        .stroke(theme::widget_kenar(koyu))
+                        .corner_radius(CornerRadius::same(5))
+                        .min_size(Vec2::new(70.0, 22.0));
+                        if ui.add(b).clicked() {
+                            main_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                        }
                     }
                 });
             });
@@ -849,7 +864,10 @@ mod tests {
 
     #[test]
     fn kaydedilmis_boyut_oncelikli() {
-        assert_eq!(etkili_boyut(true, 300.0, 200.0), (300.0, 200.0));
+        // Kompakt mod her zaman küçük kalır: eski kaydedilmiş büyük boyut
+        // widget'in ekranı işgal etmesine yol açıyordu.
+        assert_eq!(etkili_boyut(true, 300.0, 200.0), COMPACT_SIZE);
         assert_eq!(etkili_boyut(false, 119.0, 200.0), WIDE_SIZE);
+        assert_eq!(etkili_boyut(false, 300.0, 200.0), (300.0, 200.0));
     }
 }
