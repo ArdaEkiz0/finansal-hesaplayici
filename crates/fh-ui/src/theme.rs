@@ -115,6 +115,14 @@ pub fn widget_hover(koyu: bool) -> (Color32, Color32) {
     (p.birincil.gamma_multiply(0.18), p.birincil)
 }
 
+/// Tuş takımı için (hover, aktif) renk çifti. Hover genel widget hover
+/// dolgusuyla aynı mavi tonundan, aktif ise paletin mevcut cyan odak/aktif
+/// göstergesinden (`aksan`) gelir. Yeni renk kimliği eklenmez.
+pub fn tus_takimi_stili(koyu: bool) -> (Color32, Color32) {
+    let p = palet(koyu);
+    (p.birincil.gamma_multiply(0.18), p.aksan)
+}
+
 /// Ayrı widget viewport'u için çerçevesiz dolgu/stil yardımcısı.
 ///
 /// Ana pencere çerçevesinin aksine dış kenar, gölge veya ayrı bir renk kimliği

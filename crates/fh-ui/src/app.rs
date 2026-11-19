@@ -73,6 +73,10 @@ pub struct FhApp {
     pub widget_arama: String,
     /// Widget kopyalama bildiriminin zamanı.
     pub widget_kopyalandi: Option<Instant>,
+    /// Sayısal tuş takımının hedefi: 0 = ilk, 1 = ikinci metin alanı.
+    pub widget_alan: usize,
+    /// Kaydedilen widget konumu bu açılışta bir kez uygulandı mı?
+    pub widget_konum_uygulandi: bool,
     pub son_tema: String,
     pub son_olcek: f64,
     /// Kapı panelinde açık sekme: 0 geçmiş, 1 dönem, 2 takvim.
@@ -207,6 +211,8 @@ impl FhApp {
             kopyalandi: None,
             widget_arama: String::new(),
             widget_kopyalandi: None,
+            widget_alan: 0,
+            widget_konum_uygulandi: false,
             son_tema,
             son_olcek,
             kapi_sekmesi: 0,
@@ -1974,6 +1980,12 @@ impl eframe::App for FhApp {
         // minimize edilse de bu viewport açık kalır; yalnızca kalıcı `aktif`
         // durumu onu gösterir. `aktif=false` ise pencere bir sonraki karede
         // kapanır (CancelClose gönderilmez).
+        // Kapalıyken konum/alan bayraklarını sıfırla; bir sonraki açılışta
+        // kaydedilmiş konum yeniden uygulanır ve tuş takımı ilk alana döner.
+        if !self.state.widget.aktif {
+            self.widget_konum_uygulandi = false;
+            self.widget_alan = 0;
+        }
         if self.state.widget.aktif {
             let kompakt = self.state.widget.kompakt;
             let (genislik, yukseklik) = widget::etkili_boyut(
@@ -1995,7 +2007,7 @@ impl eframe::App for FhApp {
                     } else {
                         egui::WindowLevel::Normal
                     }),
-                |ui, _class| self.widget_viewport_ui(ui),
+                |ui, _class| self.widget_viewport_ui(ui, ctx.clone()),
             );
         }
     }

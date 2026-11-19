@@ -25,6 +25,7 @@ fn ornek_widget() -> WidgetAyarlari {
         genislik: 420.0,
         yukseklik: 360.0,
         ustte: false,
+        konum: Some([120.0, 90.0]),
     }
 }
 
@@ -366,4 +367,133 @@ fn komut_paleti_widget_girdileri_tekil_ve_aralanabilir() {
             assert_eq!(c.eylem, Eylem::Widget, "{} beklenmeyen widget eylemi", c.ad);
         }
     }
+}
+
+// ---- Yeni: widget konum kalıcılığı + tuş takımı stili ----
+
+#[test]
+fn konum_varsayilan_ve_eksik_alan_none() {
+    assert_eq!(WidgetAyarlari::default().konum, None);
+    assert_eq!(WidgetAyarlari::from_value(&json!({"aktif": true})).konum, None);
+    let mut yedek = state(WidgetAyarlari::default()).yedek_degeri();
+    yedek["widget"].as_object_mut().unwrap().remove("konum");
+    assert_eq!(AppState::from_backup(&yedek).unwrap().widget.konum, None);
+}
+
+#[test]
+fn konum_serde_anahtari_ve_geriye_donuk_uyumluluk() {
+    let v = serde_json::to_value(&ornek_widget()).unwrap();
+    assert_eq!(v["konum"], json!([120.0, 90.0]));
+    assert!(v.get("position").is_none());
+    // Eski yedeklerde "konum" yok: serde default ile None üretmeli.
+    let eski = json!({"aktif": true, "kompakt": true, "mod": "kdv",
+                      "genislik": 340.0, "yukseklik": 300.0, "ustte": true});
+    assert_eq!(serde_json::from_value::<WidgetAyarlari>(eski).unwrap().konum, None);
+}
+
+#[test]
+fn konum_yedek_round_trip_bomsuz() {
+    let w = ornek_widget();
+    let yedek = state(w.clone()).yedek_degeri();
+    assert_eq!(yedek["widget"]["konum"], json!([120.0, 90.0]));
+    let metin = serde_json::to_string(&yedek).unwrap();
+    assert!(!metin.starts_with('\u{feff}'));
+    let geri = AppState::metinden_yukle(&metin).unwrap();
+    assert_eq!(geri.widget, w);
+    assert_eq!(geri.widget.konum, Some([120.0, 90.0]));
+}
+
+#[test]
+fn konum_yedek_round_trip_bomlu() {
+    let w = ornek_widget();
+    let metin = serde_json::to_string_pretty(&state(w.clone()).yedek_degeri()).unwrap();
+    let geri = AppState::metinden_yukle(&format!("\u{feff}{metin}")).unwrap();
+    assert_eq!(geri.widget, w);
+    assert_eq!(geri.widget.konum, Some([120.0, 90.0]));
+}
+
+#[test]
+fn konum_eksik_ve_fazla_sayi_varsayilana_duser() {
+    for bozuk in [json!([]), json!([100.0]), json!([100.0, 200.0, 300.0])] {
+        assert_eq!(WidgetAyarlari::from_value(&json!({"konum": bozuk})).konum, None);
+    }
+    for bozuk in [json!("100,200"), json!(100), Value::Null] {
+        assert_eq!(WidgetAyarlari::from_value(&json!({"konum": bozuk})).konum, None);
+    }
+}
+
+#[test]
+fn konum_nan_ve_sonsuz_reddedilir() {
+    assert!(WidgetAyarlari::konum_gecerli([0.0, 0.0]));
+    assert!(!WidgetAyarlari::konum_gecerli([f32::NAN, 0.0]));
+    assert!(!WidgetAyarlari::konum_gecerli([0.0, f32::NAN]));
+    assert!(!WidgetAyarlari::konum_gecerli([f32::INFINITY, 0.0]));
+    assert!(!WidgetAyarlari::konum_gecerli([0.0, f32::NEG_INFINITY]));
+    // f64 → f32 taşması +sonsuz olur; from_value bunu None yapmalı.
+    assert_eq!(WidgetAyarlari::from_value(&json!({"konum": [1e40, 0.0]})).konum, None);
+}
+
+#[test]
+fn konum_aralik_sinirlari_ve_disi() {
+    let (lo, hi) = model::WIDGET_KONUM_ARALIGI;
+    assert_eq!((lo, hi), (-10000.0, 10000.0));
+    let oku = |v: Value| WidgetAyarlari::from_value(&json!({"konum": v})).konum;
+    assert_eq!(oku(json!([lo, hi])), Some([lo, hi]));
+    assert_eq!(oku(json!([lo, -lo])), Some([lo, -lo]));
+    assert_eq!(oku(json!([lo - 1.0, 0.0])), None);
+    assert_eq!(oku(json!([0.0, hi + 1.0])), None);
+}
+
+#[test]
+fn bozuk_konum_yedekten_okunurken_varsayilana_duser() {
+    let mut yedek = state(ornek_widget()).yedek_degeri();
+    yedek["widget"]["konum"] = json!([100.0]);
+    assert_eq!(AppState::from_backup(&yedek).unwrap().widget.konum, None);
+    yedek["widget"]["konum"] = json!([20000.0, 10.0]);
+    let w = AppState::from_backup(&yedek).unwrap().widget;
+    assert_eq!(w.konum, None);
+    // Diğer alanlar bozuk konumdan etkilenmez.
+    assert_eq!(w.r#mod, "stopaj");
+    assert_eq!(w.genislik, 420.0);
+}
+
+#[test]
+fn konum_eklenirken_mevcut_widget_alanlari_korunur() {
+    let w = ornek_widget();
+    let geri = AppState::from_backup(&state(w.clone()).yedek_degeri()).unwrap().widget;
+    assert_eq!(geri.aktif, w.aktif);
+    assert_eq!(geri.kompakt, w.kompakt);
+    assert_eq!(geri.r#mod, w.r#mod);
+    assert_eq!(geri.genislik, w.genislik);
+    assert_eq!(geri.yukseklik, w.yukseklik);
+    assert_eq!(geri.ustte, w.ustte);
+    assert_eq!(geri.konum, w.konum);
+    let karisik = WidgetAyarlari::from_value(&json!({
+        "aktif": true, "kompakt": false, "mod": "tevkifat", "genislik": 555.0,
+        "yukseklik": 444.0, "ustte": false, "konum": [-320.5, 275.25]
+    }));
+    assert_eq!(karisik.r#mod, "tevkifat");
+    assert_eq!(karisik.genislik, 555.0);
+    assert_eq!(karisik.yukseklik, 444.0);
+    assert!(karisik.aktif && !karisik.kompakt && !karisik.ustte);
+    assert_eq!(karisik.konum, Some([-320.5, 275.25]));
+}
+
+#[test]
+fn tus_takimi_stili_paletten_turetilir() {
+    for koyu in [true, false] {
+        let p = theme::palet(koyu);
+        let (hover, aktif) = theme::tus_takimi_stili(koyu);
+        assert_eq!(hover, p.birincil.gamma_multiply(0.18));
+        assert_eq!(aktif, p.aksan);
+        assert_ne!(hover, aktif, "hover/aktif ayrımı görülebilir olmalı");
+        assert_eq!(hover, theme::widget_hover(koyu).0);
+    }
+    let (hk, ak) = theme::tus_takimi_stili(true);
+    let (ha, aa) = theme::tus_takimi_stili(false);
+    assert_ne!(hk, ha);
+    assert_ne!(ak, aa);
+    // Palet kimliği değişmedi.
+    assert_eq!(theme::palet(true).birincil, eframe::egui::Color32::from_rgb(0x3b, 0x8d, 0xff));
+    assert_eq!(theme::palet(false).birincil, eframe::egui::Color32::from_rgb(0x25, 0x63, 0xeb));
 }

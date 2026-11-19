@@ -46,6 +46,10 @@ pub struct WidgetAyarlari {
     pub genislik: f32,
     pub yukseklik: f32,
     pub ustte: bool,
+    /// Ayrı widget viewport'unun saklanan mutlak konumu `[x, y]` (piksel).
+    /// `None` = henüz konumlanmadı; egui ilk açılışta kendi varsayımını kullanır.
+    #[serde(default)]
+    pub konum: Option<[f32; 2]>,
 }
 
 impl Default for WidgetAyarlari {
@@ -57,6 +61,7 @@ impl Default for WidgetAyarlari {
             genislik: 340.0,
             yukseklik: 300.0,
             ustte: true,
+            konum: None,
         }
     }
 }
@@ -69,8 +74,17 @@ pub const WIDGET_YUKSEKLIK_ARALIGI: (f32, f32) = (160.0, 900.0);
 pub const WIDGET_VIEWPORT_ID: &str = "fh-widget";
 /// Widget viewport'unun mutlak alt sınırı [genişlik, yükseklik] (piksel).
 pub const WIDGET_MIN_SIZE: [f32; 2] = [220.0, 120.0];
+/// Saklanabilir widget konumu için mutlak piksel aralığı; dışındaki değerler `None` olur.
+pub const WIDGET_KONUM_ARALIGI: (f32, f32) = (-10000.0, 10000.0);
 
 impl WidgetAyarlari {
+    /// Konum çiftinin saklanmaya uygunluğu: iki değer de finite ve
+    /// `WIDGET_KONUM_ARALIGI` içinde olmalı; aksi halde konum `None` kalır.
+    pub fn konum_gecerli([x, y]: [f32; 2]) -> bool {
+        let (lo, hi) = WIDGET_KONUM_ARALIGI;
+        x.is_finite() && y.is_finite() && x >= lo && x <= hi && y >= lo && y <= hi
+    }
+
     /// Yedek değerinden güvenli okuma. Nesne değilse tam varsayılan döner;
     /// alan alan tip/sınır kontrolü yapılır, bozuk alan varsayılana düşer.
     pub fn from_value(v: &Value) -> Self {
@@ -95,6 +109,15 @@ impl WidgetAyarlari {
                 .filter(|n| n.is_finite() && *n >= aralik.0 && *n <= aralik.1)
                 .unwrap_or(varsayilan)
         };
+        let konum = obj
+            .get("konum")
+            .and_then(Value::as_array)
+            .filter(|a| a.len() == 2)
+            .and_then(|a| {
+                let x = a[0].as_f64()? as f32;
+                let y = a[1].as_f64()? as f32;
+                Self::konum_gecerli([x, y]).then_some([x, y])
+            });
         Self {
             aktif: bool_alan("aktif", vars.aktif),
             kompakt: bool_alan("kompakt", vars.kompakt),
@@ -102,6 +125,7 @@ impl WidgetAyarlari {
             genislik: sayi("genislik", vars.genislik, WIDGET_GENISLIK_ARALIGI),
             yukseklik: sayi("yukseklik", vars.yukseklik, WIDGET_YUKSEKLIK_ARALIGI),
             ustte: bool_alan("ustte", vars.ustte),
+            konum,
         }
     }
 }
@@ -642,6 +666,7 @@ mod tests {
                 genislik: 420.0,
                 yukseklik: 360.0,
                 ustte: false,
+                konum: Some([150.0, 120.0]),
             },
         }
     }

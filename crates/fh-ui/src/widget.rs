@@ -11,15 +11,15 @@
 use std::time::Instant;
 
 use eframe::egui::{
-    self, Align, Align2, Color32, CornerRadius, FontId, Layout, Margin, Rect, RichText, Sense,
-    Stroke, TextWrapMode, Ui, Vec2,
+    self, Align, Align2, Color32, Context, CornerRadius, FontId, Layout, Margin, Pos2, Rect,
+    RichText, Sense, Stroke, TextWrapMode, Ui, Vec2,
 };
 use fh_core::HesapSonucu;
 
 use crate::commands::turkce_kucuk;
 use crate::model::{
-    HistEntry, InputState, Settings, WIDGET_GENISLIK_ARALIGI, WIDGET_YUKSEKLIK_ARALIGI,
-    gecmis_ekle, para_bicimi, satir_bicimi,
+    HistEntry, InputState, Settings, WidgetAyarlari, WIDGET_GENISLIK_ARALIGI,
+    WIDGET_YUKSEKLIK_ARALIGI, gecmis_ekle, para_bicimi, satir_bicimi,
 };
 use crate::modes::{self, FieldKind, MODLAR};
 use crate::theme::{self, Palet};
@@ -68,6 +68,36 @@ fn ikon_dugme(ui: &mut Ui, glif: &str, p: Palet, koyu: bool, aktif: bool, kapat:
         .corner_radius(CornerRadius::same(5))
         .min_size(Vec2::new(24.0, 22.0));
     ui.add(b).clicked()
+}
+
+/// Sayısal tuş takımının tek bir basışı. Karakter aktif alana eklenir;
+/// `Sil` son karakteri düşürür, `Temizle` alanı boşaltır.
+#[derive(Clone, Copy)]
+enum TusEylemi {
+    Karakter(char),
+    Sil,
+    Temizle,
+}
+
+/// Tuş takımı düğmesi: mevcut palet, 30px yükseklik, 6px köşe.
+/// Hover/focus'ta aksan çerçevesi çizilir (yeni görsel kimlik katmaz).
+fn tus_dugme(ui: &mut Ui, metin: &str, p: Palet, koyu: bool, genis: f32) -> bool {
+    let b = egui::Button::new(RichText::new(metin).size(15.0).color(p.metin).strong())
+        .fill(p.yuksek)
+        .stroke(theme::widget_kenar(koyu))
+        .corner_radius(CornerRadius::same(6))
+        .min_size(Vec2::new(genis, 30.0));
+    let resp = ui.add(b);
+    if resp.hovered() || resp.has_focus() {
+        let (_, aktif) = theme::tus_takimi_stili(koyu);
+        ui.painter().rect_stroke(
+            resp.rect,
+            CornerRadius::same(6),
+            Stroke::new(1.5, aktif),
+            egui::StrokeKind::Inside,
+        );
+    }
+    resp.clicked()
 }
 
 /// Onaylı paletten ₺ rozeti (döndürülmüş yazı veya yeni grafik yok).
@@ -126,9 +156,24 @@ fn sonuc_metni(mod_id: &str, r: &HesapSonucu, st: &Settings) -> String {
 impl FhApp {
     /// Widget içeriğini doğrudan (ayrı OS penceresi olan) viewport Ui'sine çizer.
     /// `app.rs::ui` yalnızca `state.widget.aktif` ise çağırır.
-    pub(crate) fn widget_viewport_ui(&mut self, ui: &mut Ui) {
+    pub(crate) fn widget_viewport_ui(&mut self, ui: &mut Ui, main_ctx: Context) {
         let koyu = theme::koyu_mu(&self.state.settings.theme);
         let p = theme::palet(koyu);
+
+        // Kaydedilmiş konumu ilk açılışta bir kez uygula. Bu karede
+        // `outer_rect` henüz eski konumu göstereceğinden konum kaydını atla.
+        let mut konum_uygulandi_bu_kare = false;
+        if !self.widget_konum_uygulandi {
+            self.widget_konum_uygulandi = true;
+            if let Some(konum) = self.state.widget.konum {
+                if WidgetAyarlari::konum_gecerli(konum) {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                        Pos2::new(konum[0], konum[1]),
+                    ));
+                    konum_uygulandi_bu_kare = true;
+                }
+            }
+        }
         let st: Settings = self.state.settings.clone();
         let mod_id = self.state.widget.r#mod.clone();
         let kompakt = self.state.widget.kompakt;
@@ -188,6 +233,8 @@ impl FhApp {
         let mut kaydet = false;
         let mut temizle = false;
         let mut geri_yukle: Option<(String, InputState)> = None;
+        let mut alan_odakta = false;
+        let mut tus_eylemleri: Vec<TusEylemi> = Vec::new();
 
         // Onaylı paletle çerçevesiz zemin dolgusu (ayrı viewport kimliği).
         theme::widget_viewport_frame(p).show(ui, |ui| {
@@ -212,7 +259,7 @@ impl FhApp {
                 );
 
                 // Başlıktaki boş alan pencereyi sürükler (OS çubuğu kapalı).
-                let bosluk = (ui.available_width() - 96.0).max(8.0);
+                let bosluk = (ui.available_width() - 172.0).max(8.0);
                 let surukle = ui.allocate_rect(
                     Rect::from_min_size(ui.cursor().min, Vec2::new(bosluk, 26.0)),
                     Sense::drag(),
@@ -240,6 +287,18 @@ impl FhApp {
                         self.state.widget.yukseklik = h;
                         boyut_sifirlandi = true;
                         self.state.kaydet();
+                    }
+                    // Ana pencereyi küçült; widget viewport'u görünür kalır.
+                    // Komut ana ctx'e gönderilir (widget ctx'i değil).
+                    let b = egui::Button::new(
+                        RichText::new("Sadece widget").size(10.0).color(p.ikinci).strong(),
+                    )
+                    .fill(p.yuksek)
+                    .stroke(theme::widget_kenar(koyu))
+                    .corner_radius(CornerRadius::same(5))
+                    .min_size(Vec2::new(70.0, 22.0));
+                    if ui.add(b).clicked() {
+                        main_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                     }
                 });
             });
@@ -359,17 +418,43 @@ impl FhApp {
                                     .filter(|f| f.tur == FieldKind::Metin)
                                     .take(2)
                                     .collect();
-                                for f in metin_alanlari {
+                                for (idx, f) in metin_alanlari.iter().enumerate() {
                                     ui.label(
                                         RichText::new(f.etiket).size(11.0).color(p.ikinci).strong(),
                                     );
+                                    let mut tiklandi = false;
+                                    let mut odakta = false;
+                                    let mut alan_rect = None;
                                     if let Some(e) = self.state.inputs.get_mut(&mod_id) {
                                         let t = egui::TextEdit::singleline(e.get_mut(f.alan))
                                             .hint_text(f.ipucu)
                                             .font(FontId::monospace(13.0));
-                                        ui.add_sized(Vec2::new(ui.available_width(), 28.0), t);
+                                        let resp = ui.add_sized(Vec2::new(ui.available_width(), 28.0), t);
+                                        tiklandi = resp.clicked() || resp.gained_focus();
+                                        odakta = resp.has_focus();
+                                        alan_rect = Some(resp.rect);
+                                    }
+                                    if tiklandi {
+                                        self.widget_alan = idx;
+                                    }
+                                    if odakta {
+                                        alan_odakta = true;
+                                    }
+                                    if idx == self.widget_alan {
+                                        if let Some(r) = alan_rect {
+                                            ui.painter().rect_stroke(
+                                                r.expand(1.0),
+                                                CornerRadius::same(5),
+                                                Stroke::new(1.0, p.aksan),
+                                                egui::StrokeKind::Inside,
+                                            );
+                                        }
                                     }
                                     ui.add_space(4.0);
+                                }
+                                // Enter: widget alanlarından biri odaktayken sonucu panoya kopyala.
+                                if alan_odakta && ui.ctx().input(|i| i.key_pressed(egui::Key::Enter)) {
+                                    kopyala = true;
                                 }
                                 for f in def
                                     .alanlar
@@ -425,6 +510,36 @@ impl FhApp {
                                         );
                                     });
                                 }
+                            }
+
+                            // ---- sayısal tuş takımı: aktif metin alanına yazar ----
+                            ui.add_space(4.0);
+                            ui.label(
+                                RichText::new("TUŞ TAKIMI").size(10.0).color(p.aksan).strong(),
+                            );
+                            let tus_toplam = ui.available_width();
+                            let tus_g3 = (tus_toplam - 12.0) / 3.0;
+                            let tus_g4 = (tus_toplam - 18.0) / 4.0;
+                            let satirlar: [&[&str]; 4] = [
+                                &["7", "8", "9"],
+                                &["4", "5", "6"],
+                                &["1", "2", "3"],
+                                &["0", ",", "⌫", "C"],
+                            ];
+                            for satir in satirlar {
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 6.0;
+                                    let genis = if satir.len() == 4 { tus_g4 } else { tus_g3 };
+                                    for tus in satir {
+                                        if tus_dugme(ui, tus, p, koyu, genis) {
+                                            tus_eylemleri.push(match *tus {
+                                                "⌫" => TusEylemi::Sil,
+                                                "C" => TusEylemi::Temizle,
+                                                c => TusEylemi::Karakter(c.chars().next().unwrap_or('0')),
+                                            });
+                                        }
+                                    }
+                                });
                             }
                             ui.add_space(5.0);
                             hairline(ui, p.kenar);
@@ -603,6 +718,35 @@ impl FhApp {
             );
         });
 
+        // Tuş takımı basışlarını aktif metin alanına uygula. Alan sırası
+        // çizimdeki `metin_alanlari` ile aynı; mod değişirse indeks sınırlanır.
+        if !tus_eylemleri.is_empty() {
+            if let Some(def) = modes::mod_def(&mod_id) {
+                let metin_alanlari: Vec<_> = def
+                    .alanlar
+                    .iter()
+                    .filter(|f| f.tur == FieldKind::Metin)
+                    .take(2)
+                    .collect();
+                if !metin_alanlari.is_empty() {
+                    let idx = self.widget_alan.min(metin_alanlari.len() - 1);
+                    let alan = metin_alanlari[idx].alan;
+                    if let Some(e) = self.state.inputs.get_mut(&mod_id) {
+                        let s = e.get_mut(alan);
+                        for tus in tus_eylemleri {
+                            match tus {
+                                TusEylemi::Karakter(c) => s.push(c),
+                                TusEylemi::Sil => {
+                                    s.pop();
+                                }
+                                TusEylemi::Temizle => s.clear(),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // ---- eylemler: doğrudan kalıcı duruma uygulanır ----
         if let Some(m) = yeni_mod {
             self.state.widget.r#mod = m.clone();
@@ -667,6 +811,26 @@ impl FhApp {
                     self.state.widget.genislik = sz.x.clamp(gmin, gmax);
                     self.state.widget.yukseklik = sz.y.clamp(ymin, ymax);
                     self.state.kaydet();
+                }
+            }
+        }
+
+        // Konum kalıcılığı: dış dikdörtgenin min köşesini kaydet. Komut
+        // gönderilmediği ve repaint istenmediği için döngü oluşmaz.
+        if !konum_uygulandi_bu_kare {
+            let yeni_konum = ui
+                .ctx()
+                .input(|i| i.viewport().outer_rect.map(|r| [r.min.x, r.min.y]));
+            if let Some(konum) = yeni_konum {
+                if WidgetAyarlari::konum_gecerli(konum) {
+                    let degisti = self.state.widget.konum.map_or(true, |onceki| {
+                        (onceki[0] - konum[0]).abs() > 1.0
+                            || (onceki[1] - konum[1]).abs() > 1.0
+                    });
+                    if degisti {
+                        self.state.widget.konum = Some(konum);
+                        self.state.kaydet();
+                    }
                 }
             }
         }
