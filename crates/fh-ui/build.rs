@@ -2,6 +2,7 @@
 //! `rc.exe` Windows SDK ile gelir; CI (windows-latest) ve yerel makinede mevcut.
 
 fn main() {
+    println!("cargo:rerun-if-changed=../../build/icon.ico");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }

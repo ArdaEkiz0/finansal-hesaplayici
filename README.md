@@ -1,6 +1,8 @@
 # Finansal Hesaplayıcı — Rust
 
-Türk mali hesaplamaları için sıfırdan Rust ile yazılmış, çevrimdışı çalışan masaüstü uygulaması (v5.0.0).
+![Finansal Hesaplayıcı logosu](build/logo.png)
+
+Türk mali hesaplamaları için sıfırdan Rust ile yazılmış, çevrimdışı çalışan masaüstü uygulaması.
 Electron sürümünün (v4.8.0) tüm özelliklerini karşılar: 15 hesaplama modu, dönem arşivi, cari kartlar,
 vergi takvimi, e-fatura CSV içe aktarma, güvenli yedek al/yükle, tema ve yazı ölçeği, komut paleti,
 güncelleyici (SHA-256 doğrulamalı) ve tek tık kurulum.
