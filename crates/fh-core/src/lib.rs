@@ -52,10 +52,11 @@ pub struct HesapSonucu {
     pub detay: String,
 }
 
-/// 15 moddan birini çalıştırır. Bilinmeyen mod veya bozuk girdi → `None`.
+/// 20 moddan birini çalıştırır. Bilinmeyen mod veya bozuk girdi → `None`.
 ///
 /// Desteklenen modlar: `kdv, stopaj, tevkifat, fiyat, kdvCompare, margin,
-/// markup, discount, percent, compound, gecikme, amortisman, doviz, batch, donem`.
+/// markup, discount, percent, compound, gecikme, amortisman, doviz, batch,
+/// donem, damga, emlak, kredi, basitFaiz, netBrut`.
 pub fn hesapla(mod_: &str, girdi: &Girdi) -> Option<HesapSonucu> {
     modes::run(mod_, girdi)
 }

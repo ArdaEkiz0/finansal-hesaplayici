@@ -1,4 +1,4 @@
-//! 15 modun alan tanımları ve `Girdi` eşlemesi. Formül içermez; hesaplama
+//! 20 modun alan tanımları ve `Girdi` eşlemesi. Formül içermez; hesaplama
 //! yalnızca `fh_core::hesapla` tarafından yapılır.
 
 use fh_core::Girdi;
@@ -40,6 +40,11 @@ pub const SEC_PAY: &[(&str, &str)] = &[
     ("1/10", "1"), ("2/10", "2"), ("3/10", "3"), ("4/10", "4"), ("5/10", "5"),
     ("6/10", "6"), ("7/10", "7"), ("8/10", "8"), ("9/10", "9"), ("10/10", "10"),
 ];
+
+/// Mod navigasyon panelindeki dikey kaydırma alanının asgari görünür yüksekliği (px).
+/// `app.rs::mod_nav_panel` bu değerle `ScrollArea::max_height` sınırını ayarlar;
+/// sınır konulmazsa fare tekerleğiyle kaydırma çalışmaz.
+pub const MOD_NAV_MIN_HEIGHT: f32 = 120.0;
 
 pub const MODLAR: &[ModeDef] = &[
     ModeDef {
@@ -163,6 +168,44 @@ pub const MODLAR: &[ModeDef] = &[
             FieldDef { alan: Alan::Ek1, etiket: "Önceki devreden", ipucu: "Örn. 1.500", tur: FieldKind::Metin, secenekler: &[] },
         ],
     },
+    // --- v5.6: 5 yeni mod (fh-core formülleriyle eşleşir) ---
+    ModeDef {
+        id: "damga", etiket: "Damga Vergisi", grup: "KDV & Stopaj",
+        alanlar: &[
+            FieldDef { alan: Alan::Birinci, etiket: "Matrah", ipucu: "Örn. 10.000", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef { alan: Alan::Oran, etiket: "Oran (‰)", ipucu: "Örn. 0,948", tur: FieldKind::Metin, secenekler: &[] },
+        ],
+    },
+    ModeDef {
+        id: "emlak", etiket: "Emlak Vergisi", grup: "KDV & Stopaj",
+        alanlar: &[
+            FieldDef { alan: Alan::Birinci, etiket: "Matrah", ipucu: "Örn. 100.000", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef { alan: Alan::Oran, etiket: "Oran (‰)", ipucu: "Örn. 1", tur: FieldKind::Metin, secenekler: &[] },
+        ],
+    },
+    ModeDef {
+        id: "kredi", etiket: "Kredi Taksiti", grup: "Faiz & Kredi",
+        alanlar: &[
+            FieldDef { alan: Alan::Birinci, etiket: "Anapara", ipucu: "Örn. 100.000", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef { alan: Alan::Oran, etiket: "Aylık faiz (%)", ipucu: "Örn. 3,5", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef { alan: Alan::Ay, etiket: "Vade (ay)", ipucu: "1–360", tur: FieldKind::Metin, secenekler: &[] },
+        ],
+    },
+    ModeDef {
+        id: "basitFaiz", etiket: "Basit Faiz", grup: "Faiz & Kredi",
+        alanlar: &[
+            FieldDef { alan: Alan::Birinci, etiket: "Anapara", ipucu: "Örn. 10.000", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef { alan: Alan::Oran, etiket: "Yıllık faiz (%)", ipucu: "Örn. 45", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef { alan: Alan::Gun, etiket: "Gün sayısı", ipucu: "1–3650", tur: FieldKind::Metin, secenekler: &[] },
+        ],
+    },
+    ModeDef {
+        id: "netBrut", etiket: "Net → Brüt", grup: "Kâr & Yüzde",
+        alanlar: &[
+            FieldDef { alan: Alan::Birinci, etiket: "Net tutar", ipucu: "Örn. 8.500", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef { alan: Alan::Oran, etiket: "Stopaj oranı (%)", ipucu: "Örn. 15", tur: FieldKind::Metin, secenekler: &[] },
+        ],
+    },
 ];
 
 pub fn mod_def(id: &str) -> Option<&'static ModeDef> {
@@ -273,10 +316,11 @@ mod tests {
     }
 
     #[test]
-    fn onbes_mod_tanli() {
-        assert_eq!(MODLAR.len(), 15);
+    fn yirmi_mod_tanli() {
+        assert_eq!(MODLAR.len(), 20);
         for id in ["kdv", "stopaj", "tevkifat", "fiyat", "kdvCompare", "margin", "markup",
-                   "discount", "percent", "compound", "gecikme", "amortisman", "doviz", "batch", "donem"] {
+                   "discount", "percent", "compound", "gecikme", "amortisman", "doviz", "batch", "donem",
+                   "damga", "emlak", "kredi", "basitFaiz", "netBrut"] {
             assert!(mod_def(id).is_some(), "{id}");
         }
     }
@@ -346,10 +390,11 @@ mod tests {
     fn mod_etiketi_ve_gruplar() {
         assert_eq!(mod_etiketi("kdvCompare"), "KDV Karşılaştırma");
         assert_eq!(mod_etiketi("yok"), "Bilinmeyen mod");
-        assert_eq!(gruplar().len(), 4);
+        assert_eq!(gruplar().len(), 5);
+        assert!(gruplar().contains(&"Faiz & Kredi"));
     }
 
-    // --- Alan eşlemesi → fh_core uçtan uca (15 modun tamamı) ---
+    // --- Alan eşlemesi → fh_core uçtan uca (20 modun tamamı) ---
 
     fn ui(mod_id: &str, birinci: &str, ikinci: &str, oran: &str) -> InputState {
         let mut i = InputState {
@@ -507,6 +552,7 @@ mod tests {
             i.ek2 = "12".into(); // compound bileşme sıklığı
             i.gun = "30".into();
             i.yil = "5".into();
+            i.ay = "12".into(); // kredi vadesi
             assert!(
                 fh_core::hesapla(m.id, &build_girdi(m.id, &i)).is_some(),
                 "{} varsayılan alanlarla çalışmalı",

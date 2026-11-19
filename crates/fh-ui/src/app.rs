@@ -3,7 +3,7 @@
 //!
 //! Görsel düzen: premium finans konsolu.
 //!   üstte kimlik + araç şeridi (kırpılmaz),
-//!   solda 15 modun gruplu dikey navigasyonu,
+//!   solda 20 modun gruplu dikey navigasyonu,
 //!   ortada geniş girdi çalışma alanı,
 //!   sağda büyük sonuç paneli,
 //!   altta gerçek içerikle dolu kayıt/takvim paneli.
@@ -75,6 +75,8 @@ pub struct FhApp {
     pub widget_kopyalandi: Option<Instant>,
     /// Sayısal tuş takımının hedefi: 0 = ilk, 1 = ikinci metin alanı.
     pub widget_alan: usize,
+    /// Mod listesinde ↑/↓ ile kaydırılan ilk mod indeksi.
+    pub mod_kaydirma: usize,
     /// Kaydedilen widget konumu bu açılışta bir kez uygulandı mı?
     pub widget_konum_uygulandi: bool,
     pub son_tema: String,
@@ -212,6 +214,7 @@ impl FhApp {
             widget_arama: String::new(),
             widget_kopyalandi: None,
             widget_alan: 0,
+            mod_kaydirma: 0,
             widget_konum_uygulandi: false,
             son_tema,
             son_olcek,
@@ -727,7 +730,7 @@ impl FhApp {
     // ---------- sol: dikey mod navigasyonu ----------
 
     /// Sol raydaki tek mod satırı. Aktif satırda cyan şerit + mavi zemin görünür.
-    fn mod_satiri(&mut self, ui: &mut Ui, m: &ModeDef, p: Palet) {
+    fn mod_satiri(&mut self, ui: &mut Ui, m: &ModeDef, p: Palet) -> egui::Response {
         let aktif = self.mode == m.id;
         let mut b = egui::Button::new(
             RichText::new(m.etiket)
@@ -756,13 +759,22 @@ impl FhApp {
             let e = self.girdi();
             modes::varsayilanlari_doldur(e, m.id);
         }
+        resp
     }
 
-    fn mod_nav_panel(&mut self, ui: &mut Ui) {
+    fn mod_nav_panel(&mut self, ui: &mut Ui, panel_yukseklik: f32) {
         let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
 
         ui.horizontal(|ui| {
             ui.label(RichText::new("MODÜLLER").size(T_SMALL).color(p.soluk).strong());
+            ui.add_space(4.0);
+            if ui.button("↑").clicked() {
+                self.mod_kaydirma = (self.mod_kaydirma.saturating_sub(4)) as usize;
+            }
+            if ui.button("↓").clicked() {
+                self.mod_kaydirma = (self.mod_kaydirma + 4).min(MODLAR.len().saturating_sub(8)) as usize;
+            }
+            ui.label(RichText::new(format!("{}/{}", self.mod_kaydirma / 4 + 1, (MODLAR.len() + 3) / 4)).size(T_BUILD).color(p.soluk).monospace());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(
                     RichText::new(format!("{} mod", MODLAR.len()))
@@ -776,41 +788,54 @@ impl FhApp {
         hairline(ui, p.kenar);
         ui.add_space(6.0);
 
-        egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
-            for grup in modes::gruplar() {
-                let sayi = MODLAR.iter().filter(|m| m.grup == grup).count();
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(grup.to_uppercase())
-                            .size(T_BUILD)
-                            .color(p.aksan)
-                            .strong(),
-                    );
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        // Panel yüksekliği doğrudan geçilir: `ui.available_height()` bu iç
+        // Ui'de Frame/allocate nedeniyle gerçek panel yüksekliğini vermiyordu,
+        // bu yüzden ScrollArea sınırsız büyüyüp fare tekerleği çalışmıyordu.
+        let kaydirma_y = (panel_yukseklik - 74.0).max(modes::MOD_NAV_MIN_HEIGHT);
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .max_height(kaydirma_y)
+            .show(ui, |ui| {
+                let hedef = self.mod_kaydirma;
+                let mut sira = 0usize;
+                for grup in modes::gruplar() {
+                    let sayi = MODLAR.iter().filter(|m| m.grup == grup).count();
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
                         ui.label(
-                            RichText::new(sayi.to_string())
+                            RichText::new(grup.to_uppercase())
                                 .size(T_BUILD)
-                                .color(p.soluk)
-                                .monospace(),
+                                .color(p.aksan)
+                                .strong(),
                         );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.label(
+                                RichText::new(sayi.to_string())
+                                    .size(T_BUILD)
+                                    .color(p.soluk)
+                                    .monospace(),
+                            );
+                        });
                     });
-                });
-                ui.add_space(2.0);
-                for m in MODLAR.iter().filter(|m| m.grup == grup) {
-                    self.mod_satiri(ui, m, p);
-                    ui.add_space(3.0);
+                    ui.add_space(2.0);
+                    for m in MODLAR.iter().filter(|m| m.grup == grup) {
+                        let resp = self.mod_satiri(ui, m, p);
+                        if sira == hedef {
+                            resp.scroll_to_me(None);
+                        }
+                        sira += 1;
+                        ui.add_space(3.0);
+                    }
                 }
-            }
-            ui.add_space(10.0);
-            hairline(ui, p.kenar);
-            ui.add_space(8.0);
-            ui.label(
-                RichText::new("Tüm hesaplamalar yerel ve çevrimdışıdır.")
-                    .size(T_BUILD)
-                    .color(p.soluk),
-            );
-        });
+                ui.add_space(10.0);
+                hairline(ui, p.kenar);
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new("Tüm hesaplamalar yerel ve çevrimdışıdır.")
+                        .size(T_BUILD)
+                        .color(p.soluk),
+                );
+            });
     }
 
     // ---------- merkez: girdi çalışma alanı ----------
@@ -1867,7 +1892,7 @@ impl eframe::App for FhApp {
                     ui.columns(2, |cols| {
                         Frame::new().fill(p.yuzey).stroke(kenar)
                             .inner_margin(Margin::symmetric(14, 14))
-                            .show(&mut cols[0], |ui| self.mod_nav_panel(ui));
+                            .show(&mut cols[0], |ui| self.mod_nav_panel(ui, ana_y));
                         Frame::new().fill(p.arka).stroke(kenar)
                             .inner_margin(Margin::symmetric(16, 14))
                             .show(&mut cols[1], |ui| {
@@ -1894,7 +1919,7 @@ impl eframe::App for FhApp {
                             |ui| {
                                 Frame::new().fill(p.yuzey).stroke(kenar)
                                     .inner_margin(Margin::symmetric(14, 14))
-                                    .show(ui, |ui| self.mod_nav_panel(ui));
+                                    .show(ui, |ui| self.mod_nav_panel(ui, ana_y));
                             },
                         );
                         ui.allocate_ui_with_layout(

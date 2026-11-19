@@ -1,6 +1,11 @@
-//! 15 modun formülleri. Tüm para matematiği `Decimal`, yuvarlama HALF_UP.
+//! 20 modun formülleri. Tüm para matematiği `Decimal`, yuvarlama HALF_UP.
 //!
 //! Girdi eşlemesi (bkz. CONTRACT.md):
+//! - damga: birinci=matrah, oran=binde (‰) → matrah*oran/1000
+//! - emlak: birinci=matrah, oran=binde (‰) → matrah*oran/1000
+//! - kredi: birinci=anapara, oran=aylık %, ay=vade(1..360) → annüite taksiti
+//! - basitFaiz: birinci=anapara, oran=yıllık %, gun=1..3650 → P*oran/100*gun/365
+//! - netBrut: birinci=net, oran=stopaj %(0..100) → net/(1-oran/100)
 //! - kdv: birinci=tutar, oran=KDV %, ikinci/ek="dahil"/"extract" bayrağı
 //! - stopaj: birinci=brüt, oran=stopaj %, ek[0]="netten"/"reverse"
 //! - tevkifat: birinci=matrah, oran=KDV %, tevkifat_pay=pay/10, tevkifat_kod=kod
@@ -130,8 +135,169 @@ pub(super) fn run(mod_: &str, g: &Girdi) -> Option<HesapSonucu> {
         "doviz" => doviz(g),
         "batch" => batch(g),
         "donem" => donem(g),
+        "damga" => damga(g),
+        "emlak" => emlak(g),
+        "kredi" => kredi(g),
+        "basitfaiz" => basit_faiz(g),
+        "netbrut" => net_brut(g),
         _ => None,
     }
+}
+
+/// Damga vergisi: matrah × oran(‰) / 1000.
+fn damga(g: &Girdi) -> Option<HesapSonucu> {
+    let matrah = amount(&g.birinci)?;
+    let oran = rate(g)?;
+    let vergi = dp2(matrah.checked_mul(oran)?.checked_div(dec(1000))?);
+    Some(out(
+        vergi,
+        None,
+        vec![
+            row("Damga vergisi", vergi),
+            row("Matrah", matrah),
+        ],
+        format!(
+            "Damga vergisi — {}‰ × {} • Vergi {}",
+            machine(oran),
+            format_tr(matrah, 2),
+            format_tr(vergi, 2)
+        ),
+    ))
+}
+
+/// Emlak vergisi: matrah × oran(‰) / 1000.
+fn emlak(g: &Girdi) -> Option<HesapSonucu> {
+    let matrah = amount(&g.birinci)?;
+    let oran = rate(g)?;
+    let vergi = dp2(matrah.checked_mul(oran)?.checked_div(dec(1000))?);
+    Some(out(
+        vergi,
+        None,
+        vec![
+            row("Emlak vergisi", vergi),
+            row("Matrah", matrah),
+        ],
+        format!(
+            "Emlak vergisi — {}‰ × {} • Vergi {}",
+            machine(oran),
+            format_tr(matrah, 2),
+            format_tr(vergi, 2)
+        ),
+    ))
+}
+
+/// Kredi: aylık taksit = P·r·(1+r)^n / ((1+r)^n − 1); r==0 ise P/n.
+/// r = aylık faiz/100, n = vade (ay, 1..360).
+fn kredi(g: &Girdi) -> Option<HesapSonucu> {
+    let principal = amount(&g.birinci)?;
+    let oran = rate(g)?;
+    let n = g.ay;
+    if !(1..=360).contains(&n) {
+        return None;
+    }
+    let n_dec = dec(n as i64);
+    let r = oran.checked_div(dec(100))?;
+    // r negatif olamaz; (1+r) <= 0 ise üs/ bölme tanımsız.
+    if r < Decimal::ZERO {
+        return None;
+    }
+    let taksit = if r.is_zero() {
+        dp2(principal.checked_div(n_dec)?)
+    } else {
+        let bir_art_r = Decimal::ONE.checked_add(r)?;
+        let us = power(bir_art_r, n_dec)?;
+        let payda = us.checked_sub(Decimal::ONE)?;
+        if payda.is_zero() {
+            return None;
+        }
+        let raw = principal
+            .checked_mul(r)?
+            .checked_mul(us)?
+            .checked_div(payda)?;
+        dp2(raw)
+    };
+    let toplam = dp2(taksit.checked_mul(n_dec)?);
+    let faiz = dp2(toplam.checked_sub(principal)?);
+    Some(out(
+        taksit,
+        Some(toplam),
+        vec![
+            row("Aylık taksit", taksit),
+            row("Toplam ödeme", toplam),
+            row("Toplam faiz", faiz),
+            row("Anapara", principal),
+        ],
+        format!(
+            "Kredi — {} ay, aylık %{} • Taksit {}",
+            n,
+            machine(oran),
+            format_tr(taksit, 2)
+        ),
+    ))
+}
+
+/// Basit faiz: faiz = P × yıllık%/100 × gün/365; gün 1..3650.
+fn basit_faiz(g: &Girdi) -> Option<HesapSonucu> {
+    let principal = amount(&g.birinci)?;
+    let oran = rate(g)?;
+    let gun = g.gun;
+    if !(1..=3650).contains(&gun) {
+        return None;
+    }
+    let gun_dec = dec(gun as i64);
+    let faiz = dp2(
+        principal
+            .checked_mul(oran)?
+            .checked_div(dec(100))?
+            .checked_mul(gun_dec)?
+            .checked_div(dec(365))?,
+    );
+    let toplam = dp2(principal.checked_add(faiz)?);
+    Some(out(
+        faiz,
+        Some(toplam),
+        vec![
+            row("Faiz tutarı", faiz),
+            row("Anapara", principal),
+            row("Toplam", toplam),
+        ],
+        format!(
+            "Basit faiz — yıllık %{}, {} gün • Faiz {}",
+            machine(oran),
+            gun,
+            format_tr(faiz, 2)
+        ),
+    ))
+}
+
+/// Netten brüte: brüt = net / (1 − stopaj%/100); 0 <= oran < 100.
+fn net_brut(g: &Girdi) -> Option<HesapSonucu> {
+    let net = amount(&g.birinci)?;
+    let oran = rate(g)?;
+    if oran < Decimal::ZERO || oran >= dec(100) {
+        return None;
+    }
+    let divisor = Decimal::ONE.checked_sub(oran.checked_div(dec(100))?)?;
+    if divisor.is_zero() {
+        return None;
+    }
+    let brut = dp2(net.checked_div(divisor)?);
+    let stopaj = dp2(brut.checked_sub(net)?);
+    Some(out(
+        brut,
+        Some(stopaj),
+        vec![
+            row("Brüt tutar", brut),
+            row("Stopaj", stopaj),
+            row("Net (girdiğiniz)", net),
+        ],
+        format!(
+            "Netten Brüt — %{} Stopaj • Brüt {} • Stopaj {}",
+            machine(oran),
+            format_tr(brut, 2),
+            format_tr(stopaj, 2)
+        ),
+    ))
 }
 
 fn kdv(g: &Girdi) -> Option<HesapSonucu> {

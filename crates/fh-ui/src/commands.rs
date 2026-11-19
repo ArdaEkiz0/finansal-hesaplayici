@@ -39,6 +39,9 @@ pub fn komutlar() -> Vec<Komut> {
         k("percent", "Yüzde"), k("compound", "Bileşik faiz"), k("gecikme", "Gecikme faizi"),
         k("amortisman", "Amortisman"), k("doviz", "Döviz"), k("batch", "Toplu"),
         k("donem", "Dönem KDV"),
+        k("damga", "Damga vergisi"), k("emlak", "Emlak vergisi"),
+        k("kredi", "Kredi taksiti"), k("basitFaiz", "Basit faiz"),
+        k("netBrut", "Net → brüt"),
         Komut { ad: "Koyu temaya geç".into(), kategori: "Görünüm", eylem: Eylem::Tema("dark") },
         Komut { ad: "Açık temaya geç".into(), kategori: "Görünüm", eylem: Eylem::Tema("light") },
         Komut { ad: "Sistem temasına geç".into(), kategori: "Görünüm", eylem: Eylem::Tema("system") },
@@ -153,14 +156,14 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(mod_komutlari.len(), 15);
+        assert_eq!(mod_komutlari.len(), 20);
         for id in mod_komutlari {
             assert!(mod_def(id).is_some(), "komut geçersiz mod id'si: {id}");
         }
     }
 
     #[test]
-    fn onbes_modun_hepsinin_komutu_var() {
+    fn yirmi_modun_hepsinin_komutu_var() {
         use crate::modes::MODLAR;
         let l = komutlar();
         for m in MODLAR {
