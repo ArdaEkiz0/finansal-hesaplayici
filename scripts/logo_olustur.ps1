@@ -48,8 +48,6 @@ function New-IconBitmap([int]$s, [bool]$basit) {
         $g.DrawString($lira, $yazi, $beyaz, (New-Object System.Drawing.RectangleF(0, 0, $s, $s)), $bicim)
     }
     else {
-        $parlak = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(210, 34, 211, 238), [Math]::Max(1, [int][Math]::Round(3 * $k)))
-        $g.DrawArc($parlak, $r.Left + 6 * $k, $r.Top + 6 * $k, ($N - 24) * $k, ($N - 24) * $k, 200, 82)
         $izgara = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(170, 34, 211, 238), [Math]::Max(1, [int][Math]::Round(5 * $k)))
         foreach ($y in @(348, 384, 420)) {
             $x2 = 356
