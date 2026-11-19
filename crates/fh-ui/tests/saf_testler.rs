@@ -43,7 +43,16 @@ fn ornek() -> AppState {
 fn surum_etiketi_workspace_ile_ayni() {
     // Tek sürüm kaynağı: Cargo workspace (Kurulum/CI ile aynı değer).
     assert_eq!(SURUM, env!("CARGO_PKG_VERSION"));
-    assert_eq!(SURUM, "5.2.1");
+    // İkinci kontrol: kök Cargo.toml'daki workspace sürümüyle aynı olmalı
+    // (sabit sürüm yazmak bir sonraki yayında testi kırıyor).
+    let kok = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+    let metin = std::fs::read_to_string(kok).expect("kök Cargo.toml okunamadı");
+    let workspace_surum = metin
+        .lines()
+        .find(|l| l.trim_start().starts_with("version = "))
+        .and_then(|l| l.split('"').nth(1))
+        .expect("workspace sürümü bulunamadı");
+    assert_eq!(SURUM, workspace_surum);
 }
 
 #[test]
