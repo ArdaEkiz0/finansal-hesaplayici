@@ -254,7 +254,11 @@ impl FhApp {
     }
 
     /// Arka plan thread'lerinin sonuçlarını arayüz bildirimine çevirir.
-    fn guncelleme_durumunu_kontrol(&mut self) {
+    /// Kurulum başarıyla hazırlandıysa uygulamayı kapatır; geri kalan işi
+    /// `fh-updater`ın yazdığı köprü dosyası yapar (sessiz kurulum + yeniden
+    /// başlatma). Windows'ta çalışan exe'nin üzerine yazılamadığı için
+    /// kapanış zorunludur.
+    fn guncelleme_durumunu_kontrol(&mut self, ctx: &Context) {
         let yeni_surum = if self.guncelleme_bildirildi {
             false
         } else {
@@ -262,7 +266,7 @@ impl FhApp {
         };
         if yeni_surum {
             self.guncelleme_bildirildi = true;
-            self.bildir("Yeni sürüm mevcut — üst panelden güncelleyebilirsiniz");
+            self.bildir("Yeni sürüm mevcut — üst panelden 'İndir ve kur' yapabilirsiniz");
         }
 
         let indirme = if self.indirme_bildirildi {
@@ -274,7 +278,8 @@ impl FhApp {
             self.indirme_bildirildi = true;
             self.indiriliyor = false;
             if basari {
-                self.bildir("Güncelleme indirildi; kurulum için hazır");
+                self.bildir("Güncelleme kuruluyor; uygulama yeniden başlatılacak…");
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             } else {
                 self.bildir("Güncelleme indirilemedi (ağ veya doğrulama)");
             }
@@ -737,7 +742,7 @@ impl FhApp {
                 );
                 if self.indiriliyor {
                     ui.add_enabled(false, egui::Button::new("İndiriliyor…"));
-                } else if ui.add(birincil_dugme("Güncelle", p)).clicked() {
+                } else if ui.add(birincil_dugme("İndir ve kur", p)).clicked() {
                     self.guncelleme_baslat();
                 }
             });
@@ -1875,7 +1880,7 @@ impl eframe::App for FhApp {
         self.kisayollar(&ctx);
         self.tema_guncelle(&ctx);
         self.hesapla();
-        self.guncelleme_durumunu_kontrol();
+        self.guncelleme_durumunu_kontrol(&ctx);
         let koyu = theme::koyu_mu(&self.state.settings.theme);
         let p = theme::palet(koyu);
         let genis = ctx.content_rect().width();

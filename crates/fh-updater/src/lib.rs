@@ -19,6 +19,10 @@ const USER_AGENT: &str = "FinansalHesaplaci-UpdateChecker";
 const IZINLI_HOSTLAR: [&str; 2] = ["github.com", "objects.githubusercontent.com"];
 
 /// Bir güncellemeyi tanımlayan, API'den çıkarılan bilgiler.
+///
+/// `url`/`sha`/`sha_url` `update.zip` içindir (bilgi amaçlı korunur).
+/// Gerçek kurulum `-kurulum.exe` varlığından yapılır; doğrulanamazsa
+/// güncelleme hiç sunulmaz (fail-closed).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Guncelleme {
     pub version: String,
@@ -26,6 +30,8 @@ pub struct Guncelleme {
     pub sha: String,
     pub sha_url: String,
     pub notes: String,
+    pub kurulum_url: String,
+    pub kurulum_sha: String,
 }
 
 /// Kısa zaman aşımlı, yeniden kullanılabilir HTTP istemcisi.
@@ -119,21 +125,6 @@ pub fn sha_dogrula(data: &[u8], beklenen: &str) -> bool {
     sabit_zamanli_esit(gercek.as_slice(), &beklenen_bytes)
 }
 
-/// `.sha256` urlsinden ilk 64 haneli hex değeri okur (fail-closed).
-fn ozet_url(agent: &ureq::Agent, url: &str) -> Option<String> {
-    let yanit = agent.get(url).set("User-Agent", USER_AGENT).call().ok()?;
-    let mut buf = Vec::new();
-    yanit.into_reader().read_to_end(&mut buf).ok()?;
-    let metin = String::from_utf8_lossy(&buf);
-    let tok = metin.split_whitespace().next()?.trim().to_ascii_lowercase();
-    let tok = tok.strip_prefix("sha256:").unwrap_or(&tok);
-    if tok.len() == 64 && tok.bytes().all(|b| b.is_ascii_hexdigit()) {
-        Some(tok.to_string())
-    } else {
-        None
-    }
-}
-
 /// GitHub releases API'sine bakıp mevcut sürümden yeni bir sürüm var mı
 /// kontrol eder. Ağ hatası, hatalı JSON, doğrulanamayan güncelleme veya
 /// izinli olmayan URL durumlarında `None` döner — asla panic üretmez.
@@ -157,6 +148,9 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
     let mut sha = String::new();
     let mut sha_url = String::new();
 
+    let mut kurulum_url = String::new();
+    let mut kurulum_sha = String::new();
+
     for asset in assets {
         let name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let download_url = asset
@@ -164,16 +158,22 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         let ad = name.to_ascii_lowercase();
+        let ozet = asset.get("digest").and_then(|v| v.as_str()).unwrap_or("");
+        let ozet = ozet
+            .strip_prefix("sha256:")
+            .unwrap_or(ozet)
+            .trim()
+            .to_ascii_lowercase();
+
         if ad.ends_with(".zip") && url.is_empty() {
             url = download_url.to_string();
-            let raw = asset.get("digest").and_then(|v| v.as_str()).unwrap_or("");
-            sha = raw
-                .strip_prefix("sha256:")
-                .unwrap_or(raw)
-                .trim()
-                .to_ascii_lowercase();
+            sha = ozet.clone();
         } else if ad.ends_with(".sha256") && sha_url.is_empty() {
             sha_url = download_url.to_string();
+        } else if ad.ends_with("-kurulum.exe") && kurulum_url.is_empty() {
+            // Gerçek güncelleme varlığı: NSIS/Inno kurulumu.
+            kurulum_url = download_url.to_string();
+            kurulum_sha = ozet;
         }
     }
 
@@ -187,6 +187,14 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
     if sha.is_empty() && sha_url.is_empty() {
         return None;
     }
+    // Kurulum exe'si ve GitHub digest'i zorunlu. Biri eksikse "Güncelle"
+    // düğmesi gösterilmez — kullanıcıyı çalışmayacak bir işleme yönlendirme.
+    if kurulum_url.is_empty()
+        || kurulum_sha.is_empty()
+        || !host_izinlimi(&kurulum_url)
+    {
+        return None;
+    }
 
     Some(Guncelleme {
         version,
@@ -198,19 +206,51 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
+        kurulum_url,
+        kurulum_sha,
     })
 }
 
-/// Güncellemeyi indirir, özetini doğrular ve geçerliyse geçici dosyaya yazar.
-/// Yalnızca izinli hostlara `https` ile bağlanır; herhangi bir hata `false`
-/// döndürür (panic yok). Özet doğrulanamadan dosya diske yazılmaz.
+/// Çalışan exe'nin dizini: kurulum klasörü veya portable klasörü.
+fn hedef_dizin() -> Option<std::path::PathBuf> {
+    std::env::current_exe().ok()?.parent().map(|p| p.to_path_buf())
+}
+
+/// Köprü batch dosyasının içeriği. Windows'ta çalışan exe'nin üzerine
+/// yazılamadığı için kurulum ayrı bir süreçte yapılır: beklenen PID kapanır,
+/// sessiz kurulum çalışır, uygulama yeniden başlatılır ve izler silinir.
+///
+/// Yalnızca sayısal PID ve `%~dp0` kullanılır — kullanıcı girdisi veya
+/// Türkçe karakterli yol doğrudan dosyaya yazılmaz, cmd kendi yolunu genişletir.
+fn kopru_icerigi(pid: u32) -> String {
+    format!(
+        "@echo off\r\n\
+         ping -n 3 127.0.0.1 >nul\r\n\
+         taskkill /F /PID {pid} >nul 2>&1\r\n\
+         start /wait \"\" \"%~dp0fh-kurulum.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES\r\n\
+         del \"%~dp0fh-kurulum.exe\" >nul 2>&1\r\n\
+         start \"\" \"%~dp0Finansal Hesaplayici.exe\"\r\n\
+         del \"%~f0\"\r\n"
+    )
+}
+
+/// Güncellemeyi indirir, SHA-256 ile doğrular ve kurulumu başlatır.
+///
+/// Kurulum exe'si yalnızca izinli hostlardan `https` ile indirilir; özet
+/// GitHub API `digest` alanından gelir ve doğrulanmadan hiçbir dosya yazılmaz.
+/// Köprü dosyaları çalışan exe'nin dizinine yazılır; başarı `true` döner ve
+/// arayan taraf uygulamayı kapatır (köprü yeniden başlatır).
 pub fn indir_ve_kur(g: &Guncelleme) -> bool {
-    if !host_izinlimi(&g.url) {
+    if !host_izinlimi(&g.kurulum_url) {
+        return false;
+    }
+    let beklenen = g.kurulum_sha.trim().to_ascii_lowercase();
+    if ozet_coz(&beklenen).is_none() {
         return false;
     }
 
     let istemci = agent();
-    let yanit = match istemci.get(&g.url).call() {
+    let yanit = match istemci.get(&g.kurulum_url).call() {
         Ok(r) => r,
         Err(_) => return false,
     };
@@ -218,28 +258,30 @@ pub fn indir_ve_kur(g: &Guncelleme) -> bool {
     if yanit.into_reader().read_to_end(&mut veri).is_err() {
         return false;
     }
-
-    let beklenen = if !g.sha.trim().is_empty() {
-        g.sha.trim().to_ascii_lowercase()
-    } else if !g.sha_url.trim().is_empty() {
-        if !host_izinlimi(&g.sha_url) {
-            return false;
-        }
-        match ozet_url(&istemci, &g.sha_url) {
-            Some(s) => s,
-            None => return false,
-        }
-    } else {
-        // Fail closed.
-        return false;
-    };
-
     if !sha_dogrula(&veri, &beklenen) {
         return false;
     }
 
-    let hedef = std::env::temp_dir().join("fh-update.zip");
-    std::fs::write(hedef, &veri).is_ok()
+    let Some(hedef) = hedef_dizin() else {
+        return false;
+    };
+    let kurulum = hedef.join("fh-kurulum.exe");
+    let kopru = hedef.join("fh-guncelle.cmd");
+
+    if std::fs::write(&kurulum, &veri).is_err() {
+        return false;
+    }
+    if std::fs::write(&kopru, kopru_icerigi(std::process::id())).is_err() {
+        let _ = std::fs::remove_file(&kurulum);
+        return false;
+    }
+
+    // Görünmez bir cmd penceresinde, ana süreçten bağımsız başlat.
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", "/MIN"])
+        .arg(&kopru)
+        .spawn()
+        .is_ok()
 }
 
 #[cfg(test)]
@@ -341,5 +383,46 @@ mod tests {
         assert_eq!(surum_karsilastir("5.0.0", "5.0.0"), Ordering::Equal);
         assert_eq!(surum_karsilastir("v5.0.0", "5.0.0"), Ordering::Equal);
         assert_eq!(surum_karsilastir("5.0.0", "5.0.1"), Ordering::Less);
+    }
+
+    #[test]
+    fn kopru_pid_ve_kurulumu_icerir() {
+        let icerik = kopru_icerigi(4242);
+        assert!(icerik.contains("taskkill /F /PID 4242"));
+        assert!(icerik.contains("fh-kurulum.exe"));
+        assert!(icerik.contains("/VERYSILENT"));
+        assert!(icerik.contains("/NORESTART"));
+        assert!(icerik.contains("%~dp0Finansal Hesaplayici.exe"));
+    }
+
+    #[test]
+    fn kopru_sabit_veya_kullanicidan_gelen_yol_icerir() {
+        let icerik = kopru_icerigi(7);
+        // Köprü kendi dizinini `%~dp0` ile çözer; sabit sürücü/yol yok.
+        assert!(!icerik.contains("C:\\"));
+        assert!(!icerik.contains("%TEMP%"));
+        assert!(!icerik.contains("AppData"));
+        assert!(icerik.contains("%~dp0"));
+    }
+
+    #[test]
+    fn kopru_sadece_ascii() {
+        // cmd dosyası UTF-8 yazılır; Türkçe karakter olsaydı bozulurdu.
+        assert!(kopru_icerigi(1).is_ascii());
+    }
+
+    #[test]
+    fn hedef_dizin_mevcut() {
+        let d = hedef_dizin().expect("current_exe dizini");
+        assert!(d.is_absolute());
+        assert!(d.ends_with("deps") || d.ends_with("release") || d.ends_with("debug"));
+    }
+
+    #[test]
+    fn ozet_coz_digest_bicimleri() {
+        assert!(ozet_coz(ABC_SHA).is_some());
+        assert!(ozet_coz(&format!("sha256:{ABC_SHA}")).is_some());
+        assert!(ozet_coz(&format!("{ABC_SHA}  update.zip")).is_some());
+        assert!(ozet_coz("kisa").is_none());
     }
 }
