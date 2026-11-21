@@ -316,10 +316,10 @@ impl FhApp {
     }
 
     /// Arka plan thread'lerinin sonuçlarını arayüz bildirimine çevirir.
-    /// Kurulum başarıyla hazırlandıysa uygulamayı kapatır; geri kalan işi
-    /// `fh-updater`ın yazdığı köprü dosyası yapar (sessiz kurulum + yeniden
-    /// başlatma). Windows'ta çalışan exe'nin üzerine yazılamadığı için
-    /// kapanış zorunludur.
+    /// Exe-değiştirme köprüsü başlatıldıysa uygulamayı kapatır; geri kalanı
+    /// görünmez cmd yapar (taskkill + move /Y + yeniden başlatma). Windows'ta
+    /// çalışan exe'nin üzerine yazılamadığı için kapanış zorunludur.
+    /// Yerine koyma başarısızsa installer'a dönülmez; `%TEMP%` dosyası açılır.
     fn guncelleme_durumunu_kontrol(&mut self, ctx: &Context) {
         let yeni_surum = self.guncelleme.lock().map(|k| k.is_some()).unwrap_or(false);
         let indirme = self.indirme_durumu.lock().ok().and_then(|k| *k);
@@ -337,13 +337,27 @@ impl FhApp {
             GuncellemeKarari::IndirmeBasarili => {
                 self.indirme_bildirildi = true;
                 self.indiriliyor = false;
-                self.bildir("Güncelleme kuruluyor; uygulama yeniden başlatılacak…");
+                self.bildir("Güncelleme uygulanıyor; uygulama yeniden başlatılacak…");
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
             GuncellemeKarari::IndirmeBasarisiz => {
                 self.indirme_bildirildi = true;
                 self.indiriliyor = false;
-                self.bildir("Güncelleme indirilemedi — ayrıntı: %TEMP%\\fh-guncelle.log");
+                // Installer fallback YOK (konsol penceresi geri gelirdi).
+                // Yeni exe indirildi ama üzerine yazılamadıysa kullanıcıya
+                // elle açmayı öner; dosya %TEMP%'de hazır.
+                let yeni = fh_updater::yeni_exe_yolu();
+                if yeni.is_file()
+                    && std::process::Command::new(&yeni).spawn().is_ok()
+                {
+                    self.bildir(
+                        "Yeni sürüm indirildi — lütfen mevcut pencereyi kapatın.",
+                    );
+                } else {
+                    self.bildir(
+                        "Güncelleme indirilemedi — ayrıntı: %TEMP%\\fh-guncelle.log",
+                    );
+                }
             }
             GuncellemeKarari::Yok => {}
         }

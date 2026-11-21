@@ -38,10 +38,12 @@ Her sürüm dört varlıkla yayınlanır: `kurulum.exe`, `portable.exe`, `update
 İndirme: `https://github.com/ArdaEkiz0/finansal-hesaplayici/releases/latest`
 
 Uygulama açılışta arka planda GitHub releases'e bakar. Yeni sürüm varsa üst panelde uyarı ve
-**İndir ve kur** düğmesi çıkar; kurulum exe'si indirilip GitHub API `digest` değeriyle (SHA-256)
-doğrulanır, yalnızca izinli hostlara HTTPS ile bağlanılır, uygulama kapanıp sessiz kurulumu izleyen
-köprü yeniden başlatır. Güncelleme kontrolünü Ayarlar → Hakkında'dan kapatabilirsin; kapalıyken
-hiç ağ isteği yapılmaz. Portable sürüm otomatik güncellenemez — kurulum exe'sini indirmen gerekir.
+**İndir ve kur** düğmesi çıkar; `update.zip` indirilip GitHub API `digest` değeriyle (SHA-256)
+doğrulanır, içindeki exe çıkarılıp görünmez bir köprüyle çalışan exe'nin üzerine yazılır ve
+uygulama yeniden başlatılır. Uygulama içi güncelleme **installer çalıştırmaz** — Inno'nun
+`unins000.exe` ikilisi konsol penceresi açıyordu. Kurulum exe'si yalnızca site'den ilk kurulum içindir.
+Güncelleme kontrolünü Ayarlar → Hakkında'dan kapatabilirsin; kapalıyken hiç ağ isteği yapılmaz.
+Kayıt Defteri'ndeki "Kaldır / Güvenli Kaldır" kaydı bir güncelleme sürümü geriden izleyebilir (kabul).
 
 ## Tasarım kuralları
 

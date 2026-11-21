@@ -32,9 +32,9 @@ const MAX_INDIRME: u64 = 64 * 1024 * 1024;
 
 /// Bir güncellemeyi tanımlayan, API'den çıkarılan bilgiler.
 ///
-/// `url`/`sha`/`sha_url` `update.zip` içindir (bilgi amaçlı korunur).
-/// Gerçek kurulum `-kurulum.exe` varlığından yapılır; doğrulanamazsa
-/// güncelleme hiç sunulmaz (fail-closed).
+/// Tek güncelleme yolu `update.zip`'tir: indir, SHA-256 doğrula, içindeki
+/// exe'yi çıkar ve çalışan exe'nin üzerine köprüyle yaz. Installer çalıştırılmaz
+/// (Inno'nun `unins000.exe` konsol penceresi açıyordu).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Guncelleme {
     pub version: String,
@@ -42,8 +42,6 @@ pub struct Guncelleme {
     pub sha: String,
     pub sha_url: String,
     pub notes: String,
-    pub kurulum_url: String,
-    pub kurulum_sha: String,
 }
 
 /// Kısa zaman aşımlı, yeniden kullanılabilir HTTP istemcisi.
@@ -197,7 +195,6 @@ fn guncelleme_cikar(json: &serde_json::Value, surum: &str) -> Option<Guncelleme>
     let assets = json.get("assets")?.as_array()?;
     let zip_varlik = tek_varlik(assets, |ad| ad.ends_with(".zip"))?;
     let sha_varlik = tek_varlik(assets, |ad| ad.ends_with(".sha256"));
-    let kurulum_varlik = tek_varlik(assets, |ad| ad.ends_with("-kurulum.exe"))?;
 
     let alan = |v: &serde_json::Value, anahtar: &str| -> String {
         v.get(anahtar)
@@ -221,8 +218,6 @@ fn guncelleme_cikar(json: &serde_json::Value, surum: &str) -> Option<Guncelleme>
     let sha_url = sha_varlik
         .map(|v| alan(v, "browser_download_url"))
         .unwrap_or_default();
-    let kurulum_url = alan(kurulum_varlik, "browser_download_url");
-    let kurulum_sha = ozet(kurulum_varlik);
 
     if url.is_empty() || !host_izinlimi(&url) {
         return None;
@@ -234,12 +229,7 @@ fn guncelleme_cikar(json: &serde_json::Value, surum: &str) -> Option<Guncelleme>
     if sha.is_empty() && sha_url.is_empty() {
         return None;
     }
-    // Kurulum exe'si ve GitHub digest'i zorunlu. Biri eksikse "Güncelle"
-    // düğmesi gösterilmez — kullanıcıyı çalışmayacak bir işleme yönlendirme.
-    if kurulum_url.is_empty() || kurulum_sha.is_empty() || !host_izinlimi(&kurulum_url) {
-        return None;
-    }
-    if ozet_coz(&kurulum_sha).is_none() {
+    if !sha.is_empty() && ozet_coz(&sha).is_none() {
         return None;
     }
 
@@ -253,8 +243,6 @@ fn guncelleme_cikar(json: &serde_json::Value, surum: &str) -> Option<Guncelleme>
             .and_then(serde_json::Value::as_str)
             .unwrap_or("")
             .to_string(),
-        kurulum_url,
-        kurulum_sha,
     })
 }
 
@@ -266,37 +254,18 @@ fn hedef_dizin() -> Option<std::path::PathBuf> {
         .map(|p| p.to_path_buf())
 }
 
-/// Köprü batch dosyasının içeriği. Windows'ta çalışan exe'nin üzerine
-/// yazılamadığı için kurulum ayrı bir süreçte yapılır: beklenen PID kapanır,
-/// sessiz kurulum çalışır, uygulama yeniden başlatılır ve izler silinir.
+/// Tek güncelleme köprüsü: çalışan exe kapanınca indirilen yeni exe eski
+/// dosyanın üzerine `move /Y` ile yazılır ve aynı adla yeniden başlatılır.
+/// Kurulum/installer kullanılmaz — `unins000.exe` konsol-subsystem olduğu için
+/// sessiz kurulum bile siyah pencere açıyordu. Ad yalnızca doğrulanmış ASCII
+/// karakterlerinden gelir (bkz. `guvenli_exe_adi`).
 ///
-/// Yalnızca sayısal PID ve `%~dp0` kullanılır — kullanıcı girdisi veya
-/// Türkçe karakterli yol doğrudan dosyaya yazılmaz, cmd kendi yolunu genişletir.
-fn kopru_icerigi(pid: u32) -> String {
+/// `pub` olması izole köprü provasında gerçek içeriğin kullanılması içindir.
+pub fn kopru_guncelleme_icerigi(pid: u32, exe_adi: &str) -> String {
     let log = "%TEMP%\\fh-guncelle.log";
     format!(
         "@echo off\r\n\
-         >>\"{log}\" echo === KURULUM BASLADI ===\r\n\
-         ping -n 3 127.0.0.1 >nul\r\n\
-         taskkill /PID {pid} >nul 2>&1\r\n\
-         >>\"{log}\" echo UYGULAMA_KAPATILDI\r\n\
-         \"%~dp0fh-kurulum.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES\r\n\
-         >>\"{log}\" echo KURULUM_ERRORLEVEL=%errorlevel%\r\n\
-         del \"%~dp0fh-kurulum.exe\" >nul 2>&1\r\n\
-         start \"\" \"%~dp0Finansal Hesaplayici.exe\"\r\n\
-         >>\"{log}\" echo YENIDEN_BASLATILDI\r\n\
-         del \"%~f0\"\r\n"
-    )
-}
-
-/// Portable köprüsü: çalışan exe kapanınca indirilen yeni exe eski dosyanın
-/// üzerine `move /Y` ile yazılır ve aynı adla yeniden başlatılır. Ad yalnızca
-/// doğrulanmış ASCII karakterlerden gelir (bkz. `guvenli_exe_adi`).
-fn kopru_portable_icerigi(pid: u32, exe_adi: &str) -> String {
-    let log = "%TEMP%\\fh-guncelle.log";
-    format!(
-        "@echo off\r\n\
-         >>\"{log}\" echo === PORTABLE BASLADI ===\r\n\
+         >>\"{log}\" echo === GUNCELLEME BASLADI ===\r\n\
          ping -n 3 127.0.0.1 >nul\r\n\
          taskkill /PID {pid} >nul 2>&1\r\n\
          >>\"{log}\" echo UYGULAMA_KAPATILDI\r\n\
@@ -304,7 +273,7 @@ fn kopru_portable_icerigi(pid: u32, exe_adi: &str) -> String {
          >>\"{log}\" echo MOVE_ERRORLEVEL=%errorlevel%\r\n\
          start \"\" \"%~dp0{exe_adi}\"\r\n\
          >>\"{log}\" echo YENIDEN_BASLATILDI\r\n\
-         del \"%~f0\"\r\n"
+         del \"%~f0\" & exit /b\r\n"
     )
 }
 
@@ -369,94 +338,71 @@ fn indir_dogrula(istemci: &ureq::Agent, url: &str, beklenen: &str) -> Option<Vec
     Some(veri)
 }
 
-/// Portable kurulum mu? (exe adı `portable` içeriyorsa)
-///
-/// Portable modda `indir_ve_kur` `update.zip`'ten exe çıkarır ve mevcut exe'nin
-/// üzerine yazar (ayrı köprü). Kurulum modundan farklı akış kullanılır.
-pub fn portable_mi() -> bool {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| {
-            p.file_name()
-                .map(|n| n.to_string_lossy().to_ascii_lowercase())
-        })
-        .is_some_and(|ad| ad.contains("portable"))
+/// İndirilen yeni exe'nin geçici konumu. Köprü `move /Y` başarısız olursa
+/// uygulama bu dosyayı açar ve kullanıcıya mevcut pencereyi kapatmasını söyler.
+/// Installer'a asla başvurulmaz (konsol penceresi geri gelirdi).
+pub fn yeni_exe_yolu() -> std::path::PathBuf {
+    std::env::temp_dir().join("fh-yeni.exe")
 }
 
-/// Güncellemeyi indirir, SHA-256 ile doğrular ve değiştirmede köprüyü başlatır.
+/// Güncellemeyi indirir, SHA-256 ile doğrular ve exe-değiştirme köprüsünü başlatır.
 ///
-/// * Kurulum modunda `kurulum.exe` indirilir, doğrulanır ve sessiz kurulum
-///   köprüsü çalıştırılır.
-/// * Portable modunda `update.zip` indirilir, doğrulanır, içindeki exe
-///   güvenli şekilde çıkarılır ve köprü mevcut exe'nin üzerine yazar.
+/// Tek yol: `update.zip` → doğrulama → `zipden_exe_cikar` → `%TEMP%\\fh-yeni.exe`
+/// → hedef dizine `fh-yeni.exe` kopyası → görünmez köprü (`taskkill` + `move /Y`
+/// + yeniden başlat). Kurulum/installer çalıştırılmaz.
 ///
-/// Her iki yolda da yalnızca izinli hostlara HTTPS, son URL kontrolü ve 64 MiB
-/// sınırı vardır. Köprü adımları `%TEMP%\fh-guncelle.log`'a yazılır.
+/// `false` dönerse `%TEMP%\\fh-yeni.exe` mevcutsa indirme başarılı ama yerine
+/// koyma başarısız demektir; arayan taraf dosyayı açıp kullanıcıyı bilgilendirir.
 pub fn indir_ve_kur(g: &Guncelleme) -> bool {
-    let istemci = agent();
-    let portable = portable_mi();
+    let yeni = yeni_exe_yolu();
+    // Önceki başarılı bir güncellemeden kalan dosya yanlışlıkla "yeni sürüm"
+    // olarak açılmasın.
+    let _ = std::fs::remove_file(&yeni);
 
-    let (veri, gecici_adi, kopru_metni) = if portable {
-        // update.zip digest'i tüm içeriği kapsar; exe ayrıca zip-slip'e karşı
-        // `zipden_exe_cikar` ile denetlenir.
-        let beklenen = g.sha.trim().to_ascii_lowercase();
-        let Some(zip_veri) = indir_dogrula(&istemci, &g.url, &beklenen) else {
-            return false;
-        };
-        let Some(exe_veri) = zipden_exe_cikar(&zip_veri) else {
-            return false;
-        };
-        let Some(mevcut) = std::env::current_exe().ok() else {
-            return false;
-        };
-        let Some(ad) = mevcut
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-        else {
-            return false;
-        };
-        if !guvenli_exe_adi(&ad) {
-            return false;
-        }
-        (
-            exe_veri,
-            "fh-yeni.exe".to_string(),
-            kopru_portable_icerigi(std::process::id(), &ad),
-        )
-    } else {
-        let beklenen = g.kurulum_sha.trim().to_ascii_lowercase();
-        let Some(veri) = indir_dogrula(&istemci, &g.kurulum_url, &beklenen) else {
-            return false;
-        };
-        (
-            veri,
-            "fh-kurulum.exe".to_string(),
-            kopru_icerigi(std::process::id()),
-        )
+    let beklenen = g.sha.trim().to_ascii_lowercase();
+    let Some(zip_veri) = indir_dogrula(&agent(), &g.url, &beklenen) else {
+        return false;
     };
+    let Some(exe_veri) = zipden_exe_cikar(&zip_veri) else {
+        return false;
+    };
+    let Some(mevcut) = std::env::current_exe().ok() else {
+        return false;
+    };
+    let Some(ad) = mevcut.file_name().map(|n| n.to_string_lossy().to_string()) else {
+        return false;
+    };
+    if !guvenli_exe_adi(&ad) {
+        return false;
+    }
+
+    // Yeni exe önce %TEMP%'e yazılır — fallback için korunur.
+    if std::fs::write(&yeni, &exe_veri).is_err() {
+        return false;
+    }
 
     let Some(hedef) = hedef_dizin() else {
         return false;
     };
-    let gecici = hedef.join(&gecici_adi);
+    let gecici = hedef.join("fh-yeni.exe");
     let kopru = hedef.join("fh-guncelle.cmd");
-
-    if std::fs::write(&gecici, &veri).is_err() {
-        return false;
+    if std::fs::copy(&yeni, &gecici).is_err() {
+        return false; // %TEMP% korunur → elle açma fallback'i
     }
-    if std::fs::write(&kopru, kopru_metni).is_err() {
+    if std::fs::write(&kopru, kopru_guncelleme_icerigi(std::process::id(), &ad)).is_err() {
         let _ = std::fs::remove_file(&gecici);
         return false;
     }
 
-    // Köprüyü GÖRÜNMEZ başlat: Windows 11'de `start /MIN` Windows Terminal
-    // sekmesine dönüşüp siyah pencere açıyordu. CREATE_NO_WINDOW (0x08000000)
-    // ile cmd doğrudan, konsol penceresi olmadan spawn edilir. `start` ara
-    // komutu kaldırıldı — spawn edilen süreç zaten ana süreçten bağımsız.
+    // CREATE_NO_WINDOW: konsol penceresi açılmaz (Windows Terminal / MIN hatası).
     let mut komut = std::process::Command::new("cmd");
     komut.arg("/C").arg(&kopru);
+    // Köprü kendi dosyasını silerken cmd'nin "batch file cannot be found"
+    // uyarısı ana sürecin konsoluna sızmasın; tüm tanılama zaten log dosyasında.
+    komut.stdout(std::process::Stdio::null());
+    komut.stderr(std::process::Stdio::null());
     #[cfg(windows)]
-    komut.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    komut.creation_flags(0x0800_0000);
     let baslatildi = komut.spawn().is_ok();
     if !baslatildi {
         let _ = std::fs::remove_file(&gecici);
@@ -573,19 +519,19 @@ mod tests {
     }
 
     #[test]
-    fn kopru_pid_ve_kurulumu_icerir() {
-        let icerik = kopru_icerigi(4242);
+    fn kopru_pid_ve_exe_degisimini_icerir() {
+        let icerik = kopru_guncelleme_icerigi(4242, "Finansal Hesaplayici.exe");
         assert!(icerik.contains("taskkill /PID 4242"));
         assert!(!icerik.contains("/F")); // graceful kapatma, veri kaybı riski yok
-        assert!(icerik.contains("fh-kurulum.exe"));
-        assert!(icerik.contains("/VERYSILENT"));
-        assert!(icerik.contains("/NORESTART"));
+        assert!(icerik.contains("move /Y"));
+        assert!(icerik.contains("fh-yeni.exe"));
         assert!(icerik.contains("%~dp0Finansal Hesaplayici.exe"));
+        assert!(icerik.contains("YENIDEN_BASLATILDI"));
     }
 
     #[test]
     fn kopru_sabit_veya_kullanicidan_gelen_yol_icerir() {
-        let icerik = kopru_icerigi(7);
+        let icerik = kopru_guncelleme_icerigi(7, "Uygulama.exe");
         // Köprü kendi dizinini `%~dp0` ile çözer; sabit sürücü/yol yok.
         // Sabit sürücü/yok; %TEMP% yalnızca tanılama log'u için kullanılır.
         assert!(!icerik.contains("C:\\"));
@@ -596,7 +542,16 @@ mod tests {
     #[test]
     fn kopru_sadece_ascii() {
         // cmd dosyası UTF-8 yazılır; Türkçe karakter olsaydı bozulurdu.
-        assert!(kopru_icerigi(1).is_ascii());
+        assert!(kopru_guncelleme_icerigi(1, "Uygulama.exe").is_ascii());
+    }
+
+    #[test]
+    fn guncelleme_kodunda_installer_yok() {
+        // Kaynak dosyayı kendi testinden oku; kurulum dalı geri gelmesin.
+        let kaynak = include_str!("lib.rs");
+        assert!(!kaynak.contains(concat!("fh-", "kurulum.exe")));
+        assert!(!kaynak.contains(concat!("VERY", "SILENT")));
+        assert!(!kaynak.contains(concat!("NOREST", "ART")));
     }
 
     #[test]
@@ -625,11 +580,6 @@ mod tests {
             "body": "Türkçe notlar",
             "assets": [
                 {
-                    "name": format!("Finansal-Hesaplayici-{surum}-kurulum.exe"),
-                    "browser_download_url": format!("{taban}/v{surum}/kurulum.exe"),
-                    "digest": format!("sha256:{ABC_SHA}")
-                },
-                {
                     "name": "update.zip",
                     "browser_download_url": format!("{taban}/v{surum}/update.zip"),
                     "digest": format!("sha256:{ABC_SHA}")
@@ -646,18 +596,18 @@ mod tests {
     fn guncelleme_cikar_tam_json() {
         let g = guncelleme_cikar(&sahte_json("5.7.4"), "5.7.3").expect("güncelleme");
         assert_eq!(g.version, "5.7.4");
-        assert_eq!(g.kurulum_sha, ABC_SHA);
-        assert!(g.kurulum_url.ends_with("/kurulum.exe"));
+        assert_eq!(g.sha, ABC_SHA);
+        assert!(g.url.ends_with("/update.zip"));
         assert!(g.notes.contains("Türkçe"));
     }
 
     #[test]
-    fn guncelleme_cikar_kurulum_varligi_yok() {
+    fn guncelleme_cikar_zip_varligi_yok() {
         let mut j = sahte_json("5.7.4");
         j["assets"]
             .as_array_mut()
             .unwrap()
-            .retain(|a| !a["name"].as_str().unwrap().ends_with("-kurulum.exe"));
+            .retain(|a| !a["name"].as_str().unwrap().ends_with(".zip"));
         assert!(guncelleme_cikar(&j, "5.7.3").is_none());
     }
 
@@ -665,11 +615,13 @@ mod tests {
     fn guncelleme_cikar_digest_yok() {
         let mut j = sahte_json("5.7.4");
         j["assets"][0].as_object_mut().unwrap().remove("digest");
+        // .sha256 varlığı da kaldırılmalı: aksi halde o özet kullanılabilir.
+        j["assets"].as_array_mut().unwrap().truncate(1);
         assert!(guncelleme_cikar(&j, "5.7.3").is_none());
     }
 
     #[test]
-    fn guncelleme_cikar_cift_kurulum_red() {
+    fn guncelleme_cikar_cift_zip_red() {
         let mut j = sahte_json("5.7.4");
         let ikinci = j["assets"][0].clone();
         j["assets"].as_array_mut().unwrap().push(ikinci);
@@ -693,7 +645,7 @@ mod tests {
     fn guncelleme_cikar_yabanci_host_red() {
         let mut j = sahte_json("5.7.4");
         j["assets"][0]["browser_download_url"] =
-            serde_json::json!("https://evil.example.com/kurulum.exe");
+            serde_json::json!("https://evil.example.com/paket.zip");
         assert!(guncelleme_cikar(&j, "5.7.3").is_none());
     }
 
@@ -769,21 +721,23 @@ mod tests {
     }
 
     #[test]
-    fn kopru_portable_ad_ve_log_icerir() {
-        let icerik = kopru_portable_icerigi(77, "Finansal-Hesaplayici-5.7.4-portable.exe");
+    fn kopru_ad_ve_log_icerir() {
+        let icerik = kopru_guncelleme_icerigi(77, "Finansal Hesaplayici.exe");
         assert!(icerik.contains("taskkill /PID 77"));
         assert!(icerik.contains("move /Y"));
         assert!(icerik.contains("fh-yeni.exe"));
-        assert!(icerik.contains("Finansal-Hesaplayici-5.7.4-portable.exe"));
+        assert!(icerik.contains("Finansal Hesaplayici.exe"));
         assert!(icerik.contains("fh-guncelle.log"));
         assert!(icerik.is_ascii());
     }
 
     #[test]
-    fn kurulum_koprusu_log_yazar() {
-        let icerik = kopru_icerigi(88);
-        assert!(icerik.contains("fh-guncelle.log"));
-        assert!(icerik.contains("KURULUM_ERRORLEVEL"));
-        assert!(icerik.contains("/VERYSILENT"));
+    fn yeni_exe_yolu_temp_altinda() {
+        let p = yeni_exe_yolu();
+        assert!(p.is_absolute());
+        assert_eq!(
+            p.file_name().unwrap().to_string_lossy(),
+            "fh-yeni.exe"
+        );
     }
 }
