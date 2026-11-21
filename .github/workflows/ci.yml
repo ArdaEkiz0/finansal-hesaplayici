@@ -110,6 +110,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Cargo.toml surumunu dogrulamak icin repo gerekli (build job'da yok).
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: surum-dosyalari
