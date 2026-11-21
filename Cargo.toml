@@ -22,7 +22,7 @@ chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 ureq = { version = "2", features = ["json"] }
 hex = "0.4"
-zip = "2"
+zip = "9"
 
 # Tersten mühendisliği pahalılaştır: sembol tablosu yok, ince LTO, tek
 # codegen birimi. Testler dev profilinde koştuğu için davranış değişmez;
