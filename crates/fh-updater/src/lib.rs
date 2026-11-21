@@ -6,6 +6,8 @@
 
 use std::cmp::Ordering;
 use std::io::{Cursor, Read};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
@@ -278,7 +280,7 @@ fn kopru_icerigi(pid: u32) -> String {
          ping -n 3 127.0.0.1 >nul\r\n\
          taskkill /PID {pid} >nul 2>&1\r\n\
          >>\"{log}\" echo UYGULAMA_KAPATILDI\r\n\
-         start /wait \"\" \"%~dp0fh-kurulum.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES\r\n\
+         \"%~dp0fh-kurulum.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES\r\n\
          >>\"{log}\" echo KURULUM_ERRORLEVEL=%errorlevel%\r\n\
          del \"%~dp0fh-kurulum.exe\" >nul 2>&1\r\n\
          start \"\" \"%~dp0Finansal Hesaplayici.exe\"\r\n\
@@ -447,12 +449,15 @@ pub fn indir_ve_kur(g: &Guncelleme) -> bool {
         return false;
     }
 
-    // Görünmez bir cmd penceresinde, ana süreçten bağımsız başlat.
-    let baslatildi = std::process::Command::new("cmd")
-        .args(["/C", "start", "", "/MIN"])
-        .arg(&kopru)
-        .spawn()
-        .is_ok();
+    // Köprüyü GÖRÜNMEZ başlat: Windows 11'de `start /MIN` Windows Terminal
+    // sekmesine dönüşüp siyah pencere açıyordu. CREATE_NO_WINDOW (0x08000000)
+    // ile cmd doğrudan, konsol penceresi olmadan spawn edilir. `start` ara
+    // komutu kaldırıldı — spawn edilen süreç zaten ana süreçten bağımsız.
+    let mut komut = std::process::Command::new("cmd");
+    komut.arg("/C").arg(&kopru);
+    #[cfg(windows)]
+    komut.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    let baslatildi = komut.spawn().is_ok();
     if !baslatildi {
         let _ = std::fs::remove_file(&gecici);
         let _ = std::fs::remove_file(&kopru);

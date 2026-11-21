@@ -35,6 +35,11 @@ chrono = { workspace = true }
 dirs = "7"
 rfd = "0.15"
 arboard = "3"
+muhasebe-lisans = { workspace = true }
+
+# Yalnız testler: lisans kapısının imzalı test anahtarı üretimi (crate kalıbı).
+[dev-dependencies]
+ed25519-dalek = "2"
 
 [build-dependencies]
 # Windows exe'sine ikon + sürüm/şirket bilgisi kaynağı ekler (profesyonel Özellikler).

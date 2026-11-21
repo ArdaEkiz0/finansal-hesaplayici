@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "5.7.5"
+version = "5.7.6"
 edition = "2024"
 authors = ["Arda M. Ekiz"]
 license = "MIT"
@@ -23,6 +23,9 @@ sha2 = "0.10"
 ureq = { version = "2", features = ["json"] }
 hex = "0.4"
 zip = "2"
+# Lisans/deneme karar çekirdeği (LISANS_SOZLESMESI §10) — sabit rev, public repo;
+# CI'ın indirebilmesi için PUBLIC olmak zorunda (doğrulama-only, imza üretmez).
+muhasebe-lisans = { git = "https://github.com/ArdaEkiz0/muhasebe-lisans", rev = "81ea31d85b8df6c15aefe5a76b5a84bd8731be10" }
 
 # Tersten mühendisliği pahalılaştır: sembol tablosu yok, ince LTO, tek
 # codegen birimi. Testler dev profilinde koştuğu için davranış değişmez;
