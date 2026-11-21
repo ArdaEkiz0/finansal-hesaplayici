@@ -3,7 +3,6 @@
 mod app;
 mod commands;
 mod kararlar;
-mod lisans;
 mod model;
 mod modes;
 mod theme;
@@ -11,33 +10,8 @@ mod theme;
 use eframe::egui;
 
 fn main() -> eframe::Result<()> {
-    // Lisans kapısı (LISANS_SOZLESMESI §10): run_native ÖNCESİ sert kapı —
-    // kilitliyken ana pencere hiç kurulmaz. Ağ yok: imzalı anahtar →
-    // saat-geri koruması → 15 günlük yerel deneme.
-    let kapi = lisans::kapi_uygula();
-    let deneme_kalan = match &kapi {
-        lisans::Kapi::Deneme { kalan_gun } => Some(*kalan_gun),
-        _ => None,
-    };
-    if let lisans::Kapi::Kilitli { baslik, gerekce } = kapi {
-        let options = eframe::NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_title("Finansal Hesaplayıcı — Kilitli")
-                .with_inner_size([500.0, 300.0])
-                .with_resizable(false),
-            ..Default::default()
-        };
-        return eframe::run_native(
-            "Finansal Hesaplayici - Kilitli",
-            options,
-            Box::new(move |cc| {
-                // Kilit ekranı da ürünün kendi temasında (veri.json ayarları).
-                let (tema, olcek) = lisans::kilit_tema_ayarlari();
-                theme::uygula(&cc.egui_ctx, &tema, olcek, true);
-                Ok(Box::new(lisans::KilitEkrani { baslik, gerekce }))
-            }),
-        );
-    }
+    // Finansal Hesaplayıcı HEDİYE ÜRÜNDÜR: lisans/deneme kapısı YOKTUR
+    // (21 Kas 2026 kararı — satılmaz, süre işlemez; v5.7.6'daki kapı yanlıştı).
     let p = model::PENCERE_AYARLARI;
     // Maksimum açılış: pencere ekrana sığar, küçük görünmez. Ölçü yalnızca
     // kullanıcı pencereyi geri restore ettiğinde (maksimum kapalıyken) kullanılır.
@@ -60,11 +34,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Finansal Hesaplayici",
         options,
-        Box::new(|cc| {
-            Ok(Box::new(lisans::Kirpik {
-                ic: app::FhApp::new(cc),
-                deneme_kalan,
-            }))
-        }),
+        Box::new(|cc| Ok(Box::new(app::FhApp::new(cc)))),
     )
 }
