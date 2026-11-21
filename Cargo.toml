@@ -22,3 +22,12 @@ chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 ureq = { version = "2", features = ["json"] }
 hex = "0.4"
+
+# Tersten mühendisliği pahalılaştır: sembol tablosu yok, ince LTO, tek
+# codegen birimi. Testler dev profilinde koştuğu için davranış değişmez;
+# yalnız release ikilisi küçülür ve analize daha az isim sızdırır.
+# CI etiket derlemesini etkiler; bir sonraki release'te devreye girer.
+[profile.release]
+strip = "symbols"
+lto = "thin"
+codegen-units = 1
