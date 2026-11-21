@@ -56,11 +56,6 @@ pub(super) const SATIR_YUKSEKLIGI: f32 = 46.0;
 /// Bir karede görünür kabul edilen mod satırı sayısı (↓ tuşu sınırı ve gösterge).
 pub(super) const GORUNUR_SATIR: usize = 8;
 
-/// Portable sürümde otomatik kurulum desteklenmez; genel "ağ veya doğrulama"
-/// mesajı kullanıcıyı yanıltıyordu.
-const PORTABLE_GUNCELLEME_MESAJI: &str =
-    "Portable sürüm otomatik güncellenemez — lütfen kurulum exe'sini indirin.";
-
 /// Komut paleti arama alanının sabit kimliği: odak isteği/bırakma bu kimliğe yapılır.
 const PALET_ARAMA_ID: &str = "fh-palet-arama";
 
@@ -348,14 +343,7 @@ impl FhApp {
             GuncellemeKarari::IndirmeBasarisiz => {
                 self.indirme_bildirildi = true;
                 self.indiriliyor = false;
-                // fh-updater portable modda indir_ve_kur'dan false döner;
-                // genel ağ mesajı yerine kesin nedeni söyle.
-                let mesaj = if fh_updater::portable_mi() {
-                    PORTABLE_GUNCELLEME_MESAJI
-                } else {
-                    "Güncelleme indirilemedi (ağ veya doğrulama)"
-                };
-                self.bildir(mesaj);
+                self.bildir("Güncelleme indirilemedi — ayrıntı: %TEMP%\\fh-guncelle.log");
             }
             GuncellemeKarari::Yok => {}
         }
@@ -365,10 +353,6 @@ impl FhApp {
     fn guncelleme_baslat(&mut self) {
         if !ag_istegi_yapilir(self.state.settings.guncelleme_kontrol) {
             self.bildir("Güncelleme kontrolü kapalı — ağ isteği yapılmaz");
-            return;
-        }
-        if fh_updater::portable_mi() {
-            self.bildir(PORTABLE_GUNCELLEME_MESAJI);
             return;
         }
         let Some(g) = self.guncelleme.lock().ok().and_then(|k| k.clone()) else {

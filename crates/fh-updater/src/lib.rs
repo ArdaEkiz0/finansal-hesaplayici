@@ -5,7 +5,7 @@
 //! üretmez. Testler tamamen çevrimdışıdır (ağ çağrısı yapılmaz).
 
 use std::cmp::Ordering;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
@@ -14,9 +14,15 @@ use sha2::{Digest, Sha256};
 const API_URL: &str = "https://api.github.com/repos/ArdaEkiz0/finansal-hesaplayici/releases/latest";
 const USER_AGENT: &str = "FinansalHesaplaci-UpdateChecker";
 
-/// İndirmeye izin verilen tek iki host. Alt alan adları ve diğer GitHub
-/// hostları (ör. `github-releases.githubusercontent.com`) kasten dahil değil.
-const IZINLI_HOSTLAR: [&str; 2] = ["github.com", "objects.githubusercontent.com"];
+/// İndirmeye izin verilen hostlar. GitHub 2026'da release asset indirmelerini
+/// `release-assets.githubusercontent.com`'a taşıdı — bu host olmadan son URL
+/// doğrulaması tüm güncellemeleri reddediyordu. `github-releases.*` gibi eski
+/// hostlar kasten dahil değil.
+const IZINLI_HOSTLAR: [&str; 3] = [
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+];
 
 /// Tek bir güncelleme indirmesi için azami boyut (64 MiB). Gerçek kurulum
 /// exe'si ~5 MB; şişirilmiş/bozuk bir yanıtın belleği doldurmasını engeller.
@@ -265,22 +271,106 @@ fn hedef_dizin() -> Option<std::path::PathBuf> {
 /// Yalnızca sayısal PID ve `%~dp0` kullanılır — kullanıcı girdisi veya
 /// Türkçe karakterli yol doğrudan dosyaya yazılmaz, cmd kendi yolunu genişletir.
 fn kopru_icerigi(pid: u32) -> String {
+    let log = "%TEMP%\\fh-guncelle.log";
     format!(
         "@echo off\r\n\
+         >>\"{log}\" echo === KURULUM BASLADI ===\r\n\
          ping -n 3 127.0.0.1 >nul\r\n\
          taskkill /PID {pid} >nul 2>&1\r\n\
+         >>\"{log}\" echo UYGULAMA_KAPATILDI\r\n\
          start /wait \"\" \"%~dp0fh-kurulum.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES\r\n\
+         >>\"{log}\" echo KURULUM_ERRORLEVEL=%errorlevel%\r\n\
          del \"%~dp0fh-kurulum.exe\" >nul 2>&1\r\n\
          start \"\" \"%~dp0Finansal Hesaplayici.exe\"\r\n\
+         >>\"{log}\" echo YENIDEN_BASLATILDI\r\n\
          del \"%~f0\"\r\n"
     )
 }
 
+/// Portable köprüsü: çalışan exe kapanınca indirilen yeni exe eski dosyanın
+/// üzerine `move /Y` ile yazılır ve aynı adla yeniden başlatılır. Ad yalnızca
+/// doğrulanmış ASCII karakterlerden gelir (bkz. `guvenli_exe_adi`).
+fn kopru_portable_icerigi(pid: u32, exe_adi: &str) -> String {
+    let log = "%TEMP%\\fh-guncelle.log";
+    format!(
+        "@echo off\r\n\
+         >>\"{log}\" echo === PORTABLE BASLADI ===\r\n\
+         ping -n 3 127.0.0.1 >nul\r\n\
+         taskkill /PID {pid} >nul 2>&1\r\n\
+         >>\"{log}\" echo UYGULAMA_KAPATILDI\r\n\
+         move /Y \"%~dp0fh-yeni.exe\" \"%~dp0{exe_adi}\" >>\"{log}\" 2>&1\r\n\
+         >>\"{log}\" echo MOVE_ERRORLEVEL=%errorlevel%\r\n\
+         start \"\" \"%~dp0{exe_adi}\"\r\n\
+         >>\"{log}\" echo YENIDEN_BASLATILDI\r\n\
+         del \"%~f0\"\r\n"
+    )
+}
+
+/// exe adı köprü dosyasına yazılacağı için yalnızca güvenli karakterlere izin ver.
+fn guvenli_exe_adi(ad: &str) -> bool {
+    !ad.is_empty()
+        && ad.len() <= 200
+        && ad.chars().all(|c| c.is_ascii_alphanumeric() || "._- ".contains(c))
+        && ad.to_ascii_lowercase().ends_with(".exe")
+}
+
+/// `update.zip` içinden kök dizindeki exe'yi çıkarır. Zip-slip (iç içe yol,
+/// `..`) girdileri atlanır; yalnızca tek bir .exe kabul edilir.
+fn zipden_exe_cikar(veri: &[u8]) -> Option<Vec<u8>> {
+    let mut arsiv = zip::ZipArchive::new(Cursor::new(veri)).ok()?;
+    let mut bulunan = None;
+    for i in 0..arsiv.len() {
+        let mut dosya = arsiv.by_index(i).ok()?;
+        let ad = dosya.name();
+        if ad.contains('/')
+            || ad.contains('\\')
+            || ad.contains("..")
+            || !ad.to_ascii_lowercase().ends_with(".exe")
+        {
+            continue;
+        }
+        let mut cikti = Vec::new();
+        dosya.read_to_end(&mut cikti).ok()?;
+        if cikti.is_empty() || cikti.len() as u64 > MAX_INDIRME || bulunan.is_some() {
+            return None; // birden fazla exe veya boş/şişkin dosya → belirsiz
+        }
+        bulunan = Some(cikti);
+    }
+    bulunan
+}
+
+/// İndir + son URL allowlist + boyut sınırı + SHA-256. Her hata `None`.
+fn indir_dogrula(istemci: &ureq::Agent, url: &str, beklenen: &str) -> Option<Vec<u8>> {
+    if !host_izinlimi(url) || ozet_coz(beklenen).is_none() {
+        return None;
+    }
+    let yanit = istemci.get(url).call().ok()?;
+    if !host_izinlimi(&yanit.get_url().to_string()) {
+        return None;
+    }
+    if let Some(uzunluk) = yanit
+        .header("Content-Length")
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        if uzunluk > MAX_INDIRME {
+            return None;
+        }
+    }
+    let mut veri = Vec::new();
+    let okunan = yanit
+        .into_reader()
+        .take(MAX_INDIRME + 1)
+        .read_to_end(&mut veri);
+    if okunan.is_err() || veri.len() as u64 > MAX_INDIRME || !sha_dogrula(&veri, beklenen) {
+        return None;
+    }
+    Some(veri)
+}
+
 /// Portable kurulum mu? (exe adı `portable` içeriyorsa)
 ///
-/// Portable sürümde köprü kurulu exe adını başlatır ve salt-okunur klasöre
-/// yazma başarısız olabilir; otomatik güncelleme sağlıklı değildir. Bu yüzden
-/// portable modda güncelleme reddedilir, kullanıcıya kurulum indirmesi söylenir.
+/// Portable modda `indir_ve_kur` `update.zip`'ten exe çıkarır ve mevcut exe'nin
+/// üzerine yazar (ayrı köprü). Kurulum modundan farklı akış kullanılır.
 pub fn portable_mi() -> bool {
     std::env::current_exe()
         .ok()
@@ -291,68 +381,69 @@ pub fn portable_mi() -> bool {
         .is_some_and(|ad| ad.contains("portable"))
 }
 
-/// Güncellemeyi indirir, SHA-256 ile doğrular ve kurulumu başlatır.
+/// Güncellemeyi indirir, SHA-256 ile doğrular ve değiştirmede köprüyü başlatır.
 ///
-/// Kurulum exe'si yalnızca izinli hostlardan `https` ile indirilir; özet
-/// GitHub API `digest` alanından gelir ve doğrulanmadan hiçbir dosya yazılmaz.
-/// Köprü dosyaları çalışan exe'nin dizinine yazılır; başarı `true` döner ve
-/// arayan taraf uygulamayı kapatır (köprü yeniden başlatır).
+/// * Kurulum modunda `kurulum.exe` indirilir, doğrulanır ve sessiz kurulum
+///   köprüsü çalıştırılır.
+/// * Portable modunda `update.zip` indirilir, doğrulanır, içindeki exe
+///   güvenli şekilde çıkarılır ve köprü mevcut exe'nin üzerine yazar.
+///
+/// Her iki yolda da yalnızca izinli hostlara HTTPS, son URL kontrolü ve 64 MiB
+/// sınırı vardır. Köprü adımları `%TEMP%\fh-guncelle.log`'a yazılır.
 pub fn indir_ve_kur(g: &Guncelleme) -> bool {
-    // Portable sürüm otomatik güncellenemez (bkz. portable_mi).
-    if portable_mi() || !host_izinlimi(&g.kurulum_url) {
-        return false;
-    }
-    let beklenen = g.kurulum_sha.trim().to_ascii_lowercase();
-    if ozet_coz(&beklenen).is_none() {
-        return false;
-    }
-
     let istemci = agent();
-    let yanit = match istemci.get(&g.kurulum_url).call() {
-        Ok(r) => r,
-        Err(_) => return false,
-    };
-    // Yönlendirme sonrası GERÇEK URL de allowlist'te olmalı — ilk URL
-    // github.com olsa bile 302 başka bir hosta götürebilir.
-    let son_url = yanit.get_url().to_string();
-    if !host_izinlimi(&son_url) {
-        return false;
-    }
-    // Bildirilen boyut sınırı aşıyorsa hiç okumaya başlama.
-    if let Some(uzunluk) = yanit
-        .header("Content-Length")
-        .and_then(|v| v.parse::<u64>().ok())
-    {
-        if uzunluk > MAX_INDIRME {
+    let portable = portable_mi();
+
+    let (veri, gecici_adi, kopru_metni) = if portable {
+        // update.zip digest'i tüm içeriği kapsar; exe ayrıca zip-slip'e karşı
+        // `zipden_exe_cikar` ile denetlenir.
+        let beklenen = g.sha.trim().to_ascii_lowercase();
+        let Some(zip_veri) = indir_dogrula(&istemci, &g.url, &beklenen) else {
+            return false;
+        };
+        let Some(exe_veri) = zipden_exe_cikar(&zip_veri) else {
+            return false;
+        };
+        let Some(mevcut) = std::env::current_exe().ok() else {
+            return false;
+        };
+        let Some(ad) = mevcut
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+        else {
+            return false;
+        };
+        if !guvenli_exe_adi(&ad) {
             return false;
         }
-    }
-
-    // Akış sırasında da sınırla: Content-Length yoksa veya yalan söylüyorsa
-    // belleği doldurmasın. MAX+1 bayt okunduysa fazla var demektir.
-    let mut veri = Vec::new();
-    let okunan = yanit
-        .into_reader()
-        .take(MAX_INDIRME + 1)
-        .read_to_end(&mut veri);
-    if okunan.is_err() || veri.len() as u64 > MAX_INDIRME {
-        return false;
-    }
-    if !sha_dogrula(&veri, &beklenen) {
-        return false;
-    }
+        (
+            exe_veri,
+            "fh-yeni.exe".to_string(),
+            kopru_portable_icerigi(std::process::id(), &ad),
+        )
+    } else {
+        let beklenen = g.kurulum_sha.trim().to_ascii_lowercase();
+        let Some(veri) = indir_dogrula(&istemci, &g.kurulum_url, &beklenen) else {
+            return false;
+        };
+        (
+            veri,
+            "fh-kurulum.exe".to_string(),
+            kopru_icerigi(std::process::id()),
+        )
+    };
 
     let Some(hedef) = hedef_dizin() else {
         return false;
     };
-    let kurulum = hedef.join("fh-kurulum.exe");
+    let gecici = hedef.join(&gecici_adi);
     let kopru = hedef.join("fh-guncelle.cmd");
 
-    if std::fs::write(&kurulum, &veri).is_err() {
+    if std::fs::write(&gecici, &veri).is_err() {
         return false;
     }
-    if std::fs::write(&kopru, kopru_icerigi(std::process::id())).is_err() {
-        let _ = std::fs::remove_file(&kurulum);
+    if std::fs::write(&kopru, kopru_metni).is_err() {
+        let _ = std::fs::remove_file(&gecici);
         return false;
     }
 
@@ -363,9 +454,7 @@ pub fn indir_ve_kur(g: &Guncelleme) -> bool {
         .spawn()
         .is_ok();
     if !baslatildi {
-        // Köprü çalışmadıysa iz bırakma: arayan yine kapanacak, dosyalar
-        // kurulum dizininde kalmasın.
-        let _ = std::fs::remove_file(&kurulum);
+        let _ = std::fs::remove_file(&gecici);
         let _ = std::fs::remove_file(&kopru);
     }
     baslatildi
@@ -493,8 +582,8 @@ mod tests {
     fn kopru_sabit_veya_kullanicidan_gelen_yol_icerir() {
         let icerik = kopru_icerigi(7);
         // Köprü kendi dizinini `%~dp0` ile çözer; sabit sürücü/yol yok.
+        // Sabit sürücü/yok; %TEMP% yalnızca tanılama log'u için kullanılır.
         assert!(!icerik.contains("C:\\"));
-        assert!(!icerik.contains("%TEMP%"));
         assert!(!icerik.contains("AppData"));
         assert!(icerik.contains("%~dp0"));
     }
@@ -611,9 +700,85 @@ mod tests {
 
     #[test]
     fn son_url_allowlist_kurallari() {
-        // Yönlendirme sonrası URL de aynı kurallara tabi.
+        // Yönlendirme sonrası URL de aynı kurallara tabi. GitHub'ın güncel
+        // asset host'u (release-assets) mutlaka kabul edilmeli.
         assert!(host_izinlimi("https://objects.githubusercontent.com/a.exe"));
+        assert!(host_izinlimi(
+            "https://release-assets.githubusercontent.com/github-production-release-asset/x?sig=1"
+        ));
         assert!(!host_izinlimi("https://evil.example.com/a.exe"));
-        assert!(!host_izinlimi("http://objects.githubusercontent.com/a.exe"));
+        assert!(!host_izinlimi("http://release-assets.githubusercontent.com/a.exe"));
+        assert!(!host_izinlimi("https://github-releases.githubusercontent.com/a.exe"));
+    }
+
+    fn zip_yap(girdiler: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut z = zip::ZipWriter::new(Cursor::new(&mut buf));
+            for (ad, veri) in girdiler {
+                z.start_file(*ad, zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                z.write_all(veri).unwrap();
+            }
+            z.finish().unwrap();
+        }
+        buf
+    }
+
+    #[test]
+    fn zipden_tek_kok_exe_cikar() {
+        let z = zip_yap(&[("Finansal Hesaplayici.exe", b"EXE")]);
+        assert_eq!(zipden_exe_cikar(&z), Some(b"EXE".to_vec()));
+    }
+
+    #[test]
+    fn zipden_yollu_girdi_red() {
+        // Zip-slip: iç içe yol veya .. içeren ad asla kabul edilmez.
+        let z = zip_yap(&[("alt/kotu.exe", b"EXE")]);
+        assert!(zipden_exe_cikar(&z).is_none());
+        let z = zip_yap(&[("../kotu.exe", b"EXE")]);
+        assert!(zipden_exe_cikar(&z).is_none());
+    }
+
+    #[test]
+    fn zipden_cift_exe_red() {
+        let z = zip_yap(&[("a.exe", b"A"), ("b.exe", b"B")]);
+        assert!(zipden_exe_cikar(&z).is_none());
+    }
+
+    #[test]
+    fn zipden_exe_yok_red() {
+        let z = zip_yap(&[("icon.ico", b"ICO")]);
+        assert!(zipden_exe_cikar(&z).is_none());
+    }
+
+    #[test]
+    fn guvenli_exe_adi_kurallari() {
+        assert!(guvenli_exe_adi("Finansal-Hesaplayici-5.7.4-portable.exe"));
+        assert!(guvenli_exe_adi("Finansal Hesaplayici.exe"));
+        assert!(!guvenli_exe_adi("kotu/../x.exe"));
+        assert!(!guvenli_exe_adi("x.bat"));
+        assert!(!guvenli_exe_adi(""));
+        assert!(!guvenli_exe_adi(&"a".repeat(300)));
+    }
+
+    #[test]
+    fn kopru_portable_ad_ve_log_icerir() {
+        let icerik = kopru_portable_icerigi(77, "Finansal-Hesaplayici-5.7.4-portable.exe");
+        assert!(icerik.contains("taskkill /PID 77"));
+        assert!(icerik.contains("move /Y"));
+        assert!(icerik.contains("fh-yeni.exe"));
+        assert!(icerik.contains("Finansal-Hesaplayici-5.7.4-portable.exe"));
+        assert!(icerik.contains("fh-guncelle.log"));
+        assert!(icerik.is_ascii());
+    }
+
+    #[test]
+    fn kurulum_koprusu_log_yazar() {
+        let icerik = kopru_icerigi(88);
+        assert!(icerik.contains("fh-guncelle.log"));
+        assert!(icerik.contains("KURULUM_ERRORLEVEL"));
+        assert!(icerik.contains("/VERYSILENT"));
     }
 }
