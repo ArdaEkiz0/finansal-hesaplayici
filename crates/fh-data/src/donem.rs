@@ -159,7 +159,15 @@ pub fn yillara_gir(list: &[DonemRecord]) -> Vec<(i32, Vec<DonemRecord>, DonemOze
 mod tests {
     use super::*;
 
-    fn rec(id: &str, year: i32, month: i32, hes: &str, ind: &str, net: &str, odenecek: bool) -> DonemRecord {
+    fn rec(
+        id: &str,
+        year: i32,
+        month: i32,
+        hes: &str,
+        ind: &str,
+        net: &str,
+        odenecek: bool,
+    ) -> DonemRecord {
         DonemRecord {
             id: id.to_string(),
             year,
@@ -179,8 +187,14 @@ mod tests {
 
     #[test]
     fn parse_donem_sayisi_virgul_ve_nokta() {
-        assert_eq!(parse_donem_sayisi("1234,56").unwrap().to_string(), "1234.56");
-        assert_eq!(parse_donem_sayisi(" 1234.56 ").unwrap().to_string(), "1234.56");
+        assert_eq!(
+            parse_donem_sayisi("1234,56").unwrap().to_string(),
+            "1234.56"
+        );
+        assert_eq!(
+            parse_donem_sayisi(" 1234.56 ").unwrap().to_string(),
+            "1234.56"
+        );
         assert_eq!(parse_donem_sayisi("-30").unwrap().to_string(), "-30");
         // TS: virgül noktaya çevrilir; "1.234,56" → "1.234.56" → geçersiz.
         assert!(parse_donem_sayisi("1.234,56").is_none());

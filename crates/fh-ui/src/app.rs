@@ -25,6 +25,10 @@ use fh_data::{
 };
 
 use crate::commands::{self, Eylem, Komut};
+use crate::kararlar::{
+    GuncellemeKarari, WidgetEtki, ag_istegi_yapilir, guncelleme_karari, kisayol_kararlari,
+    palet_secim_duzelt, widget_etki,
+};
 use crate::model::{
     AppState, Cari, DonemKayit, HistEntry, InputState, SURUM, WIDGET_GENISLIK_ARALIGI,
     WIDGET_YUKSEKLIK_ARALIGI, para_bicimi, satir_bicimi,
@@ -51,6 +55,14 @@ const T_AMOUNT: f32 = 58.0;
 pub(super) const SATIR_YUKSEKLIGI: f32 = 46.0;
 /// Bir karede görünür kabul edilen mod satırı sayısı (↓ tuşu sınırı ve gösterge).
 pub(super) const GORUNUR_SATIR: usize = 8;
+
+/// Portable sürümde otomatik kurulum desteklenmez; genel "ağ veya doğrulama"
+/// mesajı kullanıcıyı yanıltıyordu.
+const PORTABLE_GUNCELLEME_MESAJI: &str =
+    "Portable sürüm otomatik güncellenemez — lütfen kurulum exe'sini indirin.";
+
+/// Komut paleti arama alanının sabit kimliği: odak isteği/bırakma bu kimliğe yapılır.
+const PALET_ARAMA_ID: &str = "fh-palet-arama";
 
 /// `ilindeks` numaralı mod satırını listenin tepesine getiren dikey ofset (px).
 #[allow(dead_code)] // eski ScrollArea ofseti — saf testlerde korunur
@@ -109,6 +121,14 @@ pub struct FhApp {
     pub indirme_durumu: Arc<Mutex<Option<bool>>>,
     pub guncelleme_bildirildi: bool,
     pub indirme_bildirildi: bool,
+    /// Palet açılınca arama alanına odak isteği (bir sonraki karede uygulanır).
+    pub palet_odak_iste: bool,
+    /// Son filtrelemede kullanılan sorgu; değişirse seçim sıfırlanır.
+    pub palet_son_sorgu: String,
+    /// Geçmiş temizlenince geri getirmek için saklanan kopya (Undo).
+    pub gecmis_undo: Option<Vec<HistEntry>>,
+    /// Bildirimin görünme süresi (sn); Undo bildirimi daha uzun sürer.
+    pub toast_sure: u64,
 }
 
 // ---------- küçük çizim yardımcıları ----------
@@ -163,11 +183,16 @@ fn pencere_cercevesi(p: Palet) -> Frame {
 }
 
 fn birincil_dugme<'a>(ad: &'a str, p: Palet) -> egui::Button<'a> {
-    egui::Button::new(RichText::new(ad).size(T_BODY).color(Color32::WHITE).strong())
-        .fill(p.birincil)
-        .stroke(Stroke::new(1.0, p.birincil))
-        .corner_radius(CornerRadius::same(6))
-        .min_size(Vec2::new(74.0, 32.0))
+    egui::Button::new(
+        RichText::new(ad)
+            .size(T_BODY)
+            .color(Color32::WHITE)
+            .strong(),
+    )
+    .fill(p.birincil)
+    .stroke(Stroke::new(1.0, p.birincil))
+    .corner_radius(CornerRadius::same(6))
+    .min_size(Vec2::new(74.0, 32.0))
 }
 
 fn ikincil_dugme<'a>(ad: &'a str, p: Palet) -> egui::Button<'a> {
@@ -181,8 +206,8 @@ fn ikincil_dugme<'a>(ad: &'a str, p: Palet) -> egui::Button<'a> {
 /// Üst şeridin sağ ucundaki pencere kontrolü: alta alma, büyüt/küçült, kapat.
 /// Hover/focus/devre-dışı durumları tema widget stillerinden gelir; kapat
 /// glifi hata rengiyle diğer iki kontrolden ayrılır.
-fn pencere_kontrol_dugmesi<'a>(glif: &'a str, p: Palet, kapat: bool) -> egui::Button<'a> {
-    egui::Button::new(
+fn pencere_kontrol_dugmesi(ui: &mut Ui, glif: &str, ad: &str, p: Palet, kapat: bool) -> bool {
+    let b = egui::Button::new(
         RichText::new(glif)
             .size(if kapat { 18.0 } else { 16.0 })
             .color(if kapat { p.hata } else { p.ikinci })
@@ -191,7 +216,9 @@ fn pencere_kontrol_dugmesi<'a>(glif: &'a str, p: Palet, kapat: bool) -> egui::Bu
     .fill(p.yuksek)
     .stroke(Stroke::new(1.0, p.kenar))
     .corner_radius(CornerRadius::same(5))
-    .min_size(Vec2::new(34.0, 32.0))
+    // Erişilebilirlik: dokunma alanı en az 44×44 px; glif boyutu aynı kalır.
+    .min_size(Vec2::splat(44.0));
+    ui.add(b).on_hover_text(ad).clicked()
 }
 
 impl FhApp {
@@ -201,10 +228,11 @@ impl FhApp {
         let son_olcek = state.settings.font_scale;
         theme::uygula(&cc.egui_ctx, &son_tema, son_olcek, true);
 
-        // Ağ kontrolü arka planda yapılır: ağ yoksa sessizce None kalır, UI
-        // bloke olmaz ve hiçbir panic kullanıcıya yansımaz.
+        // Ağ kontrolü yalnızca kullanıcı izin verdiyse yapılır. Uygulama
+        // "çevrimdışı · veriler dışarı çıkmaz" diyor; opt-out kapalıyken hiçbir
+        // ağ isteği başlatılmaz (ağ varsa bile).
         let guncelleme: Arc<Mutex<Option<fh_updater::Guncelleme>>> = Arc::new(Mutex::new(None));
-        {
+        if ag_istegi_yapilir(state.settings.guncelleme_kontrol) {
             let paylasilan = Arc::clone(&guncelleme);
             std::thread::spawn(move || {
                 if let Some(gunc) = fh_updater::kontrol(env!("CARGO_PKG_VERSION")) {
@@ -241,6 +269,10 @@ impl FhApp {
             indirme_durumu: Arc::new(Mutex::new(None)),
             guncelleme_bildirildi: false,
             indirme_bildirildi: false,
+            palet_odak_iste: false,
+            palet_son_sorgu: String::new(),
+            gecmis_undo: None,
+            toast_sure: 3,
         };
         for m in MODLAR {
             let g = app.state.inputs.entry(m.id.to_string()).or_default();
@@ -250,7 +282,42 @@ impl FhApp {
     }
 
     fn bildir(&mut self, metin: impl Into<String>) {
+        self.toast_sure = 3;
         self.toast = Some((metin.into(), Instant::now()));
+    }
+
+    /// Undo seçeneği sunulan bildirimler daha uzun görünür.
+    fn bildir_sureli(&mut self, metin: impl Into<String>, sure: u64) {
+        self.toast_sure = sure;
+        self.toast = Some((metin.into(), Instant::now()));
+    }
+
+    /// Kalıcı kaydı dener; hatayı yutmaz, kullanıcıya bildirir.
+    fn kaydet(&mut self) {
+        if let Err(e) = self.state.kaydet() {
+            self.bildir(format!("Kaydedilemedi: {e}"));
+        }
+    }
+
+    /// Geçmişi temizler ve geri alma kopyasını saklar. Üç çağrı yolu da
+    /// (komut, geçmiş penceresi, ayarlar) aynı korumayı kullanır.
+    fn gecmis_temizle(&mut self) {
+        if self.state.history.is_empty() {
+            self.bildir("Geçmiş zaten boş");
+            return;
+        }
+        self.gecmis_undo = Some(self.state.history.clone());
+        self.state.history.clear();
+        self.kaydet();
+        self.bildir_sureli("Geçmiş temizlendi — 'Geri al' ile getirebilirsiniz", 12);
+    }
+
+    fn gecmis_undo_yap(&mut self) {
+        if let Some(h) = self.gecmis_undo.take() {
+            self.state.history = h;
+            self.kaydet();
+            self.bildir("Geçmiş geri getirildi");
+        }
     }
 
     /// Arka plan thread'lerinin sonuçlarını arayüz bildirimine çevirir.
@@ -259,35 +326,51 @@ impl FhApp {
     /// başlatma). Windows'ta çalışan exe'nin üzerine yazılamadığı için
     /// kapanış zorunludur.
     fn guncelleme_durumunu_kontrol(&mut self, ctx: &Context) {
-        let yeni_surum = if self.guncelleme_bildirildi {
-            false
-        } else {
-            self.guncelleme.lock().map(|k| k.is_some()).unwrap_or(false)
-        };
-        if yeni_surum {
-            self.guncelleme_bildirildi = true;
-            self.bildir("Yeni sürüm mevcut — üst panelden 'İndir ve kur' yapabilirsiniz");
-        }
-
-        let indirme = if self.indirme_bildirildi {
-            None
-        } else {
-            self.indirme_durumu.lock().ok().and_then(|k| *k)
-        };
-        if let Some(basari) = indirme {
-            self.indirme_bildirildi = true;
-            self.indiriliyor = false;
-            if basari {
+        let yeni_surum = self.guncelleme.lock().map(|k| k.is_some()).unwrap_or(false);
+        let indirme = self.indirme_durumu.lock().ok().and_then(|k| *k);
+        let karar = guncelleme_karari(
+            yeni_surum,
+            self.guncelleme_bildirildi,
+            indirme,
+            self.indirme_bildirildi,
+        );
+        match karar {
+            GuncellemeKarari::YeniSurum => {
+                self.guncelleme_bildirildi = true;
+                self.bildir("Yeni sürüm mevcut — üst panelden 'İndir ve kur' yapabilirsiniz");
+            }
+            GuncellemeKarari::IndirmeBasarili => {
+                self.indirme_bildirildi = true;
+                self.indiriliyor = false;
                 self.bildir("Güncelleme kuruluyor; uygulama yeniden başlatılacak…");
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-            } else {
-                self.bildir("Güncelleme indirilemedi (ağ veya doğrulama)");
             }
+            GuncellemeKarari::IndirmeBasarisiz => {
+                self.indirme_bildirildi = true;
+                self.indiriliyor = false;
+                // fh-updater portable modda indir_ve_kur'dan false döner;
+                // genel ağ mesajı yerine kesin nedeni söyle.
+                let mesaj = if fh_updater::portable_mi() {
+                    PORTABLE_GUNCELLEME_MESAJI
+                } else {
+                    "Güncelleme indirilemedi (ağ veya doğrulama)"
+                };
+                self.bildir(mesaj);
+            }
+            GuncellemeKarari::Yok => {}
         }
     }
 
     /// "Güncelle" düğmesi: indirmeyi/doğrulamayı arka planda başlatır.
     fn guncelleme_baslat(&mut self) {
+        if !ag_istegi_yapilir(self.state.settings.guncelleme_kontrol) {
+            self.bildir("Güncelleme kontrolü kapalı — ağ isteği yapılmaz");
+            return;
+        }
+        if fh_updater::portable_mi() {
+            self.bildir(PORTABLE_GUNCELLEME_MESAJI);
+            return;
+        }
         let Some(g) = self.guncelleme.lock().ok().and_then(|k| k.clone()) else {
             return;
         };
@@ -312,19 +395,35 @@ impl FhApp {
         let Some(r) = &self.result else {
             return "Geçerli bir sonuç yok.".to_string();
         };
-        let ana = para_bicimi(&r.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
+        let ana = para_bicimi(
+            &r.ana,
+            st.precision,
+            &st.currency_symbol,
+            st.show_currency_symbol,
+        );
         let mut metin = format!("{}: {}", modes::mod_etiketi(&self.mode), ana);
         if !r.alt.is_empty() {
             metin.push_str(&format!(
                 "\nDiğer: {}",
-                para_bicimi(&r.alt, st.precision, &st.currency_symbol, st.show_currency_symbol)
+                para_bicimi(
+                    &r.alt,
+                    st.precision,
+                    &st.currency_symbol,
+                    st.show_currency_symbol
+                )
             ));
         }
         metin.push_str(&format!("\n{}", r.detay));
         for (k, v) in &r.satirlar {
             metin.push_str(&format!(
                 "\n{k}: {}",
-                satir_bicimi(k, v, st.precision, &st.currency_symbol, st.show_currency_symbol)
+                satir_bicimi(
+                    k,
+                    v,
+                    st.precision,
+                    &st.currency_symbol,
+                    st.show_currency_symbol
+                )
             ));
         }
         metin
@@ -348,9 +447,21 @@ impl FhApp {
         let girdi = {
             let e = self.state.inputs.entry(mode.clone()).or_default();
             modes::varsayilanlari_doldur(e, &mode);
+            e.hatalar = modes::parse_hatalari(e);
             modes::build_girdi(&mode, e)
         };
-        self.result = fh_core::hesapla(&mode, &girdi);
+        // Parse hatası varsa tamsayı alanlar 0'a düşmüş olabilir; böyle bir
+        // sonucu "Canlı hesaplama" olarak göstermek yanlış finansal güven verir.
+        let hata_var = self
+            .state
+            .inputs
+            .get(&mode)
+            .is_some_and(|e| !e.hatalar.is_empty());
+        self.result = if hata_var {
+            None
+        } else {
+            fh_core::hesapla(&mode, &girdi)
+        };
     }
 
     /// Kullanıcı modun en az bir gerçek (seçim olmayan) alanını doldurdu mu?
@@ -379,11 +490,15 @@ impl FhApp {
     fn font_degistir(&mut self, delta: f64) {
         let v = (self.state.settings.font_scale + delta).clamp(0.85, 1.25);
         self.state.settings.font_scale = (v * 100.0).round() / 100.0;
-        self.state.kaydet();
+        self.kaydet();
     }
 
     fn filtreli_komutlar(&self) -> Vec<usize> {
         commands::filtrele(&self.komutlar, &self.palet_sorgu)
+    }
+
+    fn palet_arama_odagi_birak(&self, ctx: &Context) {
+        ctx.memory_mut(|m| m.surrender_focus(egui::Id::unique(PALET_ARAMA_ID)));
     }
 
     fn kisayollar(&mut self, ctx: &Context) {
@@ -397,19 +512,24 @@ impl FhApp {
                 i.key_pressed(egui::Key::ArrowDown),
             )
         });
-        if ctrl_k {
+        let karar = kisayol_kararlari(ctrl_k, ctrl_shift_w, esc);
+        if karar.palet_degistir {
             self.p.palet = !self.p.palet;
             if self.p.palet {
                 self.palet_sorgu.clear();
+                self.palet_son_sorgu.clear();
                 self.palet_sec = 0;
+                self.palet_odak_iste = true;
+            } else {
+                self.palet_arama_odagi_birak(ctx);
             }
         }
         // Ctrl+Shift+W: mini hesaplayıcıyı aç/kapat (kalıcı widget durumu).
-        if ctrl_shift_w {
+        if karar.widget_degistir {
             self.state.widget.aktif = !self.state.widget.aktif;
-            self.state.kaydet();
+            self.kaydet();
         }
-        if esc {
+        if karar.pencereleri_kapat {
             self.p.gecmis = false;
             self.p.ayarlar = false;
             self.p.takvim = false;
@@ -417,13 +537,19 @@ impl FhApp {
             self.p.donemler = false;
             self.p.onizleme = false;
             self.p.palet = false;
+            self.palet_arama_odagi_birak(ctx);
             if self.state.widget.aktif {
                 self.state.widget.aktif = false;
-                self.state.kaydet();
+                self.kaydet();
             }
         }
         if self.p.palet {
+            // Sorgu değişince eski seçim geçersizdir; 0'a döner. Aynı sorguda
+            // liste küçüldüyse aralığa sınırlanır (yanlış komut çalışması engellenir).
             let n = self.filtreli_komutlar().len();
+            let degisti = self.palet_sorgu != self.palet_son_sorgu;
+            self.palet_sec = palet_secim_duzelt(self.palet_sec, n, degisti);
+            self.palet_son_sorgu = self.palet_sorgu.clone();
             if up && n > 0 {
                 self.palet_sec = (self.palet_sec + n - 1) % n;
             }
@@ -432,10 +558,11 @@ impl FhApp {
             }
             if enter && n > 0 {
                 let idxs = self.filtreli_komutlar();
-                if let Some(&i) = idxs.get(self.palet_sec.min(n - 1)) {
+                if let Some(&i) = idxs.get(self.palet_sec) {
                     let eylem = self.komutlar[i].eylem.clone();
                     self.komut_calistir(eylem);
                     self.p.palet = false;
+                    self.palet_arama_odagi_birak(ctx);
                 }
             }
         }
@@ -450,7 +577,7 @@ impl FhApp {
             }
             Eylem::Tema(t) => {
                 self.state.settings.theme = t.to_string();
-                self.state.kaydet();
+                self.kaydet();
             }
             Eylem::FontBuyut => self.font_degistir(0.05),
             Eylem::FontKucult => self.font_degistir(-0.05),
@@ -460,17 +587,19 @@ impl FhApp {
             Eylem::EfaturaIce => self.efatura_ice(),
             Eylem::Takvim => self.p.takvim = true,
             Eylem::Gecmis => self.p.gecmis = true,
-            Eylem::GecmisTemizle => {
-                self.state.history.clear();
-                self.state.kaydet();
-                self.bildir("Geçmiş temizlendi");
-            }
+            Eylem::GecmisTemizle => self.gecmis_temizle(),
             Eylem::Ayarlar => self.p.ayarlar = true,
             Eylem::Cariler => self.p.cariler = true,
             Eylem::Donemler => self.p.donemler = true,
-            Eylem::Widget => {
-                self.state.widget.aktif = !self.state.widget.aktif;
-                self.state.kaydet();
+            e @ (Eylem::WidgetAcKapat | Eylem::WidgetSadeleştir | Eylem::WidgetÜsteSabitle) => {
+                match widget_etki(&e).expect("widget komutu") {
+                    WidgetEtki::Aktiflik => self.state.widget.aktif = !self.state.widget.aktif,
+                    WidgetEtki::Sadeleştir => {
+                        self.state.widget.kompakt = !self.state.widget.kompakt
+                    }
+                    WidgetEtki::Ustte => self.state.widget.ustte = !self.state.widget.ustte,
+                }
+                self.kaydet();
             }
             Eylem::Yazdir => self.yazdir(),
         }
@@ -495,7 +624,10 @@ impl FhApp {
     }
 
     fn yedek_yukle(&mut self) {
-        let Some(path) = rfd::FileDialog::new().add_filter("JSON", &["json"]).pick_file() else {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("JSON", &["json"])
+            .pick_file()
+        else {
             return;
         };
         let metin = match std::fs::read_to_string(&path) {
@@ -520,7 +652,7 @@ impl FhApp {
                     modes::varsayilanlari_doldur(e, m.id);
                 }
                 self.state = yeni;
-                self.state.kaydet();
+                self.kaydet();
                 self.bildir("Yedek yüklendi");
             }
             None => self.bildir("Bu dosya geçerli bir yedek değil"),
@@ -533,15 +665,27 @@ impl FhApp {
             return;
         }
         let mut satirlar = vec![vec![
-            "Tarih".to_string(), "Mod".to_string(), "Sonuç".to_string(), "Detay".to_string(),
+            "Tarih".to_string(),
+            "Mod".to_string(),
+            "Sonuç".to_string(),
+            "Detay".to_string(),
         ]];
         for e in &self.state.history {
             let tarih = chrono::DateTime::from_timestamp(e.timestamp, 0)
                 .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
                 .unwrap_or_default();
-            satirlar.push(vec![tarih, modes::mod_etiketi(&e.mode).to_string(), e.ana.clone(), e.detay.clone()]);
+            satirlar.push(vec![
+                tarih,
+                modes::mod_etiketi(&e.mode).to_string(),
+                e.ana.clone(),
+                e.detay.clone(),
+            ]);
         }
-        self.csv_yaz(csv_metin(&satirlar), "gecmis.csv", "Geçmiş CSV dışa aktarıldı");
+        self.csv_yaz(
+            csv_metin(&satirlar),
+            "gecmis.csv",
+            "Geçmiş CSV dışa aktarıldı",
+        );
     }
 
     fn csv_yaz(&mut self, metin: String, ad: &str, basari: &str) {
@@ -559,7 +703,10 @@ impl FhApp {
     }
 
     fn efatura_ice(&mut self) {
-        let Some(path) = rfd::FileDialog::new().add_filter("CSV", &["csv", "txt"]).pick_file() else {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("CSV", &["csv", "txt"])
+            .pick_file()
+        else {
             return;
         };
         let Ok(icerik) = std::fs::read_to_string(&path) else {
@@ -578,7 +725,7 @@ impl FhApp {
         if e.oran.is_empty() {
             e.oran = "20".to_string();
         }
-        self.state.kaydet();
+        self.kaydet();
         self.bildir(format!("{} matrah içe aktarıldı", matrahlar.len()));
     }
 
@@ -589,7 +736,10 @@ impl FhApp {
         };
         let now = chrono::Local::now();
         let e = HistEntry {
-            id: format!("h{}", now.timestamp_nanos_opt().unwrap_or(now.timestamp_millis())),
+            id: format!(
+                "h{}",
+                now.timestamp_nanos_opt().unwrap_or(now.timestamp_millis())
+            ),
             timestamp: now.timestamp(),
             mode: self.mode.clone(),
             inputs: self.girdi().clone(),
@@ -598,7 +748,7 @@ impl FhApp {
             detay: r.detay,
         };
         crate::model::gecmis_ekle(&mut self.state.history, e);
-        self.state.kaydet();
+        self.kaydet();
         self.bildir("Sonuç geçmişe eklendi");
     }
 
@@ -612,10 +762,7 @@ impl FhApp {
                 .strong(),
         )
         .fill(if aktif { p.birincil } else { p.yuksek })
-        .stroke(Stroke::new(
-            1.0,
-            if aktif { p.birincil } else { p.kenar },
-        ))
+        .stroke(Stroke::new(1.0, if aktif { p.birincil } else { p.kenar }))
         .corner_radius(CornerRadius::same(6))
         .min_size(Vec2::new(48.0, 32.0));
         ui.add(b)
@@ -632,7 +779,17 @@ impl FhApp {
         let (l_k, l_ap, l_am, l_w, l_ay, l_tk, l_cr, l_dn, l_gc) = if dar_ust {
             ("⌘K", "A+", "A−", "W", "Ayar", "Tak", "Cari", "Dön", "Geç")
         } else {
-            ("⌘K", "A+", "A−", "Widget", "Ayarlar", "Takvim", "Cari", "Dönemler", "Geçmiş")
+            (
+                "⌘K",
+                "A+",
+                "A−",
+                "Widget",
+                "Ayarlar",
+                "Takvim",
+                "Cari",
+                "Dönemler",
+                "Geçmiş",
+            )
         };
 
         ui.horizontal(|ui| {
@@ -683,15 +840,23 @@ impl FhApp {
                 // Pencere kontrolleri ÖNCE eklenir: right_to_left'te ilk eklenen
                 // sağ uçta kalır, taşan araç düğmeleri onu iter/çıkarmaz.
                 let maksimize = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
-                if ui.add(pencere_kontrol_dugmesi("×", p, true)).clicked() {
+                if pencere_kontrol_dugmesi(ui, "×", "Pencereyi kapat", p, true) {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
                 let buyut_glif = if maksimize { "❐" } else { "□" };
-                if ui.add(pencere_kontrol_dugmesi(buyut_glif, p, false)).clicked() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!maksimize));
+                let buyut_ad = if maksimize {
+                    "Pencereyi küçült"
+                } else {
+                    "Pencereyi büyüt"
+                };
+                if pencere_kontrol_dugmesi(ui, buyut_glif, buyut_ad, p, false) {
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::Maximized(!maksimize));
                 }
-                if ui.add(pencere_kontrol_dugmesi("─", p, false)).clicked() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                if pencere_kontrol_dugmesi(ui, "─", "Pencereyi simge durumuna küçült", p, false)
+                {
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                 }
 
                 // Araç düğmeleri ters sırayla: görünür sıra ⌘K A+ A− … Geçmiş.
@@ -710,9 +875,12 @@ impl FhApp {
                 if self.arac_dugmesi(ui, l_ay, self.p.ayarlar, p).clicked() {
                     self.p.ayarlar = !self.p.ayarlar;
                 }
-                if self.arac_dugmesi(ui, l_w, self.state.widget.aktif, p).clicked() {
+                if self
+                    .arac_dugmesi(ui, l_w, self.state.widget.aktif, p)
+                    .clicked()
+                {
                     self.state.widget.aktif = !self.state.widget.aktif;
-                    self.state.kaydet();
+                    self.kaydet();
                 }
                 if self.arac_dugmesi(ui, l_am, false, p).clicked() {
                     self.font_degistir(-0.05);
@@ -723,7 +891,13 @@ impl FhApp {
                 if self.arac_dugmesi(ui, l_k, self.p.palet, p).clicked() {
                     self.p.palet = !self.p.palet;
                     self.palet_sorgu.clear();
+                    self.palet_son_sorgu.clear();
                     self.palet_sec = 0;
+                    if self.p.palet {
+                        self.palet_odak_iste = true;
+                    } else {
+                        self.palet_arama_odagi_birak(ui.ctx());
+                    }
                 }
             });
         });
@@ -798,7 +972,12 @@ impl FhApp {
         let mut asagi = klavye_asagi;
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new("MODÜLLER").size(T_SMALL).color(p.soluk).strong());
+            ui.label(
+                RichText::new("MODÜLLER")
+                    .size(T_SMALL)
+                    .color(p.soluk)
+                    .strong(),
+            );
             ui.add_space(4.0);
             if ui.button("↑").clicked() {
                 yukari = true;
@@ -910,7 +1089,9 @@ impl FhApp {
             });
         });
         if temizle {
-            self.state.inputs.insert(mode.clone(), InputState::default());
+            self.state
+                .inputs
+                .insert(mode.clone(), InputState::default());
             let e = self.girdi();
             modes::varsayilanlari_doldur(e, &mode);
         }
@@ -923,8 +1104,18 @@ impl FhApp {
         );
         ui.add_space(5.0);
 
-        // Durum çizgisi: yeşil doğrulandı / kırmızı girdi hatası / soluk hazır.
-        let (durum_rengi, durum_metni) = if self.result.is_some() {
+        // Durum çizgisi: kırmızı girdi hatası / yeşil doğrulandı / soluk hazır.
+        // Parse hatası varsa result zaten None yapıldı; yine de hata bayrağı
+        // önce kontrol edilir ki yanlış sonuç hiçbir zaman doğrulanmış görünmesin.
+        let hatalar = self
+            .state
+            .inputs
+            .get(&mode)
+            .map(|e| e.hatalar.clone())
+            .unwrap_or_default();
+        let (durum_rengi, durum_metni) = if !hatalar.is_empty() {
+            (p.hata, "● Girdi hatası")
+        } else if self.result.is_some() {
             (p.basari, "● Canlı hesaplama")
         } else if self.girdi_dolu() {
             (p.hata, "● Girdi bekleniyor")
@@ -932,7 +1123,12 @@ impl FhApp {
             (p.soluk, "● Hazır")
         };
         ui.horizontal(|ui| {
-            ui.label(RichText::new(durum_metni).size(T_SMALL).color(durum_rengi).strong());
+            ui.label(
+                RichText::new(durum_metni)
+                    .size(T_SMALL)
+                    .color(durum_rengi)
+                    .strong(),
+            );
             if let Some(d) = def {
                 ui.label(
                     RichText::new(format!("· {} alan", d.alanlar.len()))
@@ -941,12 +1137,36 @@ impl FhApp {
                 );
             }
         });
+        if !hatalar.is_empty() {
+            ui.add_space(6.0);
+            egui::Frame::new()
+                .fill(p.hata.gamma_multiply(0.14))
+                .stroke(Stroke::new(1.0, p.hata.gamma_multiply(0.6)))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(Margin::symmetric(10, 8))
+                .show(ui, |ui| {
+                    for (alan, mesaj) in &hatalar {
+                        let etiket = def
+                            .and_then(|d| d.alanlar.iter().find(|f| f.alan == *alan))
+                            .map(|f| f.etiket)
+                            .unwrap_or("Alan");
+                        ui.label(
+                            RichText::new(format!("⚠ {etiket} — {mesaj}"))
+                                .size(T_SMALL)
+                                .color(p.hata)
+                                .strong(),
+                        );
+                    }
+                });
+        }
 
         ui.add_space(10.0);
         hairline(ui, p.kenar);
         ui.add_space(12.0);
 
-        let Some(def) = def else { return; };
+        let Some(def) = def else {
+            return;
+        };
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             for (n, f) in def.alanlar.iter().enumerate() {
                 if n > 0 {
@@ -1217,7 +1437,12 @@ impl FhApp {
     fn donemi_kaydet(&mut self) {
         let mode = self.mode.clone();
         let e = self.girdi();
-        let (satis, alis, oran, devreden) = (e.birinci.clone(), e.ikinci.clone(), e.oran.clone(), e.ek1.clone());
+        let (satis, alis, oran, devreden) = (
+            e.birinci.clone(),
+            e.ikinci.clone(),
+            e.oran.clone(),
+            e.ek1.clone(),
+        );
         let Some((hesaplanan, indirilecek, net, odenecek)) =
             compute_donem_net(&satis, &alis, &devreden, &oran)
         else {
@@ -1243,7 +1468,7 @@ impl FhApp {
         };
         self.state.donemler.retain(|d| d.id != id);
         self.state.donemler.insert(0, kayit);
-        self.state.kaydet();
+        self.kaydet();
         self.bildir(format!("{id} dönemi arşive kaydedildi"));
         let _ = mode;
     }
@@ -1270,10 +1495,12 @@ impl FhApp {
         if self.p.onizleme {
             self.onizleme_penceresi(ctx);
         }
-        if let Some((metin, at)) = &self.toast {
-            if at.elapsed() < Duration::from_secs(3) {
-                let metin = metin.clone();
+        let toast = self.toast.clone();
+        if let Some((metin, at)) = toast {
+            if at.elapsed() < Duration::from_secs(self.toast_sure) {
                 let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
+                let undo_var = self.gecmis_undo.is_some();
+                let mut undo_tiklandi = false;
                 egui::Window::new("Bildirim")
                     .title_bar(false)
                     .resizable(false)
@@ -1282,9 +1509,17 @@ impl FhApp {
                     .anchor(Align2::RIGHT_BOTTOM, Vec2::new(-16.0, -16.0))
                     .show(ctx, |ui| {
                         ui.add_space(2.0);
-                        ui.label(RichText::new(metin).size(T_BODY));
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(metin).size(T_BODY));
+                            if undo_var && ui.add(ikincil_dugme("Geri al", p)).clicked() {
+                                undo_tiklandi = true;
+                            }
+                        });
                         ui.add_space(2.0);
                     });
+                if undo_tiklandi {
+                    self.gecmis_undo_yap();
+                }
             }
         }
     }
@@ -1304,28 +1539,44 @@ impl FhApp {
                         self.gecmis_csv();
                     }
                     if ui.add(ikincil_dugme("Geçmişi temizle", p)).clicked() {
-                        self.state.history.clear();
-                        self.state.kaydet();
-                        self.bildir("Geçmiş temizlendi");
+                        self.gecmis_temizle();
                     }
-                    ui.label(RichText::new(format!("{} kayıt", self.state.history.len())).size(T_SMALL).color(p.soluk));
+                    ui.label(
+                        RichText::new(format!("{} kayıt", self.state.history.len()))
+                            .size(T_SMALL)
+                            .color(p.soluk),
+                    );
                 });
                 ui.add_space(6.0);
                 hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if self.state.history.is_empty() {
                         ui.add_space(10.0);
-                        ui.label(RichText::new("Henüz kayıt yok. Sonuç biletinden 'Geçmişe kaydet' ile ekleyin.")
-                            .size(T_SMALL).color(p.soluk));
+                        ui.label(
+                            RichText::new(
+                                "Henüz kayıt yok. Sonuç biletinden 'Geçmişe kaydet' ile ekleyin.",
+                            )
+                            .size(T_SMALL)
+                            .color(p.soluk),
+                        );
                     }
                     for e in &self.state.history {
                         let tarih = chrono::DateTime::from_timestamp(e.timestamp, 0)
                             .map(|d| d.format("%d.%m %H:%M").to_string())
                             .unwrap_or_default();
-                        let deger = para_bicimi(&e.ana, st.precision, &st.currency_symbol, st.show_currency_symbol);
+                        let deger = para_bicimi(
+                            &e.ana,
+                            st.precision,
+                            &st.currency_symbol,
+                            st.show_currency_symbol,
+                        );
                         let b = egui::Button::new(
-                            RichText::new(format!("{tarih}  ·  {}  ·  {deger}", modes::mod_etiketi(&e.mode)))
-                                .size(T_SMALL).color(p.ikinci),
+                            RichText::new(format!(
+                                "{tarih}  ·  {}  ·  {deger}",
+                                modes::mod_etiketi(&e.mode)
+                            ))
+                            .size(T_SMALL)
+                            .color(p.ikinci),
                         )
                         .fill(Color32::TRANSPARENT)
                         .min_size(Vec2::new(ui.available_width().max(100.0) - 10.0, 24.0));
@@ -1350,9 +1601,13 @@ impl FhApp {
         let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let mut sekme = self.ayarlar_sekmesi;
         let mut open = self.p.ayarlar;
-        let guncelleme_durumu = match self.guncelleme.lock().ok().and_then(|k| k.clone()) {
-            Some(g) => format!("Yeni sürüm v{} mevcut", g.version),
-            None => "Yeni sürüm bulunamadı".to_string(),
+        let guncelleme_durumu = if !ag_istegi_yapilir(self.state.settings.guncelleme_kontrol) {
+            "Güncelleme kontrolü kapalı — ağ isteği yapılmaz".to_string()
+        } else {
+            match self.guncelleme.lock().ok().and_then(|k| k.clone()) {
+                Some(g) => format!("Yeni sürüm v{} mevcut", g.version),
+                None => "Yeni sürüm bulunamadı".to_string(),
+            }
         };
 
         egui::Window::new("Ayarlar")
@@ -1383,7 +1638,7 @@ impl FhApp {
                                 for (ad, val) in [("Koyu", "dark"), ("Açık", "light"), ("Sistem", "system")] {
                                     if ui.selectable_label(self.state.settings.theme == val, ad).clicked() {
                                         self.state.settings.theme = val.to_string();
-                                        self.state.kaydet();
+                                        self.kaydet();
                                     }
                                 }
                             });
@@ -1417,7 +1672,7 @@ impl FhApp {
                                 for h in [0usize, 2, 4] {
                                     if ui.selectable_label(self.state.settings.precision == h, format!("{h} hane")).clicked() {
                                         self.state.settings.precision = h;
-                                        self.state.kaydet();
+                                        self.kaydet();
                                     }
                                 }
                             });
@@ -1503,13 +1758,13 @@ impl FhApp {
                             if ui.add(ikincil_dugme("Konumu sıfırla", p)).clicked() {
                                 self.state.widget.konum = None;
                                 self.widget_konum_uygulandi = false;
-                                self.state.kaydet();
+                                self.kaydet();
                                 self.bildir("Widget konumu sıfırlandı");
                             }
                             ui.label(RichText::new("Pencere bir sonraki açılışta varsayılan konuma yerleşir.")
                                 .size(T_BUILD).color(p.soluk));
                             if kaydet {
-                                self.state.kaydet();
+                                self.kaydet();
                             }
                         }
 
@@ -1539,6 +1794,31 @@ impl FhApp {
                             ui.add_space(6.0);
                             if ui.add(ikincil_dugme("Geçmişi temizle", p)).clicked() {
                                 self.komut_calistir(Eylem::GecmisTemizle);
+                            }
+
+                            ui.add_space(16.0);
+                            hairline(ui, p.kenar);
+                            ui.add_space(10.0);
+                            ui.label(RichText::new("Güncelleme kontrolü").size(T_BODY).color(p.metin).strong());
+                            ui.label(
+                                RichText::new("Kapattığınızda uygulama hiçbir ağ isteği yapmaz.")
+                                    .size(T_BUILD).color(p.soluk),
+                            );
+                            let mut ag_var = self.state.settings.guncelleme_kontrol;
+                            if ui
+                                .checkbox(&mut ag_var, "Güncellemeleri kontrol et (ağ isteği)")
+                                .changed()
+                            {
+                                self.state.settings.guncelleme_kontrol = ag_var;
+                                if !ag_var {
+                                    // Bekleyen güncelleme bilgisi ve ağ durumu temizlenir.
+                                    if let Ok(mut kilit) = self.guncelleme.lock() {
+                                        *kilit = None;
+                                    }
+                                    self.guncelleme_bildirildi = false;
+                                    self.indiriliyor = false;
+                                }
+                                self.kaydet();
                             }
 
                             ui.add_space(16.0);
@@ -1594,7 +1874,17 @@ impl FhApp {
                             ui.add_space(5.0);
                             ui.label(RichText::new(guncelleme_durumu.as_str()).size(T_SMALL).color(p.ikinci));
                             ui.add_space(6.0);
-                            if ui.add(ikincil_dugme("Güncellemeyi kontrol et", p)).clicked() {
+                            let ag_var = ag_istegi_yapilir(self.state.settings.guncelleme_kontrol);
+                            let ipucu = if ag_var {
+                                "GitHub API'den sürüm kontrolü yapılır"
+                            } else {
+                                "Ağ istekleri kapalı — ayarlardan açın"
+                            };
+                            if ui
+                                .add_enabled(ag_var, ikincil_dugme("Güncellemeyi kontrol et", p))
+                                .on_hover_text(ipucu)
+                                .clicked()
+                            {
                                 let paylasilan = Arc::clone(&self.guncelleme);
                                 self.guncelleme_bildirildi = false;
                                 std::thread::spawn(move || {
@@ -1623,21 +1913,43 @@ impl FhApp {
             .frame(pencere_cercevesi(p))
             .default_size((540.0, 460.0))
             .show(ctx, |ui| {
-                ui.label(RichText::new("Yaklaşan beyan ve ödeme tarihleri (statik VUK takvimi)")
-                    .size(T_SMALL).color(p.soluk));
+                ui.label(
+                    RichText::new("Yaklaşan beyan ve ödeme tarihleri (statik VUK takvimi)")
+                        .size(T_SMALL)
+                        .color(p.soluk),
+                );
                 ui.add_space(6.0);
                 hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for k in kayitlar.iter().take(80) {
                         let gun = gun_kaldi(&k.tarih, bugun);
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(k.tarih.as_str()).size(T_SMALL).color(p.birincil).monospace());
-                            ui.label(RichText::new(k.ad.as_str()).size(T_BODY).color(p.metin).strong());
+                            ui.label(
+                                RichText::new(k.tarih.as_str())
+                                    .size(T_SMALL)
+                                    .color(p.birincil)
+                                    .monospace(),
+                            );
+                            ui.label(
+                                RichText::new(k.ad.as_str())
+                                    .size(T_BODY)
+                                    .color(p.metin)
+                                    .strong(),
+                            );
                             if (0..=7).contains(&gun) {
-                                ui.label(RichText::new(format!("{gun} gün kaldı")).size(T_BUILD).color(p.uyari).strong());
+                                ui.label(
+                                    RichText::new(format!("{gun} gün kaldı"))
+                                        .size(T_BUILD)
+                                        .color(p.uyari)
+                                        .strong(),
+                                );
                             }
                         });
-                        ui.label(RichText::new(format!("{} — {}", k.donemi, k.aciklama)).size(T_SMALL).color(p.soluk));
+                        ui.label(
+                            RichText::new(format!("{} — {}", k.donemi, k.aciklama))
+                                .size(T_SMALL)
+                                .color(p.soluk),
+                        );
                         hairline(ui, p.kenar.gamma_multiply(0.6));
                     }
                 });
@@ -1656,15 +1968,25 @@ impl FhApp {
             .default_size((430.0, 420.0))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.yeni_cari).hint_text("Cari adı").desired_width(180.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.yeni_cari)
+                            .hint_text("Cari adı")
+                            .desired_width(180.0),
+                    );
                     if ui.add(birincil_dugme("Ekle", p)).clicked() {
                         let ad = self.yeni_cari.trim().to_string();
                         if !ad.is_empty() {
-                            let id = format!("c{}", chrono::Local::now().timestamp_nanos_opt().unwrap_or(1));
-                            self.state.cariler.push(Cari { id: id.clone(), name: ad });
+                            let id = format!(
+                                "c{}",
+                                chrono::Local::now().timestamp_nanos_opt().unwrap_or(1)
+                            );
+                            self.state.cariler.push(Cari {
+                                id: id.clone(),
+                                name: ad,
+                            });
                             self.state.active_cari = id;
                             self.yeni_cari.clear();
-                            self.state.kaydet();
+                            self.kaydet();
                         }
                     }
                 });
@@ -1673,11 +1995,16 @@ impl FhApp {
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     for id in &idler {
                         let cari = self.state.cariler.iter().find(|c| &c.id == id).cloned();
-                        let Some(c) = cari else { continue; };
+                        let Some(c) = cari else {
+                            continue;
+                        };
                         let mut sil = false;
                         let mut sec = false;
                         ui.horizontal(|ui| {
-                            if ui.selectable_label(aktif == c.id, c.name.as_str()).clicked() {
+                            if ui
+                                .selectable_label(aktif == c.id, c.name.as_str())
+                                .clicked()
+                            {
                                 sec = true;
                             }
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -1689,14 +2016,14 @@ impl FhApp {
                         hairline(ui, p.kenar.gamma_multiply(0.6));
                         if sec {
                             self.state.active_cari = c.id.clone();
-                            self.state.kaydet();
+                            self.kaydet();
                         }
                         if sil {
                             self.state.cariler.retain(|x| x.id != c.id);
                             if self.state.active_cari == c.id {
                                 self.state.active_cari.clear();
                             }
-                            self.state.kaydet();
+                            self.kaydet();
                         }
                     }
                     if idler.is_empty() {
@@ -1720,7 +2047,12 @@ impl FhApp {
             .collect();
         let gruplar = yillara_gir(&kayitlar);
         let csv = donem_csv(&kayitlar);
-        let ozet = beyan_ozeti(&kayitlar, st.precision, &st.currency_symbol, st.show_currency_symbol);
+        let ozet = beyan_ozeti(
+            &kayitlar,
+            st.precision,
+            &st.currency_symbol,
+            st.show_currency_symbol,
+        );
         let cariler = self.state.cariler.clone();
         let mut open = self.p.donemler;
         egui::Window::new("Dönem KDV Arşivi")
@@ -1805,42 +2137,71 @@ impl FhApp {
     }
 
     fn palet_penceresi(&mut self, ctx: &Context) {
-        let idxs = self.filtreli_komutlar();
         let p = theme::palet(theme::koyu_mu(&self.state.settings.theme));
         let mut secilen = None;
         let mut open = self.p.palet;
+        let arama_id = egui::Id::unique(PALET_ARAMA_ID);
+        if self.palet_odak_iste {
+            ctx.memory_mut(|m| m.request_focus(arama_id));
+            self.palet_odak_iste = false;
+        }
+        let n = self.filtreli_komutlar().len();
+        let degisti = self.palet_sorgu != self.palet_son_sorgu;
+        self.palet_sec = palet_secim_duzelt(self.palet_sec, n, degisti);
+        self.palet_son_sorgu = self.palet_sorgu.clone();
         egui::Window::new("Komut Paleti · Ctrl+K")
             .open(&mut open)
             .frame(pencere_cercevesi(p))
             .default_size((500.0, 440.0))
             .anchor(Align2::CENTER_TOP, Vec2::new(0.0, 70.0))
             .show(ctx, |ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.palet_sorgu)
-                    .hint_text("Komut ara… (↑↓ gezin, Enter seç, Esc kapat)")
-                    .desired_width(f32::INFINITY));
+                let resp = ui.add(
+                    egui::TextEdit::singleline(&mut self.palet_sorgu)
+                        .id(arama_id)
+                        .hint_text("Komut ara… (↑↓ gezin, Enter seç, Esc kapat)")
+                        .desired_width(f32::INFINITY),
+                );
+                if resp.changed() {
+                    self.palet_sec = 0;
+                    self.palet_son_sorgu = self.palet_sorgu.clone();
+                }
                 ui.add_space(6.0);
                 hairline(ui, p.kenar);
-                egui::ScrollArea::vertical().max_height(340.0).show(ui, |ui| {
-                    if idxs.is_empty() {
-                        ui.label(RichText::new("Eşleşen komut yok.").size(T_SMALL).color(p.soluk));
-                    }
-                    for (n, &idx) in idxs.iter().enumerate() {
-                        let c = &self.komutlar[idx];
-                        let aktif = n == self.palet_sec;
-                        let b = egui::Button::new(
-                            RichText::new(format!("{}   · {}", c.ad, c.kategori))
-                                .size(T_SMALL)
-                                .color(if aktif { Color32::WHITE } else { p.ikinci }),
-                        )
-                        .fill(if aktif { p.birincil } else { Color32::TRANSPARENT })
-                        .min_size(Vec2::new(ui.available_width().max(100.0) - 8.0, 24.0));
-                        if ui.add(b).clicked() {
-                            secilen = Some(idx);
+                let idxs = self.filtreli_komutlar();
+                egui::ScrollArea::vertical()
+                    .max_height(340.0)
+                    .show(ui, |ui| {
+                        if idxs.is_empty() {
+                            ui.label(
+                                RichText::new("Eşleşen komut yok.")
+                                    .size(T_SMALL)
+                                    .color(p.soluk),
+                            );
                         }
-                    }
-                });
+                        for (n, &idx) in idxs.iter().enumerate() {
+                            let c = &self.komutlar[idx];
+                            let aktif = n == self.palet_sec;
+                            let b = egui::Button::new(
+                                RichText::new(format!("{}   · {}", c.ad, c.kategori))
+                                    .size(T_SMALL)
+                                    .color(if aktif { Color32::WHITE } else { p.ikinci }),
+                            )
+                            .fill(if aktif {
+                                p.birincil
+                            } else {
+                                Color32::TRANSPARENT
+                            })
+                            .min_size(Vec2::new(ui.available_width().max(100.0) - 8.0, 24.0));
+                            if ui.add(b).clicked() {
+                                secilen = Some(idx);
+                            }
+                        }
+                    });
             });
         self.p.palet = open;
+        if !self.p.palet {
+            ctx.memory_mut(|m| m.surrender_focus(arama_id));
+        }
         if let Some(i) = secilen {
             let e = self.komutlar[i].eylem.clone();
             self.komut_calistir(e);
@@ -1867,7 +2228,9 @@ impl FhApp {
                 ui.add_space(6.0);
                 hairline(ui, p.kenar);
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.add(egui::TextEdit::multiline(&mut metin.clone()).desired_width(f32::INFINITY));
+                    // Salt okunur önizleme: eski kod geçici bir klonu düzenliyordu,
+                    // yazılanlar kayboluyordu. Gerçek state zaten `self.onizleme_metin`.
+                    ui.add(egui::Label::new(metin.as_str()).wrap_mode(TextWrapMode::Wrap));
                 });
             });
         self.p.onizleme = open;
@@ -1912,10 +2275,14 @@ impl eframe::App for FhApp {
             |ui| {
                 if dar {
                     ui.columns(2, |cols| {
-                        Frame::new().fill(p.yuzey).stroke(kenar)
+                        Frame::new()
+                            .fill(p.yuzey)
+                            .stroke(kenar)
                             .inner_margin(Margin::symmetric(14, 14))
                             .show(&mut cols[0], |ui| self.mod_nav_panel(ui, ana_y));
-                        Frame::new().fill(p.arka).stroke(kenar)
+                        Frame::new()
+                            .fill(p.arka)
+                            .stroke(kenar)
                             .inner_margin(Margin::symmetric(16, 14))
                             .show(&mut cols[1], |ui| {
                                 theme::doku(ui, koyu);
@@ -1937,32 +2304,43 @@ impl eframe::App for FhApp {
                     let wm = (wt - wn - wr).max(240.0);
                     ui.horizontal(|ui| {
                         ui.allocate_ui_with_layout(
-                            Vec2::new(wn, ana_y), egui::Layout::top_down(Align::Min),
+                            Vec2::new(wn, ana_y),
+                            egui::Layout::top_down(Align::Min),
                             |ui| {
-                                Frame::new().fill(p.yuzey).stroke(kenar)
+                                Frame::new()
+                                    .fill(p.yuzey)
+                                    .stroke(kenar)
                                     .inner_margin(Margin::symmetric(14, 14))
                                     .show(ui, |ui| self.mod_nav_panel(ui, ana_y));
                             },
                         );
                         ui.allocate_ui_with_layout(
-                            Vec2::new(wm, ana_y), egui::Layout::top_down(Align::Min),
+                            Vec2::new(wm, ana_y),
+                            egui::Layout::top_down(Align::Min),
                             |ui| {
-                                Frame::new().fill(p.arka).stroke(kenar)
+                                Frame::new()
+                                    .fill(p.arka)
+                                    .stroke(kenar)
                                     .inner_margin(Margin::symmetric(24, 20))
                                     .show(ui, |ui| {
                                         theme::doku(ui, koyu);
-                                        egui::ScrollArea::vertical().show(ui, |ui| self.girdi_panel(ui));
+                                        egui::ScrollArea::vertical()
+                                            .show(ui, |ui| self.girdi_panel(ui));
                                     });
                             },
                         );
                         ui.allocate_ui_with_layout(
-                            Vec2::new(wr, ana_y), egui::Layout::top_down(Align::Min),
+                            Vec2::new(wr, ana_y),
+                            egui::Layout::top_down(Align::Min),
                             |ui| {
-                                Frame::new().fill(p.arka).stroke(kenar)
+                                Frame::new()
+                                    .fill(p.arka)
+                                    .stroke(kenar)
                                     .inner_margin(Margin::symmetric(22, 18))
                                     .show(ui, |ui| {
                                         theme::doku(ui, koyu);
-                                        egui::ScrollArea::vertical().show(ui, |ui| self.sonuc_panel(ui));
+                                        egui::ScrollArea::vertical()
+                                            .show(ui, |ui| self.sonuc_panel(ui));
                                     });
                             },
                         );
@@ -1978,12 +2356,15 @@ impl eframe::App for FhApp {
             Vec2::new(ui.available_width(), durum_y),
             egui::Layout::left_to_right(Align::Center),
             |ui| {
-                Frame::new().fill(p.yuzey).stroke(kenar)
+                Frame::new()
+                    .fill(p.yuzey)
+                    .stroke(kenar)
                     .inner_margin(Margin::symmetric(14, 2))
                     .show(ui, |ui| {
                         ui.label(
                             RichText::new(format!("v{SURUM} · çevrimdışı · veri cihazda"))
-                                .size(T_BUILD).color(p.soluk),
+                                .size(T_BUILD)
+                                .color(p.soluk),
                         );
                         ui.add_space(ui.available_width().max(0.0));
                         let st = &self.state.settings;
@@ -1994,7 +2375,9 @@ impl eframe::App for FhApp {
                         };
                         ui.label(
                             RichText::new(format!("{birim} · {} hane", st.precision))
-                                .size(T_BUILD).color(p.soluk).monospace(),
+                                .size(T_BUILD)
+                                .color(p.soluk)
+                                .monospace(),
                         );
                     });
             },
@@ -2009,9 +2392,10 @@ impl eframe::App for FhApp {
             egui::Sense::drag(),
         );
         if grip.drag_started() {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::BeginResize(
-                egui::viewport::ResizeDirection::SouthEast,
-            ));
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::BeginResize(
+                    egui::viewport::ResizeDirection::SouthEast,
+                ));
         }
         ui.painter().line_segment(
             [
@@ -2062,21 +2446,38 @@ impl eframe::App for FhApp {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         // Pencere boşlukları siyah kalmasın: temanın zemin rengiyle boyanır.
         let c = theme::palet(theme::koyu_mu(&self.state.settings.theme)).arka;
-        [c.r() as f32 / 255.0, c.g() as f32 / 255.0, c.b() as f32 / 255.0, 1.0]
+        [
+            c.r() as f32 / 255.0,
+            c.g() as f32 / 255.0,
+            c.b() as f32 / 255.0,
+            1.0,
+        ]
     }
 }
 
 /// Saf yardımcı: dönem kayıtlarından CSV metni (`fh_data::csv_metin` kullanılır).
 pub fn donem_csv(kayitlar: &[DonemRecord]) -> String {
     let mut satirlar = vec![vec![
-        "Dönem".to_string(), "Yıl".to_string(), "Cari".to_string(), "Satış".to_string(),
-        "Alış".to_string(), "Hesaplanan".to_string(), "İndirilecek".to_string(),
-        "Net".to_string(), "Durum".to_string(),
+        "Dönem".to_string(),
+        "Yıl".to_string(),
+        "Cari".to_string(),
+        "Satış".to_string(),
+        "Alış".to_string(),
+        "Hesaplanan".to_string(),
+        "İndirilecek".to_string(),
+        "Net".to_string(),
+        "Durum".to_string(),
     ]];
     for k in kayitlar {
         satirlar.push(vec![
-            k.id.clone(), k.year.to_string(), k.cari.clone(), k.satis.clone(), k.alis.clone(),
-            k.hesaplanan.clone(), k.indirilecek.clone(), k.net.clone(),
+            k.id.clone(),
+            k.year.to_string(),
+            k.cari.clone(),
+            k.satis.clone(),
+            k.alis.clone(),
+            k.hesaplanan.clone(),
+            k.indirilecek.clone(),
+            k.net.clone(),
             if k.odenecek { "Ödenecek" } else { "Devreden" }.to_string(),
         ]);
     }
@@ -2084,7 +2485,12 @@ pub fn donem_csv(kayitlar: &[DonemRecord]) -> String {
 }
 
 /// Saf yardımcı: yıllık beyan özeti metni.
-pub fn beyan_ozeti(kayitlar: &[DonemRecord], precision: usize, sembol: &str, goster: bool) -> String {
+pub fn beyan_ozeti(
+    kayitlar: &[DonemRecord],
+    precision: usize,
+    sembol: &str,
+    goster: bool,
+) -> String {
     let gruplar = yillara_gir(kayitlar);
     if gruplar.is_empty() {
         return "Arşivde dönem kaydı yok.".to_string();
@@ -2106,16 +2512,28 @@ mod tests {
 
     fn rec(id: &str, year: i32, net: &str, odenecek: bool) -> DonemRecord {
         DonemRecord {
-            id: id.to_string(), year, month: 1, satis: "1000".into(), alis: "400".into(),
-            devreden_giris: "0".into(), hesaplanan: "200".into(), indirilecek: "80".into(),
-            net: net.to_string(), odenecek, kdv_rate: "20".into(), cari: String::new(),
+            id: id.to_string(),
+            year,
+            month: 1,
+            satis: "1000".into(),
+            alis: "400".into(),
+            devreden_giris: "0".into(),
+            hesaplanan: "200".into(),
+            indirilecek: "80".into(),
+            net: net.to_string(),
+            odenecek,
+            kdv_rate: "20".into(),
+            cari: String::new(),
             closed_at: 0,
         }
     }
 
     #[test]
     fn beyan_ozeti_yillik_toplam() {
-        let list = vec![rec("2026-02", 2026, "120", true), rec("2025-12", 2025, "-50", false)];
+        let list = vec![
+            rec("2026-02", 2026, "120", true),
+            rec("2025-12", 2025, "-50", false),
+        ];
         let s = beyan_ozeti(&list, 2, "₺", true);
         assert!(s.contains("2026 — 1 dönem"));
         assert!(s.contains("2025 — 1 dönem"));
@@ -2163,8 +2581,10 @@ mod tests {
 
     #[test]
     fn mod_indeksi_sinirla_ust_sinir() {
-        assert_eq!(mod_indeksi_sinirla(100, MODLAR.len(), GORUNUR_SATIR),
-                   MODLAR.len() - GORUNUR_SATIR);
+        assert_eq!(
+            mod_indeksi_sinirla(100, MODLAR.len(), GORUNUR_SATIR),
+            MODLAR.len() - GORUNUR_SATIR
+        );
     }
 
     #[test]
@@ -2175,7 +2595,10 @@ mod tests {
     #[test]
     fn mod_indeksi_sinirla_tam_sinir() {
         let sinir = MODLAR.len() - GORUNUR_SATIR;
-        assert_eq!(mod_indeksi_sinirla(sinir, MODLAR.len(), GORUNUR_SATIR), sinir);
+        assert_eq!(
+            mod_indeksi_sinirla(sinir, MODLAR.len(), GORUNUR_SATIR),
+            sinir
+        );
     }
 
     #[test]

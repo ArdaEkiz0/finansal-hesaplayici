@@ -8,11 +8,11 @@ desktop-windows
 
 ## Users
 
-Birincil kullanıcı: Türkçe konuşan SMMM'ler ve mali müşavir ofisleri; saniyeler içinde KDV/stopaj/tevkifat hesabı yapan, aynı anda birden fazla mükellef dosyası açık çalışan kişiler. İkincil: kendi muhasebesini yapan küçük işletme sahipleri. (Kaynak: mevcut uygulama, 15 mod, paketleme kararı — çıkarım.)
+Birincil kullanıcı: Türkçe konuşan SMMM'ler ve mali müşavir ofisleri; saniyeler içinde KDV/stopaj/tevkifat hesabı yapan, aynı anda birden fazla mükellef dosyası açık çalışan kişiler. İkincil: kendi muhasebesini yapan küçük işletme sahipleri. (Kaynak: mevcut uygulama, 20 mod, paketleme kararı — çıkarım.)
 
 ## Product Purpose
 
-Vergi ve finans hesaplarını çevrimdışı, ondalık hassasiyetle ve Türkçe biçimde yapmak. Başarı: kullanıcı girdiyi yazdığı anda doğru sonucu görmek, verisini kaybetmemek, hesabı yazdırıp/recovery alabilmek. (Çıkarım: `fh-core`/`fh-data` ve eski Electron sürümü.)
+Vergi ve finans hesaplarını çevrimdışı, ondalık hassasiyetle ve Türkçe biçimde yapmak. Başarı: kullanıcı girdiyi yazdığı anda doğru sonucu görmek, verisini kaybetmemek, hesabı yazdırıp/recovery alabilmek. (Çıkarım: `fh-core`/`fh-data`.)
 
 ## Positioning
 
@@ -24,7 +24,7 @@ Windows 10/11, kullanıcı bazlı kurulum (`%LOCALAPPDATA%\Programs`), veri `%AP
 
 ## Capabilities and Constraints
 
-15 mod (KDV, stopaj, tevkifat, fiyat, kdvCompare, margin, markup, discount, percent, compound, batch, donem, gecikme, amortisman, doviz); geçmiş; dönem arşivi + yıllık özet; cari kartlar; vergi takvimi; e-fatura CSV içe aktarma; yedek al/yükle; CSV dışa aktarma; koyu/açık/sistem tema; yazı ölçeği; Ctrl+K paleti; mini widget; güncelleyici. Tüm para matematiği `fh-core`, tüm veri kuralları `fh-data` üzerinden; arayüzde formül yok. egui 0.37 — döndürülmüş galley API'si yok. (Kod: CONTRACT.md, modül listeleri.)
+20 mod (kesin liste: `fh-ui/src/modes.rs::MODLAR`); geçmiş; dönem arşivi + yıllık özet; cari kartlar; vergi takvimi; e-fatura CSV içe aktarma; yedek al/yükle; CSV dışa aktarma; koyu/açık/sistem tema; yazı ölçeği; Ctrl+K paleti; daima üstte ayrı OS penceresi widget; SHA-256 doğrulamalı tek tık güncelleyici. Tüm para matematiği `fh-core`, tüm veri kuralları `fh-data` üzerinden; arayüzde formül yok. egui 0.37 — döndürülmüş galley API'si yok. (Kod: CONTRACT.md, modül listeleri.)
 
 ## Brand Commitments
 
@@ -32,7 +32,7 @@ Windows 10/11, kullanıcı bazlı kurulum (`%LOCALAPPDATA%\Programs`), veri `%AP
 
 ## Evidence on Hand
 
-Çalışan v5.0.0 Rust uygulaması, 156 test, CI/release (4 varlık), son ekran görüntüsü `C:\Users\ozel\AppData\Local\Temp\opencode\rust-final.png`, eski Electron arayüzü git geçmişinde.
+Çalışan Rust uygulaması (v5.7.x), 400+ test, CI/release (4 varlık: kurulum.exe, portable.exe, update.zip, update.zip.sha256), koyu/açık tema ekran görüntüleri `C:\Users\ozel\AppData\Local\Temp\opencode\` altında. Eski Electron arayüzü git geçmişinde.
 
 ## Product Principles
 

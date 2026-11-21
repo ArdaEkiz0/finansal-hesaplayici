@@ -5,6 +5,8 @@
 use chrono::SecondsFormat;
 use serde_json::{Value, json};
 
+use crate::donem::parse_donem_sayisi;
+
 pub const SINIR_HISTORY: usize = 100;
 pub const SINIR_DONEMLER: usize = 240;
 pub const SINIR_CARILER: usize = 500;
@@ -53,8 +55,8 @@ fn arr<'a>(v: &'a Value, key: &str) -> Vec<&'a Value> {
 /// - eski Electron yedekleri: `"result"` alanı.
 /// `id` / `mode` / `timestamp` doğrulaması iki biçimde de aynen korunur.
 fn gecerli_gecmis(e: &Value) -> bool {
-    let sonuc_var = e.get("ana").is_some_and(Value::is_string)
-        || e.get("result").is_some_and(Value::is_string);
+    let sonuc_var =
+        e.get("ana").is_some_and(Value::is_string) || e.get("result").is_some_and(Value::is_string);
     e.is_object()
         && e.get("id").is_some_and(Value::is_string)
         && sonuc_var
@@ -64,23 +66,76 @@ fn gecerli_gecmis(e: &Value) -> bool {
 
 fn donem_id_gecerli(s: &str) -> bool {
     let b = s.as_bytes();
-    b.len() == 7
-        && b[4] == b'-'
-        && b[0..4].iter().all(|c| c.is_ascii_digit())
-        && b[5..7].iter().all(|c| c.is_ascii_digit())
+    if b.len() != 7
+        || b[4] != b'-'
+        || !b[0..4].iter().all(|c| c.is_ascii_digit())
+        || !b[5..7].iter().all(|c| c.is_ascii_digit())
+    {
+        return false;
+    }
+    let ay = (b[5] - b'0') * 10 + (b[6] - b'0');
+    (1..=12).contains(&ay)
 }
 
 fn gecerli_donem(e: &Value) -> bool {
+    // donem.rs::donem_ozet bozuk tutarları 0 sanıp topluyor; yedeğe hiç
+    // girmemeleri için burada sayısallık ve takvim aralığı doğrulanır.
+    let tutar_gecerli = |ad: &str| {
+        e.get(ad)
+            .and_then(Value::as_str)
+            .is_some_and(|s| parse_donem_sayisi(s).is_some())
+    };
+    let yil = e.get("year").and_then(Value::as_f64);
+    let ay = e.get("month").and_then(Value::as_f64);
     e.is_object()
         && e.get("id")
             .and_then(Value::as_str)
             .is_some_and(donem_id_gecerli)
-        && e.get("year").is_some_and(Value::is_number)
-        && e.get("month").is_some_and(Value::is_number)
-        && e.get("hesaplanan").is_some_and(Value::is_string)
-        && e.get("indirilecek").is_some_and(Value::is_string)
-        && e.get("net").is_some_and(Value::is_string)
-        && e.get("odenecek").is_some_and(|v| v.is_boolean())
+        && yil.is_some_and(|y| y.fract() == 0.0 && (1900.0..=2200.0).contains(&y))
+        && ay.is_some_and(|a| a.fract() == 0.0 && (1.0..=12.0).contains(&a))
+        && tutar_gecerli("hesaplanan")
+        && tutar_gecerli("indirilecek")
+        && tutar_gecerli("net")
+        && e.get("odenecek").is_some_and(Value::is_boolean)
+}
+
+/// Sınır aşımında en yeni kayıtları korumak için tarihe göre (yeni → eski)
+/// sıralar. Sınır içindeyse giriş sırası korunur (mevcut yedek sözleşmesi).
+fn en_yeni_kayitlar(
+    kayitlar: Vec<&Value>,
+    sinir: usize,
+    tarih: impl Fn(&Value) -> Option<f64>,
+) -> Vec<Value> {
+    if kayitlar.len() <= sinir {
+        return kayitlar.into_iter().cloned().collect();
+    }
+    let mut kayitlar = kayitlar;
+    // sort_by kararlıdır: eşit tarihli kayıtların sırası bozulmaz.
+    kayitlar.sort_by(|a, b| {
+        let ta = tarih(a).unwrap_or(f64::NEG_INFINITY);
+        let tb = tarih(b).unwrap_or(f64::NEG_INFINITY);
+        tb.partial_cmp(&ta).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    kayitlar.into_iter().take(sinir).cloned().collect()
+}
+
+/// Cari kayıtlarında tarih alanı yoktur; yeni kayıtlar liste sonuna eklenir.
+/// Tarih alanı varsa ona göre sırala, yoksa son `sinir` kaydı koru.
+fn en_yeni_cariler(kayitlar: Vec<&Value>, sinir: usize) -> Vec<Value> {
+    if kayitlar.len() <= sinir {
+        return kayitlar.into_iter().cloned().collect();
+    }
+    let tarih = |e: &Value| {
+        e.get("timestamp")
+            .or_else(|| e.get("createdAt"))
+            .or_else(|| e.get("created_at"))
+            .and_then(Value::as_f64)
+    };
+    if kayitlar.iter().all(|e| tarih(e).is_some()) {
+        return en_yeni_kayitlar(kayitlar, sinir, tarih);
+    }
+    let fazla = kayitlar.len() - sinir;
+    kayitlar.into_iter().skip(fazla).cloned().collect()
 }
 
 fn gecerli_cari(e: &Value) -> bool {
@@ -128,24 +183,33 @@ pub fn temizle_yedek(v: &Value) -> Option<TemizYedek> {
         .unwrap_or("dark")
         .to_string();
 
-    let history = arr(v, "history")
-        .into_iter()
-        .filter(|e| gecerli_gecmis(e))
-        .take(SINIR_HISTORY)
-        .cloned()
-        .collect();
-    let donemler = arr(v, "donemler")
-        .into_iter()
-        .filter(|e| gecerli_donem(e))
-        .take(SINIR_DONEMLER)
-        .cloned()
-        .collect();
-    let cariler = arr(v, "cariler")
-        .into_iter()
-        .filter(|e| gecerli_cari(e))
-        .take(SINIR_CARILER)
-        .cloned()
-        .collect();
+    let history = en_yeni_kayitlar(
+        arr(v, "history")
+            .into_iter()
+            .filter(|e| gecerli_gecmis(e))
+            .collect(),
+        SINIR_HISTORY,
+        |e| e.get("timestamp").and_then(Value::as_f64),
+    );
+    let donemler = en_yeni_kayitlar(
+        arr(v, "donemler")
+            .into_iter()
+            .filter(|e| gecerli_donem(e))
+            .collect(),
+        SINIR_DONEMLER,
+        |e| {
+            let y = e.get("year").and_then(Value::as_f64)?;
+            let a = e.get("month").and_then(Value::as_f64)?;
+            Some(y * 12.0 + a)
+        },
+    );
+    let cariler = en_yeni_cariler(
+        arr(v, "cariler")
+            .into_iter()
+            .filter(|e| gecerli_cari(e))
+            .collect(),
+        SINIR_CARILER,
+    );
 
     Some(TemizYedek {
         history,
@@ -235,12 +299,88 @@ mod tests {
     #[test]
     fn sınırlar_100_240_500() {
         let h: Vec<Value> = (0..150).map(|i| gecmis(&format!("h{i}"))).collect();
-        let d: Vec<Value> = (0..300).map(|i| donem(&format!("2026-{:02}", i % 12 + 1))).collect();
+        let d: Vec<Value> = (0..300)
+            .map(|i| donem(&format!("2026-{:02}", i % 12 + 1)))
+            .collect();
         let c: Vec<Value> = (0..600).map(|i| cari(&format!("c{i}"))).collect();
         let t = temizle_yedek(&json!({"history": h, "donemler": d, "cariler": c})).unwrap();
         assert_eq!(t.history.len(), 100);
         assert_eq!(t.donemler.len(), 240);
         assert_eq!(t.cariler.len(), 500);
+    }
+
+    #[test]
+    fn limit_asiminda_history_en_yeni_100_korunur() {
+        let h: Vec<Value> = (0..300)
+            .map(|i| json!({"id": format!("h{i}"), "result": "1", "timestamp": i, "mode": "kdv"}))
+            .collect();
+        let t = temizle_yedek(&json!({"history": h})).unwrap();
+        assert_eq!(t.history.len(), 100);
+        assert_eq!(
+            t.history[0]["id"], "h299",
+            "en yeni kayıt ilk sırada olmalı"
+        );
+        assert_eq!(t.history[99]["id"], "h200");
+        assert!(t.history.iter().all(|e| {
+            e["id"]
+                .as_str()
+                .unwrap()
+                .trim_start_matches('h')
+                .parse::<i32>()
+                .unwrap()
+                >= 200
+        }));
+    }
+
+    #[test]
+    fn limit_asiminda_donemler_en_yeni_240_korunur() {
+        let d: Vec<Value> = (0..300)
+            .map(|i| {
+                let y = 2000 + i / 12;
+                let a = i % 12 + 1;
+                json!({"id": format!("{y}-{a:02}"), "year": y, "month": a,
+                       "hesaplanan": "1", "indirilecek": "0", "net": "1", "odenecek": true})
+            })
+            .collect();
+        let t = temizle_yedek(&json!({"donemler": d})).unwrap();
+        assert_eq!(t.donemler.len(), 240);
+        assert_eq!(t.donemler[0]["id"], "2024-12");
+        assert_eq!(t.donemler[0]["year"], 2024);
+        assert_eq!(t.donemler[0]["month"], 12);
+    }
+
+    #[test]
+    fn limit_asiminda_cariler_en_yeni_500_korunur() {
+        let c: Vec<Value> = (0..600)
+            .map(|i| json!({"id": format!("c{i}"), "name": "Müşteri"}))
+            .collect();
+        let t = temizle_yedek(&json!({"cariler": c})).unwrap();
+        assert_eq!(t.cariler.len(), 500);
+        assert_eq!(t.cariler[0]["id"], "c100");
+        assert_eq!(t.cariler[499]["id"], "c599");
+    }
+
+    #[test]
+    fn bozuk_donem_kaydi_red_edilir() {
+        let iyi = donem("2026-01");
+        let bozuk_tutar = json!({"id": "2026-02", "year": 2026, "month": 2,
+            "hesaplanan": "abc", "indirilecek": "0", "net": "1", "odenecek": true});
+        let bozuk_ay = json!({"id": "2026-13", "year": 2026, "month": 13,
+            "hesaplanan": "1", "indirilecek": "0", "net": "1", "odenecek": true});
+        let bozuk_yil = json!({"id": "1800-01", "year": 1800, "month": 1,
+            "hesaplanan": "1", "indirilecek": "0", "net": "1", "odenecek": true});
+        let bozuk_net = json!({"id": "2026-03", "year": 2026, "month": 3,
+            "hesaplanan": "1", "indirilecek": "0", "net": "???", "odenecek": true});
+        let t = temizle_yedek(&json!({
+            "donemler": [iyi, bozuk_tutar, bozuk_ay, bozuk_yil, bozuk_net]
+        }))
+        .unwrap();
+        assert_eq!(
+            t.donemler.len(),
+            1,
+            "bozuk dönem kayıtları yedeğe girmemeli"
+        );
+        assert_eq!(t.donemler[0]["id"], "2026-01");
     }
 
     #[test]
@@ -250,7 +390,8 @@ mod tests {
             "settings": {"showCurrencySymbol": "evet", "precision": 3, "fontScale": 9},
             "theme": "mavi",
             "activeCari": 42,
-        })).unwrap();
+        }))
+        .unwrap();
         assert!(t.show_currency_symbol);
         assert_eq!(t.precision, 2);
         assert_eq!(t.font_scale, 1.0);
@@ -265,7 +406,8 @@ mod tests {
             "activeCari": "c1",
             "settings": {"showCurrencySymbol": false, "precision": 4, "fontScale": 1.1},
             "theme": "light",
-        })).unwrap();
+        }))
+        .unwrap();
         assert!(!t.show_currency_symbol);
         assert_eq!(t.precision, 4);
         assert_eq!(t.font_scale, 1.1);
@@ -281,7 +423,8 @@ mod tests {
             "settings": {"showCurrencySymbol": false, "precision": 4,
                           "fontScale": 1.2, "theme": "light"},
             "activeCari": "eski"
-        })).unwrap();
+        }))
+        .unwrap();
         assert_eq!(eski.theme, "light");
         assert_eq!(eski.font_scale, 1.2);
         assert_eq!(eski.precision, 4);
@@ -294,7 +437,8 @@ mod tests {
             "settings": {"show_currency_symbol": false, "precision": 0,
                           "font_scale": 0.9, "theme": "system"},
             "active_cari": "yeni"
-        })).unwrap();
+        }))
+        .unwrap();
         assert_eq!(yeni.theme, "system");
         assert_eq!(yeni.font_scale, 0.9);
         assert_eq!(yeni.precision, 0);
@@ -380,7 +524,8 @@ mod tests {
         let eksik_mode = json!({"id": "q", "ana": "10", "timestamp": 7});
         let t = temizle_yedek(&json!({"history": [
             ui, eski, eksik_ana, yanlis_tip, eksik_id, eksik_ts, eksik_mode, json!("bozuk")
-        ]})).unwrap();
+        ]}))
+        .unwrap();
         assert_eq!(t.history.len(), 2, "yalnızca iki geçerli biçim kalmalı");
         assert_eq!(t.history[0]["ana"], "5");
         assert_eq!(t.history[1]["result"], "6");

@@ -27,7 +27,16 @@ fn donem(id: &str) -> Value {
            "odenecek": true, "kdv_rate": "20", "cari": "c1", "closed_at": 1})
 }
 
-fn kayit(id: &str, yil: i32, ay: i32, hes: &str, ind: &str, net: &str, odenecek: bool, cari: &str) -> DonemRecord {
+fn kayit(
+    id: &str,
+    yil: i32,
+    ay: i32,
+    hes: &str,
+    ind: &str,
+    net: &str,
+    odenecek: bool,
+    cari: &str,
+) -> DonemRecord {
     DonemRecord {
         id: id.to_string(),
         year: yil,
@@ -105,7 +114,8 @@ fn y03_yabanci_yedek_red_ve_sanitizasyon() {
         "history": [json!({"id": "x", "timestamp": "sayı-değil", "mode": "kdv", "ana": "1"})],
         "settings": {"precision": 3, "fontScale": 99},
         "theme": "mavi"
-    })).unwrap();
+    }))
+    .unwrap();
     assert!(t.history.is_empty(), "bozuk timestamp ayıklanmalı");
     assert_eq!(t.precision, 2);
     assert_eq!(t.font_scale, 1.0);
@@ -119,15 +129,29 @@ fn y04_csv_enjeksiyon_ve_bicim() {
     // app.rs::gecmis_csv başlıklarıyla aynı biçim.
     let satirlar = vec![
         vec!["Tarih".into(), "Mod".into(), "Sonuç".into(), "Detay".into()],
-        vec!["2026-11-18 10:30".into(), "KDV".into(), "200".into(),
-             "=HYPERLINK(\"http://kötü\",\"tıkla\")".into()],
-        vec!["2026-11-18 11:00".into(), "Stopaj".into(), "1.000,50".into(),
-             "iki, virgül ve \"tırnak\"".into()],
+        vec![
+            "2026-11-18 10:30".into(),
+            "KDV".into(),
+            "200".into(),
+            "=HYPERLINK(\"http://kötü\",\"tıkla\")".into(),
+        ],
+        vec![
+            "2026-11-18 11:00".into(),
+            "Stopaj".into(),
+            "1.000,50".into(),
+            "iki, virgül ve \"tırnak\"".into(),
+        ],
     ];
     let metin = csv_metin(&satirlar);
     assert!(metin.starts_with('\u{FEFF}'), "Excel için BOM şart");
-    assert!(metin.contains("\"'=HYPERLINK(\"\"http://kötü\"\",\"\"tıkla\"\")\""), "formül apostroflanmalı");
-    assert!(metin.contains("\"iki, virgül ve \"\"tırnak\"\"\""), "tırnaklar kaçırılmalı");
+    assert!(
+        metin.contains("\"'=HYPERLINK(\"\"http://kötü\"\",\"\"tıkla\"\")\""),
+        "formül apostroflanmalı"
+    );
+    assert!(
+        metin.contains("\"iki, virgül ve \"\"tırnak\"\"\""),
+        "tırnaklar kaçırılmalı"
+    );
     assert_eq!(metin.matches('\n').count(), 2);
 }
 
@@ -164,7 +188,11 @@ fn y06_efatura_gib_csv_ice_aktarma() {
                   2026-01-02;\"Mal, çeşit\";%20;2.500,00\n\
                   2026-01-03;Hizmet;%20;0\n";
     let matrahlar = efatura_matrahlar(icerik);
-    assert_eq!(matrahlar, vec!["1234.56", "2500.00"], "sıfır matrah atlanmalı");
+    assert_eq!(
+        matrahlar,
+        vec!["1234.56", "2500.00"],
+        "sıfır matrah atlanmalı"
+    );
 
     // İçe aktarılan matrahlar toplu moda beslenir: %20 KDV → 4481.47.
     let toplam: Decimal = matrahlar.iter().map(|s| d(s)).sum();
@@ -176,7 +204,10 @@ fn y06_efatura_gib_csv_ice_aktarma() {
 
 #[test]
 fn y07_efatura_basliksiz_ve_tek_sutun() {
-    assert_eq!(efatura_matrahlar("1000\n2000.50\nabc"), vec!["1000", "2000.50"]);
+    assert_eq!(
+        efatura_matrahlar("1000\n2000.50\nabc"),
+        vec!["1000", "2000.50"]
+    );
     assert_eq!(efatura_matrahlar(""), Vec::<String>::new());
 }
 
@@ -204,7 +235,16 @@ fn y08_donem_yillik_ozet_12_ay() {
         } else {
             ("500", "800", "-300", false)
         };
-        kayitlar.push(kayit(&format!("2026-{ay:02}"), 2026, ay, hes, ind, net, odenecek, "c1"));
+        kayitlar.push(kayit(
+            &format!("2026-{ay:02}"),
+            2026,
+            ay,
+            hes,
+            ind,
+            net,
+            odenecek,
+            "c1",
+        ));
     }
     let gruplar = yillara_gir(&kayitlar);
     assert_eq!(gruplar.len(), 1);
@@ -250,7 +290,11 @@ fn y10_cari_filtresi_donemleri_ayirir() {
         kayit("2026-03", 2026, 3, "300", "100", "200", true, "c1"),
     ];
     let filtrele = |f: &str| -> Vec<DonemRecord> {
-        kayitlar.iter().filter(|d| f.is_empty() || d.cari == f).cloned().collect()
+        kayitlar
+            .iter()
+            .filter(|d| f.is_empty() || d.cari == f)
+            .cloned()
+            .collect()
     };
     assert_eq!(filtrele("").len(), 3);
     assert_eq!(filtrele("c1").len(), 2);
@@ -285,7 +329,9 @@ fn y12_gecici_vergi_diger_ceyrekler() {
         ("2026-08-15", "2. çeyrek (Nisan–Haziran) 2026"),
         ("2026-11-15", "3. çeyrek (Temmuz–Eylül) 2026"),
     ] {
-        let k = liste.iter().find(|k| k.tip == "gVV" && k.tarih == tarih)
+        let k = liste
+            .iter()
+            .find(|k| k.tip == "gVV" && k.tarih == tarih)
             .unwrap_or_else(|| panic!("{tarih} kaydı yok"));
         assert_eq!(k.donemi, donem);
     }

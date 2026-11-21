@@ -7,7 +7,16 @@ const ONES: [&str; 10] = [
 const TENS: [&str; 10] = [
     "", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan",
 ];
-const SCALES: [&str; 5] = ["", "bin", "milyon", "milyar", "trilyon"];
+/// u64 (≈1.8e19) üst sınırını da kapsayacak ölçekler: 10^3 … 10^18.
+const SCALES: [&str; 7] = [
+    "",
+    "bin",
+    "milyon",
+    "milyar",
+    "trilyon",
+    "katrilyon",
+    "kentilyon",
+];
 
 fn three_digits(n: u32) -> String {
     let h = n / 100;
@@ -54,12 +63,13 @@ pub fn para_yazisi(v: Decimal) -> String {
         Ok(n) => n,
         Err(_) => return format!("{} lira", machine(value)),
     };
-    let kurus = dec_str
-        .chars()
-        .take(2)
-        .collect::<String>()
-        .parse::<u32>()
-        .unwrap_or(0);
+    // machine() trailing sıfırları atar: "1.50" → "1.5". Kuruşu 2 haneye
+    // SAĞA sıfır ekleyerek geri getir (1,5 → 50 kuruş, 1,05 → 5 kuruş).
+    let mut kurus_str = dec_str.chars().take(2).collect::<String>();
+    while kurus_str.len() < 2 {
+        kurus_str.push('0');
+    }
+    let kurus = kurus_str.parse::<u32>().unwrap_or(0);
 
     if int == 0 && kurus == 0 {
         return "sıfır lira".to_string();
@@ -67,7 +77,9 @@ pub fn para_yazisi(v: Decimal) -> String {
 
     let mut words = String::new();
     if int == 0 {
-        // yalnızca kuruş
+        // Yalnızca kuruş olsa da "sıfır lira" öneki gerekir; aksi halde
+        // çıktı "lira elli kuruş" (lirasız) olurdu.
+        words.push_str("sıfır");
     } else {
         let mut remaining = int;
         let mut gi = 0usize;
@@ -127,5 +139,50 @@ mod tests {
     #[test]
     fn words_negative() {
         assert_eq!(para_yazisi(Decimal::from(-30)), "eksi otuz lira");
+    }
+
+    #[test]
+    fn words_kurus_saga_sifir_eklenir() {
+        // machine() "1.50" → "1.5"; kuruş 50 olmalı, 5 değil.
+        assert_eq!(
+            para_yazisi(Decimal::from_str("1.5").unwrap()),
+            "bir lira elli kuruş"
+        );
+        assert_eq!(
+            para_yazisi(Decimal::from_str("1.05").unwrap()),
+            "bir lira beş kuruş"
+        );
+    }
+
+    #[test]
+    fn words_sifir_lira_ve_kurus() {
+        assert_eq!(
+            para_yazisi(Decimal::from_str("0.01").unwrap()),
+            "sıfır lira bir kuruş"
+        );
+        assert_eq!(
+            para_yazisi(Decimal::from_str("0.5").unwrap()),
+            "sıfır lira elli kuruş"
+        );
+    }
+
+    #[test]
+    fn words_buyuk_olcekler() {
+        assert_eq!(
+            para_yazisi(Decimal::from_str("1000000000000000").unwrap()),
+            "bir katrilyon lira"
+        );
+        assert_eq!(
+            para_yazisi(Decimal::from_str("1000000000000000000").unwrap()),
+            "bir kentilyon lira"
+        );
+    }
+
+    #[test]
+    fn words_negatif_kuruslu() {
+        assert_eq!(
+            para_yazisi(Decimal::from_str("-1.5").unwrap()),
+            "eksi bir lira elli kuruş"
+        );
     }
 }

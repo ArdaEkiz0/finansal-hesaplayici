@@ -74,7 +74,12 @@ fn m03_kdv_turkce_bicim_ve_ifade() {
 #[test]
 fn m04_kdv_dahil_toplam_korunur() {
     // Yuvarlama kaçağı olmamalı: net + KDV = girilen brüt tutar.
-    for (tutar, oran) in [("0.03", "20"), ("100", "20"), ("1234.56", "18"), ("999.99", "1")] {
+    for (tutar, oran) in [
+        ("0.03", "20"),
+        ("100", "20"),
+        ("1234.56", "18"),
+        ("999.99", "1"),
+    ] {
         let g = girdi(tutar, "dahil", oran);
         let r = sonuc("kdv", &g);
         let net = d(&satir(&r, "Net Tutar"));
@@ -284,7 +289,12 @@ fn m20_percent() {
 #[test]
 fn m21_percent_degisim_formulu() {
     // (new-old)/|old|*100 — eski TS calculatePercentChange birebir.
-    for (eski, yeni, beklenen) in [("20", "500", "2400"), ("500", "20", "-96"), ("-20", "-30", "-50"), ("0", "500", "0")] {
+    for (eski, yeni, beklenen) in [
+        ("20", "500", "2400"),
+        ("500", "20", "-96"),
+        ("-20", "-30", "-50"),
+        ("0", "500", "0"),
+    ] {
         let r = sonuc("percent", &girdi(eski, yeni, ""));
         assert_eq!(satir(&r, "Değişim %"), beklenen, "{eski}→{yeni}");
     }
@@ -541,8 +551,21 @@ fn m40_tum_modlar_bozuk_girdide_panic_uretmiyor() {
         ..Girdi::default()
     };
     for m in [
-        "kdv", "stopaj", "tevkifat", "fiyat", "kdvCompare", "margin", "markup",
-        "discount", "percent", "compound", "gecikme", "amortisman", "doviz", "batch", "donem",
+        "kdv",
+        "stopaj",
+        "tevkifat",
+        "fiyat",
+        "kdvCompare",
+        "margin",
+        "markup",
+        "discount",
+        "percent",
+        "compound",
+        "gecikme",
+        "amortisman",
+        "doviz",
+        "batch",
+        "donem",
     ] {
         let _ = hesapla(m, &bozuk);
     }

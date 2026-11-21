@@ -2,12 +2,12 @@
 //! GUI açılmaz; kaynak modülleri `#[path]` ile dahil edilir.
 //! `commands` modülü `crate::modes` kullandığı için `modes` de dahil edilir.
 
+#[path = "../src/commands.rs"]
+mod commands;
 #[path = "../src/model.rs"]
 mod model;
 #[path = "../src/modes.rs"]
 mod modes;
-#[path = "../src/commands.rs"]
-mod commands;
 #[path = "../src/theme.rs"]
 mod theme;
 
@@ -81,7 +81,10 @@ fn widget_yedek_round_trip_bomlu() {
     let w = ornek_widget();
     let metin = serde_json::to_string(&state(w.clone()).yedek_degeri()).unwrap();
     let geri = AppState::metinden_yukle(&format!("\u{feff}{metin}")).unwrap();
-    assert_eq!(geri.widget, w, "BOM'lu dosyada widget ayarları kaybolmamalı");
+    assert_eq!(
+        geri.widget, w,
+        "BOM'lu dosyada widget ayarları kaybolmamalı"
+    );
 }
 
 #[test]
@@ -99,7 +102,10 @@ fn widget_eksik_alanlar_varsayilana_duser() {
     // widget anahtarı hiç yoksa tam varsayılan.
     let mut yedek2 = state(ornek_widget()).yedek_degeri();
     yedek2.as_object_mut().unwrap().remove("widget");
-    assert_eq!(AppState::from_backup(&yedek2).unwrap().widget, WidgetAyarlari::default());
+    assert_eq!(
+        AppState::from_backup(&yedek2).unwrap().widget,
+        WidgetAyarlari::default()
+    );
 }
 
 #[test]
@@ -109,7 +115,10 @@ fn widget_bozuk_alanlar_varsayilana_duser() {
         "aktif": "evet", "kompakt": 1, "mod": 42,
         "genislik": "genis", "yukseklik": true, "ustte": Value::Null
     });
-    assert_eq!(AppState::from_backup(&yedek).unwrap().widget, WidgetAyarlari::default());
+    assert_eq!(
+        AppState::from_backup(&yedek).unwrap().widget,
+        WidgetAyarlari::default()
+    );
 }
 
 #[test]
@@ -143,7 +152,10 @@ fn widget_gecersiz_yapilar_varsayilana_duser() {
         assert_eq!(WidgetAyarlari::from_value(&v), WidgetAyarlari::default());
         let mut yedek = state(ornek_widget()).yedek_degeri();
         yedek["widget"] = v;
-        assert_eq!(AppState::from_backup(&yedek).unwrap().widget, WidgetAyarlari::default());
+        assert_eq!(
+            AppState::from_backup(&yedek).unwrap().widget,
+            WidgetAyarlari::default()
+        );
     }
     // Boş/uzun mod adı da varsayılana düşer.
     for m in ["", "   ", "x".repeat(40).as_str()] {
@@ -155,15 +167,25 @@ fn widget_gecersiz_yapilar_varsayilana_duser() {
 #[test]
 fn komut_paleti_widget_kimlikleri_gecerli() {
     let l = komutlar();
-    let widgetlar: Vec<_> = l.iter().filter(|c| turkce_kucuk(&c.ad).contains("widget")).collect();
+    let widgetlar: Vec<_> = l
+        .iter()
+        .filter(|c| turkce_kucuk(&c.ad).contains("widget"))
+        .collect();
     assert_eq!(widgetlar.len(), 3, "palette 3 widget girdisi olmalı");
-    for c in widgetlar {
-        assert_eq!(c.eylem, Eylem::Widget, "{} bilinmeyen widget eylemi", c.ad);
+    let beklenen = [
+        Eylem::WidgetAcKapat,
+        Eylem::WidgetSadeleştir,
+        Eylem::WidgetÜsteSabitle,
+    ];
+    for (c, e) in widgetlar.iter().zip(beklenen.iter()) {
+        assert_eq!(c.eylem, *e, "{} bilinmeyen widget eylemi", c.ad);
         assert_eq!(c.kategori, "Görünüm");
     }
     let bulunan = filtrele(&l, "widget");
     assert_eq!(bulunan.len(), 3);
-    assert!(bulunan.iter().all(|&i| l[i].eylem == Eylem::Widget));
+    for e in beklenen {
+        assert!(bulunan.iter().any(|&i| l[i].eylem == e));
+    }
 }
 
 #[test]
@@ -174,7 +196,9 @@ fn komut_paleti_tum_kimlikleri_gecerli() {
         match c.eylem {
             Eylem::Mod(id) => assert!(modes::mod_def(id).is_some(), "geçersiz mod: {id}"),
             Eylem::Tema(t) => assert!(["dark", "light", "system"].contains(&t)),
-            Eylem::Widget => assert_eq!(c.kategori, "Görünüm"),
+            Eylem::WidgetAcKapat | Eylem::WidgetSadeleştir | Eylem::WidgetÜsteSabitle => {
+                assert_eq!(c.kategori, "Görünüm")
+            }
             Eylem::FontBuyut
             | Eylem::FontKucult
             | Eylem::YedekAl
@@ -191,7 +215,12 @@ fn komut_paleti_tum_kimlikleri_gecerli() {
         }
     }
     for c in &l {
-        assert_eq!(l.iter().filter(|x| x.ad == c.ad).count(), 1, "yinelenen ad: {}", c.ad);
+        assert_eq!(
+            l.iter().filter(|x| x.ad == c.ad).count(),
+            1,
+            "yinelenen ad: {}",
+            c.ad
+        );
     }
 }
 
@@ -237,7 +266,10 @@ fn widget_min_size_sabiti_dogrulanir() {
     assert!(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0);
     assert!(w > h, "widget yatayda daha geniş olmalı");
     let d = WidgetAyarlari::default();
-    assert!(d.genislik >= w && d.yukseklik >= h, "varsayılan boyut alt sınırı karşılamalı");
+    assert!(
+        d.genislik >= w && d.yukseklik >= h,
+        "varsayılan boyut alt sınırı karşılamalı"
+    );
 }
 
 #[test]
@@ -250,7 +282,9 @@ fn widget_viewport_sabitleri_kaliciligi_bozmaz() {
     assert!(!metin.contains("viewport"));
     // BOM'suz ve BOM'lu yollardan widget ayarları aynı geri gelir.
     let bomsuz = AppState::metinden_yukle(&metin).unwrap().widget;
-    let bomlu = AppState::metinden_yukle(&format!("\u{feff}{metin}")).unwrap().widget;
+    let bomlu = AppState::metinden_yukle(&format!("\u{feff}{metin}"))
+        .unwrap()
+        .widget;
     assert_eq!(bomsuz, w);
     assert_eq!(bomlu, w);
     assert!(bomlu.genislik >= model::WIDGET_MIN_SIZE[0]);
@@ -264,7 +298,11 @@ fn widget_ayarlari_json_round_trip_bomlu_ve_bomsuz() {
     assert_eq!(serde_json::from_str::<WidgetAyarlari>(&metin).unwrap(), w);
     for bomlu in [false, true] {
         let yedek_metin = serde_json::to_string_pretty(&state(w.clone()).yedek_degeri()).unwrap();
-        let giris = if bomlu { format!("\u{feff}{yedek_metin}") } else { yedek_metin };
+        let giris = if bomlu {
+            format!("\u{feff}{yedek_metin}")
+        } else {
+            yedek_metin
+        };
         let geri = AppState::metinden_yukle(&giris).unwrap().widget;
         assert_eq!(geri.aktif, w.aktif);
         assert_eq!(geri.kompakt, w.kompakt);
@@ -284,14 +322,54 @@ fn widget_bozuk_alanlar_tek_tek_varsayilana_duser() {
     let kontrol = |alan: &str, beklenen: WidgetAyarlari| {
         let mut v = temel.clone();
         v[alan] = bozuk.clone();
-        assert_eq!(WidgetAyarlari::from_value(&v), beklenen, "{alan} alanı varsayılana düşmeli");
+        assert_eq!(
+            WidgetAyarlari::from_value(&v),
+            beklenen,
+            "{alan} alanı varsayılana düşmeli"
+        );
     };
-    kontrol("aktif", WidgetAyarlari { aktif: d.aktif, ..w.clone() });
-    kontrol("kompakt", WidgetAyarlari { kompakt: d.kompakt, ..w.clone() });
-    kontrol("mod", WidgetAyarlari { r#mod: d.r#mod.clone(), ..w.clone() });
-    kontrol("genislik", WidgetAyarlari { genislik: d.genislik, ..w.clone() });
-    kontrol("yukseklik", WidgetAyarlari { yukseklik: d.yukseklik, ..w.clone() });
-    kontrol("ustte", WidgetAyarlari { ustte: d.ustte, ..w.clone() });
+    kontrol(
+        "aktif",
+        WidgetAyarlari {
+            aktif: d.aktif,
+            ..w.clone()
+        },
+    );
+    kontrol(
+        "kompakt",
+        WidgetAyarlari {
+            kompakt: d.kompakt,
+            ..w.clone()
+        },
+    );
+    kontrol(
+        "mod",
+        WidgetAyarlari {
+            r#mod: d.r#mod.clone(),
+            ..w.clone()
+        },
+    );
+    kontrol(
+        "genislik",
+        WidgetAyarlari {
+            genislik: d.genislik,
+            ..w.clone()
+        },
+    );
+    kontrol(
+        "yukseklik",
+        WidgetAyarlari {
+            yukseklik: d.yukseklik,
+            ..w.clone()
+        },
+    );
+    kontrol(
+        "ustte",
+        WidgetAyarlari {
+            ustte: d.ustte,
+            ..w.clone()
+        },
+    );
 }
 
 #[test]
@@ -316,9 +394,15 @@ fn widget_sinir_degerleri_kapsamli() {
     assert!(minh <= yl);
 
     let mod32 = "x".repeat(32);
-    assert_eq!(WidgetAyarlari::from_value(&json!({"mod": mod32})).r#mod, mod32);
+    assert_eq!(
+        WidgetAyarlari::from_value(&json!({"mod": mod32})).r#mod,
+        mod32
+    );
     let mod33 = "x".repeat(33);
-    assert_eq!(WidgetAyarlari::from_value(&json!({"mod": mod33})).r#mod, "kdv");
+    assert_eq!(
+        WidgetAyarlari::from_value(&json!({"mod": mod33})).r#mod,
+        "kdv"
+    );
 }
 
 #[test]
@@ -353,18 +437,38 @@ fn widget_viewport_frame_tema_kimligini_bozmaz() {
 #[test]
 fn komut_paleti_widget_girdileri_tekil_ve_aralanabilir() {
     let l = komutlar();
-    let widgetlar: Vec<_> = l.iter().filter(|c| c.eylem == Eylem::Widget).collect();
-    assert_eq!(widgetlar.len(), 3);
-    for c in &widgetlar {
+    let beklenen = [
+        Eylem::WidgetAcKapat,
+        Eylem::WidgetSadeleştir,
+        Eylem::WidgetÜsteSabitle,
+    ];
+    for e in &beklenen {
+        let widgetlar: Vec<_> = l.iter().filter(|c| c.eylem == *e).collect();
+        assert_eq!(
+            widgetlar.len(),
+            1,
+            "her widget eylemi tek komuta bağlanmalı: {e:?}"
+        );
+        let c = widgetlar[0];
         assert!(!c.ad.is_empty());
         assert_eq!(c.kategori, "Görünüm");
         assert!(filtrele(&l, &c.ad).iter().any(|&i| l[i].ad == c.ad));
         assert!(filtrele(&l, "widget").iter().any(|&i| l[i].ad == c.ad));
-        assert_eq!(widgetlar.iter().filter(|x| x.ad == c.ad).count(), 1, "yinelenen ad: {}", c.ad);
+    }
+    for e in &beklenen {
+        assert_eq!(
+            beklenen.iter().filter(|x| *x == e).count(),
+            1,
+            "yinelenen eylem: {e:?}"
+        );
     }
     for c in &l {
         if turkce_kucuk(&c.ad).contains("widget") {
-            assert_eq!(c.eylem, Eylem::Widget, "{} beklenmeyen widget eylemi", c.ad);
+            assert!(
+                beklenen.contains(&c.eylem),
+                "{} beklenmeyen widget eylemi",
+                c.ad
+            );
         }
     }
 }
@@ -374,7 +478,10 @@ fn komut_paleti_widget_girdileri_tekil_ve_aralanabilir() {
 #[test]
 fn konum_varsayilan_ve_eksik_alan_none() {
     assert_eq!(WidgetAyarlari::default().konum, None);
-    assert_eq!(WidgetAyarlari::from_value(&json!({"aktif": true})).konum, None);
+    assert_eq!(
+        WidgetAyarlari::from_value(&json!({"aktif": true})).konum,
+        None
+    );
     let mut yedek = state(WidgetAyarlari::default()).yedek_degeri();
     yedek["widget"].as_object_mut().unwrap().remove("konum");
     assert_eq!(AppState::from_backup(&yedek).unwrap().widget.konum, None);
@@ -388,7 +495,12 @@ fn konum_serde_anahtari_ve_geriye_donuk_uyumluluk() {
     // Eski yedeklerde "konum" yok: serde default ile None üretmeli.
     let eski = json!({"aktif": true, "kompakt": true, "mod": "kdv",
                       "genislik": 340.0, "yukseklik": 300.0, "ustte": true});
-    assert_eq!(serde_json::from_value::<WidgetAyarlari>(eski).unwrap().konum, None);
+    assert_eq!(
+        serde_json::from_value::<WidgetAyarlari>(eski)
+            .unwrap()
+            .konum,
+        None
+    );
 }
 
 #[test]
@@ -415,10 +527,16 @@ fn konum_yedek_round_trip_bomlu() {
 #[test]
 fn konum_eksik_ve_fazla_sayi_varsayilana_duser() {
     for bozuk in [json!([]), json!([100.0]), json!([100.0, 200.0, 300.0])] {
-        assert_eq!(WidgetAyarlari::from_value(&json!({"konum": bozuk})).konum, None);
+        assert_eq!(
+            WidgetAyarlari::from_value(&json!({"konum": bozuk})).konum,
+            None
+        );
     }
     for bozuk in [json!("100,200"), json!(100), Value::Null] {
-        assert_eq!(WidgetAyarlari::from_value(&json!({"konum": bozuk})).konum, None);
+        assert_eq!(
+            WidgetAyarlari::from_value(&json!({"konum": bozuk})).konum,
+            None
+        );
     }
 }
 
@@ -430,7 +548,10 @@ fn konum_nan_ve_sonsuz_reddedilir() {
     assert!(!WidgetAyarlari::konum_gecerli([f32::INFINITY, 0.0]));
     assert!(!WidgetAyarlari::konum_gecerli([0.0, f32::NEG_INFINITY]));
     // f64 → f32 taşması +sonsuz olur; from_value bunu None yapmalı.
-    assert_eq!(WidgetAyarlari::from_value(&json!({"konum": [1e40, 0.0]})).konum, None);
+    assert_eq!(
+        WidgetAyarlari::from_value(&json!({"konum": [1e40, 0.0]})).konum,
+        None
+    );
 }
 
 #[test]
@@ -460,7 +581,9 @@ fn bozuk_konum_yedekten_okunurken_varsayilana_duser() {
 #[test]
 fn konum_eklenirken_mevcut_widget_alanlari_korunur() {
     let w = ornek_widget();
-    let geri = AppState::from_backup(&state(w.clone()).yedek_degeri()).unwrap().widget;
+    let geri = AppState::from_backup(&state(w.clone()).yedek_degeri())
+        .unwrap()
+        .widget;
     assert_eq!(geri.aktif, w.aktif);
     assert_eq!(geri.kompakt, w.kompakt);
     assert_eq!(geri.r#mod, w.r#mod);
@@ -494,6 +617,12 @@ fn tus_takimi_stili_paletten_turetilir() {
     assert_ne!(hk, ha);
     assert_ne!(ak, aa);
     // Palet kimliği değişmedi.
-    assert_eq!(theme::palet(true).birincil, eframe::egui::Color32::from_rgb(0x3b, 0x8d, 0xff));
-    assert_eq!(theme::palet(false).birincil, eframe::egui::Color32::from_rgb(0x25, 0x63, 0xeb));
+    assert_eq!(
+        theme::palet(true).birincil,
+        eframe::egui::Color32::from_rgb(0x3b, 0x8d, 0xff)
+    );
+    assert_eq!(
+        theme::palet(false).birincil,
+        eframe::egui::Color32::from_rgb(0x25, 0x63, 0xeb)
+    );
 }

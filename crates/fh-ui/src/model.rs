@@ -1,7 +1,7 @@
 //! Kalıcı uygulama durumu. Tüm veri %APPDATA% altında tek bir JSON dosyasında
 //! tutulur; okuma `fh_data::temizle_yedek` ile sanitize edilir.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use fh_data::{DonemRecord, TemizYedek, YedekAyarlari, YedekParca, temizle_yedek, yedek_olustur};
 use rust_decimal::Decimal;
@@ -130,6 +130,10 @@ impl WidgetAyarlari {
     }
 }
 
+fn varsayilan_guncelleme_kontrol() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     /// "dark" | "light" | "system"
@@ -139,6 +143,10 @@ pub struct Settings {
     /// 0 | 2 | 4
     pub precision: usize,
     pub currency_symbol: String,
+    /// Güncelleme kontrolü için ağ isteğine izin. Varsayılan açık; kullanıcı
+    /// kapatırsa açılışta ve el ile yapılan kontrollerde hiç ağ isteği çıkmaz.
+    #[serde(default = "varsayilan_guncelleme_kontrol")]
+    pub guncelleme_kontrol: bool,
 }
 
 impl Default for Settings {
@@ -149,6 +157,7 @@ impl Default for Settings {
             show_currency_symbol: true,
             precision: 2,
             currency_symbol: "₺".to_string(),
+            guncelleme_kontrol: true,
         }
     }
 }
@@ -170,6 +179,10 @@ pub struct InputState {
     pub ay: String,
     pub gun: String,
     pub secim: String,
+    /// Alan bazlı parse hataları. Yedeğe yazılmaz; her kare `modes::parse_hatalari`
+    /// ile yeniden üretilir. Boşsa girdi doğrulanmış sayılır.
+    #[serde(skip, default)]
+    pub hatalar: Vec<(Alan, String)>,
 }
 
 #[allow(dead_code)] // Bazı alanlar gelecek modlar için ayrılmıştır.
@@ -323,9 +336,16 @@ fn value_or_hist(v: &Value) -> Option<HistEntry> {
         id: v.get("id")?.as_str()?.to_string(),
         timestamp: v.get("timestamp")?.as_i64()?,
         mode: v.get("mode")?.as_str()?.to_string(),
-        inputs: v.get("inputs").and_then(value_or::<InputState>).unwrap_or_default(),
+        inputs: v
+            .get("inputs")
+            .and_then(value_or::<InputState>)
+            .unwrap_or_default(),
         ana: ana.to_string(),
-        alt: v.get("alt").and_then(Value::as_str).unwrap_or("").to_string(),
+        alt: v
+            .get("alt")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
         detay: v
             .get("detay")
             .or_else(|| v.get("detail"))
@@ -345,17 +365,37 @@ fn value_or_donem(v: &Value) -> Option<DonemKayit> {
         id: v.get("id")?.as_str()?.to_string(),
         year: v.get("year")?.as_i64()? as i32,
         month: v.get("month")?.as_i64()? as i32,
-        satis: v.get("satis").and_then(Value::as_str).unwrap_or("0").to_string(),
-        alis: v.get("alis").and_then(Value::as_str).unwrap_or("0").to_string(),
+        satis: v
+            .get("satis")
+            .and_then(Value::as_str)
+            .unwrap_or("0")
+            .to_string(),
+        alis: v
+            .get("alis")
+            .and_then(Value::as_str)
+            .unwrap_or("0")
+            .to_string(),
         devreden_giris: v
             .get("devreden_giris")
             .or_else(|| v.get("devredenGiris"))
             .and_then(Value::as_str)
             .unwrap_or("0")
             .to_string(),
-        hesaplanan: v.get("hesaplanan").and_then(Value::as_str).unwrap_or("0").to_string(),
-        indirilecek: v.get("indirilecek").and_then(Value::as_str).unwrap_or("0").to_string(),
-        net: v.get("net").and_then(Value::as_str).unwrap_or("0").to_string(),
+        hesaplanan: v
+            .get("hesaplanan")
+            .and_then(Value::as_str)
+            .unwrap_or("0")
+            .to_string(),
+        indirilecek: v
+            .get("indirilecek")
+            .and_then(Value::as_str)
+            .unwrap_or("0")
+            .to_string(),
+        net: v
+            .get("net")
+            .and_then(Value::as_str)
+            .unwrap_or("0")
+            .to_string(),
         odenecek: v.get("odenecek").and_then(Value::as_bool).unwrap_or(true),
         kdv_rate: v
             .get("kdv_rate")
@@ -363,7 +403,11 @@ fn value_or_donem(v: &Value) -> Option<DonemKayit> {
             .and_then(Value::as_str)
             .unwrap_or("20")
             .to_string(),
-        cari: v.get("cari").and_then(Value::as_str).unwrap_or("").to_string(),
+        cari: v
+            .get("cari")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
         closed_at: v
             .get("closed_at")
             .or_else(|| v.get("closedAt"))
@@ -372,13 +416,20 @@ fn value_or_donem(v: &Value) -> Option<DonemKayit> {
     })
 }
 
-fn temiz_settings(t: &TemizYedek, sembol: String) -> Settings {
+fn temiz_settings(t: &TemizYedek, sembol: String, v: &Value) -> Settings {
+    // Eski yedeklerde alan yoksa güncelleme kontrolü açık kalır (geriye uyumluluk).
+    let guncelleme_kontrol = v
+        .get("ekstra")
+        .and_then(|e| e.get("guncelleme_kontrol"))
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
     Settings {
         theme: t.theme.clone(),
         font_scale: t.font_scale,
         show_currency_symbol: t.show_currency_symbol,
         precision: t.precision,
         currency_symbol: sembol,
+        guncelleme_kontrol,
     }
 }
 
@@ -402,13 +453,16 @@ impl AppState {
             }
         }
         Some(Self {
-            settings: temiz_settings(&t, sembol),
+            settings: temiz_settings(&t, sembol, v),
             history: t.history.iter().filter_map(value_or_hist).collect(),
             donemler: t.donemler.iter().filter_map(value_or_donem).collect(),
             cariler: t.cariler.iter().filter_map(value_or).collect(),
             active_cari: t.active_cari,
             inputs,
-            widget: v.get("widget").map(WidgetAyarlari::from_value).unwrap_or_default(),
+            widget: v
+                .get("widget")
+                .map(WidgetAyarlari::from_value)
+                .unwrap_or_default(),
         })
     }
 
@@ -448,9 +502,21 @@ impl AppState {
         let p = YedekParca {
             surum: Some(SURUM.to_string()),
             tarih: None,
-            history: self.history.iter().filter_map(|e| serde_json::to_value(e).ok()).collect(),
-            donemler: self.donemler.iter().filter_map(|d| serde_json::to_value(d).ok()).collect(),
-            cariler: self.cariler.iter().filter_map(|c| serde_json::to_value(c).ok()).collect(),
+            history: self
+                .history
+                .iter()
+                .filter_map(|e| serde_json::to_value(e).ok())
+                .collect(),
+            donemler: self
+                .donemler
+                .iter()
+                .filter_map(|d| serde_json::to_value(d).ok())
+                .collect(),
+            cariler: self
+                .cariler
+                .iter()
+                .filter_map(|c| serde_json::to_value(c).ok())
+                .collect(),
             active_cari: self.active_cari.clone(),
             ayarlar: Some(YedekAyarlari {
                 show_currency_symbol: self.settings.show_currency_symbol,
@@ -461,7 +527,13 @@ impl AppState {
         };
         let mut v = yedek_olustur(&p);
         if let Some(obj) = v.as_object_mut() {
-            obj.insert("ekstra".to_string(), json!({"currency_symbol": self.settings.currency_symbol}));
+            obj.insert(
+                "ekstra".to_string(),
+                json!({
+                    "currency_symbol": self.settings.currency_symbol,
+                    "guncelleme_kontrol": self.settings.guncelleme_kontrol,
+                }),
+            );
             let mut inputs = serde_json::Map::new();
             for (k, i) in &self.inputs {
                 if let Ok(iv) = serde_json::to_value(i) {
@@ -477,13 +549,65 @@ impl AppState {
         v
     }
 
-    pub fn kaydet(&self) {
-        let path = Self::dosya_yolu();
+    /// Kalıcı kayıt. Geçici dosyaya yazar sonra atomik değiştirir; hataları
+    /// yutmaz, çağıranın kullanıcıya bildirmesi için `Result` döner.
+    pub fn kaydet(&self) -> Result<(), String> {
+        Self::kaydet_path(&Self::dosya_yolu(), &self.yedek_degeri())
+    }
+
+    /// `kaydet`ın saf dosya yolu çeşidi: testler geçici dizinde çağırır.
+    /// `gecici` hedefle aynı dizinde olmalı ki rename atomik olsun.
+    pub fn kaydet_path(path: &Path, veri: &Value) -> Result<(), String> {
         if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Kayıt klasörü oluşturulamadı: {e}"))?;
         }
-        if let Ok(metin) = serde_json::to_string_pretty(&self.yedek_degeri()) {
-            let _ = std::fs::write(path, metin);
+        let metin = serde_json::to_string_pretty(veri)
+            .map_err(|e| format!("Yedek JSON'u üretilemedi: {e}"))?;
+
+        // Bozuk/okunamayan mevcut dosyanın üzerine yazmadan önce kurtarma
+        // kopyası alınır; kullanıcı verisi sessizce kaybolmasın.
+        if path.exists() {
+            let mevcut = std::fs::read_to_string(path).unwrap_or_default();
+            if Self::metinden_yukle(&mevcut).is_none() {
+                let kurtarma = path.with_extension("json.bak");
+                std::fs::copy(path, &kurtarma)
+                    .map_err(|e| format!("Bozuk dosyanın kurtarma kopyası alınamadı: {e}"))?;
+            }
+        }
+
+        let gecici = path.with_extension("json.tmp");
+        // Bu noktada mevcut dosya hâlâ dokunulmadı: yazma hatasında korunur.
+        std::fs::write(&gecici, &metin).map_err(|e| format!("Geçici dosya yazılamadı: {e}"))?;
+
+        match std::fs::rename(&gecici, path) {
+            Ok(()) => Ok(()),
+            Err(ilk_hata) => {
+                // Windows'ta hedef mevcutsa rename başarısız olur. Eski dosyayı
+                // önce güvenli bir takas dosyasına kopyalarız; kopya başarısızsa
+                // orijinal dosyaya hiç dokunmayız.
+                let takas = path.with_extension("json.swap");
+                if let Err(kopya_hata) = std::fs::copy(path, &takas) {
+                    let _ = std::fs::remove_file(&gecici);
+                    return Err(format!(
+                        "Kayıt tamamlanamadı: takas kopyası alınamadı: {kopya_hata} ({ilk_hata})"
+                    ));
+                }
+                let degistir = std::fs::remove_file(path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|_| std::fs::rename(&gecici, path).map_err(|e| e.to_string()));
+                match degistir {
+                    Ok(()) => {
+                        let _ = std::fs::remove_file(&takas); // temizlik: en iyi çaba
+                        Ok(())
+                    }
+                    Err(hata) => {
+                        let _ = std::fs::rename(&takas, path); // orijinali geri koy
+                        let _ = std::fs::remove_file(&gecici);
+                        Err(format!("Kayıt tamamlanamadı: {hata} ({ilk_hata})"))
+                    }
+                }
+            }
         }
     }
 }
@@ -515,7 +639,13 @@ const YUZDE_SATIRLARI: [&str; 5] = [
 const HAM_SATIRLAR: [&str; 2] = ["İşlem kodu", "Geçerli satır"];
 
 /// Sonuç tablosu satırı: gerçek yüzde satırları `%`, diğerleri para olarak gösterilir.
-pub fn satir_bicimi(label: &str, value: &str, precision: usize, sembol: &str, goster: bool) -> String {
+pub fn satir_bicimi(
+    label: &str,
+    value: &str,
+    precision: usize,
+    sembol: &str,
+    goster: bool,
+) -> String {
     let etiket = label.trim();
     if HAM_SATIRLAR.iter().any(|s| s.eq_ignore_ascii_case(etiket)) {
         return value.to_string();
@@ -523,7 +653,10 @@ pub fn satir_bicimi(label: &str, value: &str, precision: usize, sembol: &str, go
     let Some(d) = fh_core::parse_tr(value) else {
         return value.to_string();
     };
-    if YUZDE_SATIRLARI.iter().any(|s| s.eq_ignore_ascii_case(etiket)) {
+    if YUZDE_SATIRLARI
+        .iter()
+        .any(|s| s.eq_ignore_ascii_case(etiket))
+    {
         format!("%{}", fh_core::format_tr(d, precision))
     } else {
         para_bicimi(value, precision, sembol, goster)
@@ -533,6 +666,17 @@ pub fn satir_bicimi(label: &str, value: &str, precision: usize, sembol: &str, go
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_NO: AtomicU64 = AtomicU64::new(0);
+
+    fn test_dizini() -> PathBuf {
+        let n = TEST_NO.fetch_add(1, Ordering::Relaxed);
+        let d = std::env::temp_dir().join(format!("fh-kaydet-{}-{n}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
 
     fn entry(id: &str) -> HistEntry {
         HistEntry {
@@ -574,10 +718,16 @@ mod tests {
         // REGRESYON: "%20 KDV" ve "Adım 1 (%10)" para tutarıdır; eski
         // `etiket.contains('%')` kuralı bunları "%200,00" / "%900,00" yapardı.
         assert_eq!(satir_bicimi("%20 KDV", "2000", 2, "₺", true), "2.000,00 ₺");
-        assert_eq!(satir_bicimi("Adım 1 (%10)", "900", 2, "₺", true), "900,00 ₺");
+        assert_eq!(
+            satir_bicimi("Adım 1 (%10)", "900", 2, "₺", true),
+            "900,00 ₺"
+        );
         assert_eq!(satir_bicimi("Adım 2 (%5)", "855", 2, "₺", true), "855,00 ₺");
         // Gerçek yüzde satırları etiketinde % olmasa bile yüzde kalır.
-        assert_eq!(satir_bicimi("Marj Karşılığı", "12.5", 2, "₺", true), "%12,50");
+        assert_eq!(
+            satir_bicimi("Marj Karşılığı", "12.5", 2, "₺", true),
+            "%12,50"
+        );
         assert_eq!(satir_bicimi("Etkin İndirim", "19", 2, "₺", false), "%19,00");
     }
 
@@ -637,12 +787,15 @@ mod tests {
         gecmis_ekle(&mut history, ornek_entry("h1", "kdv", "200"));
         gecmis_ekle(&mut history, ornek_entry("h2", "stopaj", "150"));
         let mut inputs = std::collections::HashMap::new();
-        inputs.insert("kdv".to_string(), InputState {
-            birinci: "1000".into(),
-            oran: "20".into(),
-            secim: "haric".into(),
-            ..InputState::default()
-        });
+        inputs.insert(
+            "kdv".to_string(),
+            InputState {
+                birinci: "1000".into(),
+                oran: "20".into(),
+                secim: "haric".into(),
+                ..InputState::default()
+            },
+        );
         AppState {
             settings: Settings {
                 theme: "light".into(),
@@ -650,12 +803,19 @@ mod tests {
                 show_currency_symbol: false,
                 precision: 4,
                 currency_symbol: "$".into(),
+                guncelleme_kontrol: true,
             },
             history,
             donemler: vec![ornek_donem("2026-01", "c1"), ornek_donem("2026-02", "c2")],
             cariler: vec![
-                Cari { id: "c1".into(), name: "Müşteri A".into() },
-                Cari { id: "c2".into(), name: "Müşteri B".into() },
+                Cari {
+                    id: "c1".into(),
+                    name: "Müşteri A".into(),
+                },
+                Cari {
+                    id: "c2".into(),
+                    name: "Müşteri B".into(),
+                },
             ],
             active_cari: "c1".into(),
             inputs,
@@ -693,7 +853,10 @@ mod tests {
         assert_eq!(geri.donemler, state.donemler);
         assert_eq!(geri.cariler, state.cariler);
         assert_eq!(geri.active_cari, "c1");
-        assert_eq!(geri.widget, state.widget, "widget ayarları round-trip'te korunmalı");
+        assert_eq!(
+            geri.widget, state.widget,
+            "widget ayarları round-trip'te korunmalı"
+        );
         assert_eq!(geri.inputs.get("kdv").unwrap().secim, "haric");
         assert_eq!(geri.inputs.get("kdv").unwrap().oran, "20");
     }
@@ -755,7 +918,9 @@ mod tests {
         // app.rs::donemler_penceresi'ndeki yükleme koşuluyla aynı davranış.
         let state = ornek_state();
         let filtrele = |f: &str| -> Vec<DonemKayit> {
-            state.donemler.iter()
+            state
+                .donemler
+                .iter()
                 .filter(|d| f.is_empty() || d.cari == f)
                 .cloned()
                 .collect()
@@ -765,13 +930,22 @@ mod tests {
         assert_eq!(filtrele("c1")[0].id, "2026-01");
         assert_eq!(filtrele("yok").len(), 0);
         // Filtrelenen kayıtların cari adı çözümlenebiliyor.
-        let ad = state.cariler.iter().find(|c| c.id == filtrele("c2")[0].cari).unwrap().name.clone();
+        let ad = state
+            .cariler
+            .iter()
+            .find(|c| c.id == filtrele("c2")[0].cari)
+            .unwrap()
+            .name
+            .clone();
         assert_eq!(ad, "Müşteri B");
     }
 
     #[test]
     fn satir_bicimi_kenar_durumlari() {
-        assert_eq!(satir_bicimi("Efektif Oran", "12.5", 2, "₺", false), "%12,50");
+        assert_eq!(
+            satir_bicimi("Efektif Oran", "12.5", 2, "₺", false),
+            "%12,50"
+        );
         assert_eq!(satir_bicimi("Değişim %", "-96", 2, "₺", false), "%-96,00");
         assert_eq!(satir_bicimi("Kur (1 USD)", "40", 4, "₺", true), "40,0000 ₺");
         assert_eq!(satir_bicimi("Geçersiz", "abc", 2, "₺", true), "abc");
@@ -798,5 +972,82 @@ mod tests {
         assert_eq!(geri.donemler, state.donemler);
         assert_eq!(geri.cariler, state.cariler);
         assert_eq!(geri.active_cari, state.active_cari);
+    }
+
+    #[test]
+    fn kaydet_yazma_hatasinda_mevcut_dosya_korunur() {
+        let dizin = test_dizini();
+        let path = dizin.join("veri.json");
+        let onceki = "{\"uygulama\":\"finansal-hesaplayici\"}";
+        std::fs::write(&path, onceki).unwrap();
+        // Geçici dosya yolunu dizin yaparak yazmayı bilerek başarısız et.
+        std::fs::create_dir(path.with_extension("json.tmp")).unwrap();
+        let sonuc = AppState::kaydet_path(&path, &json!({"yeni": true}));
+        assert!(sonuc.is_err(), "yazma hatası yutulmamalı");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), onceki);
+        std::fs::remove_dir_all(dizin).unwrap();
+    }
+
+    #[test]
+    fn kaydet_bozuk_dosyada_kurtarma_kopyasi_alir() {
+        let dizin = test_dizini();
+        let path = dizin.join("veri.json");
+        std::fs::write(&path, "{bozuk json").unwrap();
+        let veri = ornek_state().yedek_degeri();
+        AppState::kaydet_path(&path, &veri).unwrap();
+        let bak = path.with_extension("json.bak");
+        assert_eq!(std::fs::read_to_string(&bak).unwrap(), "{bozuk json");
+        let geri = AppState::metinden_yukle(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(geri.history.len(), 2);
+        assert!(
+            !path.with_extension("json.tmp").exists(),
+            "geçici dosya kalmamalı"
+        );
+        std::fs::remove_dir_all(dizin).unwrap();
+    }
+
+    #[test]
+    fn kaydet_gecerli_dosyada_kurtarma_kopyasi_olusturmaz() {
+        let dizin = test_dizini();
+        let path = dizin.join("veri.json");
+        let veri = ornek_state().yedek_degeri();
+        AppState::kaydet_path(&path, &veri).unwrap();
+        AppState::kaydet_path(&path, &veri).unwrap();
+        assert!(!path.with_extension("json.bak").exists());
+        assert!(!path.with_extension("json.tmp").exists());
+        std::fs::remove_dir_all(dizin).unwrap();
+    }
+
+    #[test]
+    fn guncelleme_kontrol_yedekte_tasinir_ve_eksikte_acik() {
+        let mut s = ornek_state();
+        s.settings.guncelleme_kontrol = false;
+        let geri = AppState::from_backup(&s.yedek_degeri()).unwrap();
+        assert!(!geri.settings.guncelleme_kontrol);
+        let mut v = s.yedek_degeri();
+        v["ekstra"]
+            .as_object_mut()
+            .unwrap()
+            .remove("guncelleme_kontrol");
+        assert!(
+            AppState::from_backup(&v)
+                .unwrap()
+                .settings
+                .guncelleme_kontrol
+        );
+    }
+
+    #[test]
+    fn input_hatalari_yedege_yazilmaz() {
+        let mut i = InputState::default();
+        i.hatalar.push((Alan::Yil, "geçersiz sayı".into()));
+        let v = serde_json::to_value(&i).unwrap();
+        assert!(v.get("hatalar").is_none());
+        assert!(
+            serde_json::from_value::<InputState>(v)
+                .unwrap()
+                .hatalar
+                .is_empty()
+        );
     }
 }

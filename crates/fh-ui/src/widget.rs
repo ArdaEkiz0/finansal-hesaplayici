@@ -18,8 +18,8 @@ use fh_core::HesapSonucu;
 
 use crate::commands::turkce_kucuk;
 use crate::model::{
-    HistEntry, InputState, Settings, WidgetAyarlari, WIDGET_GENISLIK_ARALIGI,
-    WIDGET_KONUM_ARALIGI, WIDGET_YUKSEKLIK_ARALIGI, gecmis_ekle, para_bicimi, satir_bicimi,
+    HistEntry, InputState, Settings, WIDGET_GENISLIK_ARALIGI, WIDGET_KONUM_ARALIGI,
+    WIDGET_YUKSEKLIK_ARALIGI, WidgetAyarlari, gecmis_ekle, para_bicimi, satir_bicimi,
 };
 use crate::modes::{self, FieldKind, MODLAR};
 use crate::theme::{self, Palet};
@@ -59,11 +59,7 @@ fn delta_biriktir(toplam: [f32; 2], delta: Vec2) -> [f32; 2] {
 /// tuş hemen önce basılmış olmalı" garantisine gerek kalmaz. Sonuç geçerli
 /// konum aralığına kısıtlanır: bozuk/büyük bir delta pencereyi ekran dışına
 /// sürmez ve kaydedilen konum her zaman `konum_gecerli` ile uyumlu kalır.
-fn konum_uygula(
-    baslangic: [f32; 2],
-    delta: Vec2,
-    onceki_toplam: Option<[f32; 2]>,
-) -> [f32; 2] {
+fn konum_uygula(baslangic: [f32; 2], delta: Vec2, onceki_toplam: Option<[f32; 2]>) -> [f32; 2] {
     let (lo, hi) = WIDGET_KONUM_ARALIGI;
     let toplam = onceki_toplam.unwrap_or([0.0, 0.0]);
     let eksen = |bas: f32, top: f32, d: f32| {
@@ -100,7 +96,17 @@ pub(super) fn etkili_boyut(kompakt: bool, genislik: f32, yukseklik: f32) -> (f32
 }
 
 /// Küçük kare ikon düğmesi (kompakt/geniş, üstte kal, kapat, kopyala).
-fn ikon_dugme(ui: &mut Ui, glif: &str, p: Palet, koyu: bool, aktif: bool, kapat: bool) -> bool {
+/// `ad` hem erişilebilir isim hem hover açıklamasıdır; dokunma alanı 44×44 px'e
+/// çıkarılmıştır (eski 24×22 alan fareyle kolay kaçırılıyordu).
+fn ikon_dugme(
+    ui: &mut Ui,
+    glif: &str,
+    ad: &str,
+    p: Palet,
+    koyu: bool,
+    aktif: bool,
+    kapat: bool,
+) -> bool {
     let renk = if kapat {
         p.hata
     } else if aktif {
@@ -117,8 +123,8 @@ fn ikon_dugme(ui: &mut Ui, glif: &str, p: Palet, koyu: bool, aktif: bool, kapat:
             theme::widget_kenar(koyu)
         })
         .corner_radius(CornerRadius::same(5))
-        .min_size(Vec2::new(24.0, 22.0));
-    ui.add(b).clicked()
+        .min_size(Vec2::splat(44.0));
+    ui.add(b).on_hover_text(ad).clicked()
 }
 
 /// Sayısal tuş takımının tek bir basışı. Karakter aktif alana eklenir;
@@ -219,9 +225,10 @@ impl FhApp {
             self.widget_konum_uygulandi = true;
             if let Some(konum) = self.state.widget.konum {
                 if WidgetAyarlari::konum_gecerli(konum) {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                        Pos2::new(konum[0], konum[1]),
-                    ));
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::OuterPosition(Pos2::new(
+                            konum[0], konum[1],
+                        )));
                     konum_uygulandi_bu_kare = true;
                 }
             }
@@ -242,7 +249,7 @@ impl FhApp {
         // pencere kendiliğinden kapanır.
         if ui.ctx().input(|i| i.viewport().close_requested()) {
             self.state.widget.aktif = false;
-            self.state.kaydet();
+            self.kaydet();
         }
 
         // Widget'in kendi modu için girdi hazır olsun; sonuç anlık görüntüsü
@@ -252,8 +259,13 @@ impl FhApp {
             modes::varsayilanlari_doldur(e, &mod_id);
         }
         let girdi = self.state.inputs.get(&mod_id).cloned().unwrap_or_default();
-        let sonuc: Option<HesapSonucu> =
-            fh_core::hesapla(&mod_id, &modes::build_girdi(&mod_id, &girdi));
+        let hatalar = modes::parse_hatalari(&girdi);
+        // Parse hatası varsa yanlış sonuç "canlı" gibi gösterilmesin.
+        let sonuc: Option<HesapSonucu> = if hatalar.is_empty() {
+            fh_core::hesapla(&mod_id, &modes::build_girdi(&mod_id, &girdi))
+        } else {
+            None
+        };
 
         let gecmis: Vec<(String, InputState, String, String)> = self
             .state
@@ -302,21 +314,16 @@ impl FhApp {
                 let toplam_genislik = ui.available_width();
 
                 // Sağdaki düğmeler için yer ayır; geri kalan tüm şerit
-                // (logo + mod adı + boşluk) sürükleme alanıdır. Kompakt modda
-                // 220px sabit viewport bu şeridi tam 100px bırakır. Geniş
-                // modda başlığın tüm boşluğu kullanılır; pencere daraltıldığında
-                // .max(100) düğmelerin üstüne binmesin diye 0'a kısılır.
-                let dugme_yeri = if kompakt { 108.0 } else { 156.0 };
+                // (logo + mod adı + boşluk) sürükleme alanıdır. Dokunma alanları
+                // 44×44'e çıktığı için kompakt başlıkta 4 düğme ~182px yer kaplar;
+                // 220px viewport'ta kalan ~26px logo + sürükleme içindir.
+                // Pencere daraltıldığında sürükleme alanı 0'a kısılır; düğmelerin
+                // üstüne binmez.
+                let dugme_yeri = if kompakt { 182.0 } else { 214.0 };
                 let bosluk = toplam_genislik - dugme_yeri;
-                let surukle_genislik = if kompakt {
-                    bosluk.max(100.0)
-                } else {
-                    bosluk.max(0.0)
-                };
-                let surukle_rect = Rect::from_min_size(
-                    baslangic_nokta,
-                    Vec2::new(surukle_genislik, 26.0),
-                );
+                let surukle_genislik = bosluk.max(0.0);
+                let surukle_rect =
+                    Rect::from_min_size(baslangic_nokta, Vec2::new(surukle_genislik, 26.0));
                 let surukle = ui.allocate_rect(surukle_rect, Sense::drag());
 
                 // Logo ve mod adı sürükleme alanının üstüne çizilir; kendi
@@ -406,7 +413,7 @@ impl FhApp {
                         let konum =
                             konum_uygula(durum.baslangic, Vec2::ZERO, Some(durum.toplam_delta));
                         self.state.widget.konum = Some(konum);
-                        self.state.kaydet();
+                        self.kaydet();
                     }
                     ctx.data_mut(|d| {
                         d.remove_temp::<SurukleDurum>(surukle_id);
@@ -415,37 +422,55 @@ impl FhApp {
                 }
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
+                    ui.spacing_mut().item_spacing.x = if kompakt { 2.0 } else { 4.0 };
                     // Kapat: tek düğme, kalıcı duruma yazar.
-                    if ikon_dugme(ui, "×", p, koyu, false, true) {
+                    if ikon_dugme(ui, "×", "Widget'ı kapat", p, koyu, false, true) {
                         self.state.widget.aktif = false;
-                        self.state.kaydet();
+                        self.kaydet();
                     }
-                    if ikon_dugme(ui, if ustte { "◉" } else { "◎" }, p, koyu, ustte, false) {
+                    if ikon_dugme(
+                        ui,
+                        if ustte { "◉" } else { "◎" },
+                        "Pencereyi her zaman üstte tut",
+                        p,
+                        koyu,
+                        ustte,
+                        false,
+                    ) {
                         self.state.widget.ustte = !ustte;
-                        self.state.kaydet();
+                        self.kaydet();
                     }
-                    if ikon_dugme(ui, if kompakt { "▣" } else { "▤" }, p, koyu, kompakt, false)
-                    {
+                    if ikon_dugme(
+                        ui,
+                        if kompakt { "▣" } else { "▤" },
+                        "Sadeleştir / genişlet",
+                        p,
+                        koyu,
+                        kompakt,
+                        false,
+                    ) {
                         let yeni = !kompakt;
                         self.state.widget.kompakt = yeni;
                         let (w, h) = if yeni { COMPACT_SIZE } else { WIDE_SIZE };
                         self.state.widget.genislik = w;
                         self.state.widget.yukseklik = h;
                         boyut_sifirlandi = true;
-                        self.state.kaydet();
+                        self.kaydet();
                     }
                     // Ana pencereyi küçült; widget viewport'u görünür kalır.
                     // Komut ana ctx'e gönderilir (widget ctx'i değil).
                     // Kompakt başlıkta geniş metin düğmesi yerine küçük "W" ikonu:
                     // mod adıyla çakışmaz, pencereyi büyütmez.
                     if kompakt {
-                        if ikon_dugme(ui, "W", p, koyu, false, false) {
+                        if ikon_dugme(ui, "W", "Ana pencereyi küçült", p, koyu, false, false) {
                             main_ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                         }
                     } else {
                         let b = egui::Button::new(
-                            RichText::new("Sadece widget").size(10.0).color(p.ikinci).strong(),
+                            RichText::new("Sadece widget")
+                                .size(10.0)
+                                .color(p.ikinci)
+                                .strong(),
                         )
                         .fill(p.yuksek)
                         .stroke(theme::widget_kenar(koyu))
@@ -471,6 +496,20 @@ impl FhApp {
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {
+                        if !hatalar.is_empty() {
+                            let metin = hatalar
+                                .iter()
+                                .map(|(_, m)| m.as_str())
+                                .collect::<Vec<_>>()
+                                .join(" · ");
+                            ui.label(
+                                RichText::new(format!("⚠ Girdi hatası: {metin}"))
+                                    .size(T_SMALL)
+                                    .color(p.hata)
+                                    .strong(),
+                            );
+                            ui.add_space(4.0);
+                        }
                         if kompakt {
                             // ---- kompakt: mod adı + büyük sonuç + kopyala ikonu ----
                             ui.horizontal(|ui| {
@@ -511,7 +550,15 @@ impl FhApp {
                                         });
                                     });
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                    if ikon_dugme(ui, "⧉", p, koyu, false, false) {
+                                    if ikon_dugme(
+                                        ui,
+                                        "⧉",
+                                        "Sonucu panoya kopyala",
+                                        p,
+                                        koyu,
+                                        false,
+                                        false,
+                                    ) {
                                         kopyala = true;
                                     }
                                 });
@@ -584,7 +631,8 @@ impl FhApp {
                                         let t = egui::TextEdit::singleline(e.get_mut(f.alan))
                                             .hint_text(f.ipucu)
                                             .font(FontId::monospace(13.0));
-                                        let resp = ui.add_sized(Vec2::new(ui.available_width(), 28.0), t);
+                                        let resp =
+                                            ui.add_sized(Vec2::new(ui.available_width(), 28.0), t);
                                         tiklandi = resp.clicked() || resp.gained_focus();
                                         odakta = resp.has_focus();
                                         alan_rect = Some(resp.rect);
@@ -608,7 +656,9 @@ impl FhApp {
                                     ui.add_space(4.0);
                                 }
                                 // Enter: widget alanlarından biri odaktayken sonucu panoya kopyala.
-                                if alan_odakta && ui.ctx().input(|i| i.key_pressed(egui::Key::Enter)) {
+                                if alan_odakta
+                                    && ui.ctx().input(|i| i.key_pressed(egui::Key::Enter))
+                                {
                                     kopyala = true;
                                 }
                                 for f in def
@@ -670,7 +720,10 @@ impl FhApp {
                             // ---- sayısal tuş takımı: aktif metin alanına yazar ----
                             ui.add_space(4.0);
                             ui.label(
-                                RichText::new("TUŞ TAKIMI").size(10.0).color(p.aksan).strong(),
+                                RichText::new("TUŞ TAKIMI")
+                                    .size(10.0)
+                                    .color(p.aksan)
+                                    .strong(),
                             );
                             let tus_toplam = ui.available_width();
                             let tus_g3 = (tus_toplam - 12.0) / 3.0;
@@ -690,7 +743,9 @@ impl FhApp {
                                             tus_eylemleri.push(match *tus {
                                                 "⌫" => TusEylemi::Sil,
                                                 "C" => TusEylemi::Temizle,
-                                                c => TusEylemi::Karakter(c.chars().next().unwrap_or('0')),
+                                                c => TusEylemi::Karakter(
+                                                    c.chars().next().unwrap_or('0'),
+                                                ),
                                             });
                                         }
                                     }
@@ -908,7 +963,7 @@ impl FhApp {
             self.widget_arama.clear();
             let e = self.state.inputs.entry(m).or_default();
             modes::varsayilanlari_doldur(e, &self.state.widget.r#mod);
-            self.state.kaydet();
+            self.kaydet();
         }
         if kopyala {
             if let Some(r) = sonuc.as_ref() {
@@ -934,7 +989,7 @@ impl FhApp {
                     detay: r.detay.clone(),
                 };
                 gecmis_ekle(&mut self.state.history, e);
-                self.state.kaydet();
+                self.kaydet();
                 self.bildir("Widget sonucu geçmişe eklendi");
             }
         }
@@ -942,14 +997,14 @@ impl FhApp {
             self.state.widget.r#mod = m.clone();
             self.state.inputs.insert(m.clone(), inputs);
             self.mode = m;
-            self.state.kaydet();
+            self.kaydet();
             self.bildir("Kayıt widget'a geri yüklendi");
         }
         if temizle {
             let e = self.state.inputs.entry(mod_id.clone()).or_default();
             *e = InputState::default();
             modes::varsayilanlari_doldur(e, &mod_id);
-            self.state.kaydet();
+            self.kaydet();
             self.bildir("Widget girdileri temizlendi");
         }
 
@@ -965,7 +1020,7 @@ impl FhApp {
                     let (ymin, ymax) = WIDGET_YUKSEKLIK_ARALIGI;
                     self.state.widget.genislik = sz.x.clamp(gmin, gmax);
                     self.state.widget.yukseklik = sz.y.clamp(ymin, ymax);
-                    self.state.kaydet();
+                    self.kaydet();
                 }
             }
         }
@@ -991,12 +1046,11 @@ impl FhApp {
             if let Some(konum) = yeni_konum {
                 if WidgetAyarlari::konum_gecerli(konum) {
                     let degisti = self.state.widget.konum.map_or(true, |onceki| {
-                        (onceki[0] - konum[0]).abs() > 1.0
-                            || (onceki[1] - konum[1]).abs() > 1.0
+                        (onceki[0] - konum[0]).abs() > 1.0 || (onceki[1] - konum[1]).abs() > 1.0
                     });
                     if degisti {
                         self.state.widget.konum = Some(konum);
-                        self.state.kaydet();
+                        self.kaydet();
                     }
                 }
             }
@@ -1148,7 +1202,10 @@ mod tests {
 
     #[test]
     fn delta_biriktir_saf_ve_negatif() {
-        assert_eq!(delta_biriktir([0.0, 0.0], Vec2::new(3.0, -4.0)), [3.0, -4.0]);
+        assert_eq!(
+            delta_biriktir([0.0, 0.0], Vec2::new(3.0, -4.0)),
+            [3.0, -4.0]
+        );
         assert_eq!(
             delta_biriktir([10.0, 20.0], Vec2::new(-2.5, 0.5)),
             [7.5, 20.5]

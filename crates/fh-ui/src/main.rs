@@ -2,6 +2,7 @@
 
 mod app;
 mod commands;
+mod kararlar;
 mod model;
 mod modes;
 mod theme;

@@ -18,6 +18,10 @@ const USER_AGENT: &str = "FinansalHesaplaci-UpdateChecker";
 /// hostları (ör. `github-releases.githubusercontent.com`) kasten dahil değil.
 const IZINLI_HOSTLAR: [&str; 2] = ["github.com", "objects.githubusercontent.com"];
 
+/// Tek bir güncelleme indirmesi için azami boyut (64 MiB). Gerçek kurulum
+/// exe'si ~5 MB; şişirilmiş/bozuk bir yanıtın belleği doldurmasını engeller.
+const MAX_INDIRME: u64 = 64 * 1024 * 1024;
+
 /// Bir güncellemeyi tanımlayan, API'den çıkarılan bilgiler.
 ///
 /// `url`/`sha`/`sha_url` `update.zip` içindir (bilgi amaçlı korunur).
@@ -39,6 +43,10 @@ fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(8))
         .timeout_read(Duration::from_secs(15))
+        // GitHub indirme URL'i 302 ile objects.githubusercontent.com'a gider;
+        // yönlendirme kapatılırsa indirme çalışmaz. Sınırla ve SON URL'i
+        // `indir_ve_kur` içinde tekrar doğrula (allowlist atlatılamasın).
+        .redirects(3)
         .build()
 }
 
@@ -103,7 +111,11 @@ fn sabit_zamanli_esit(a: &[u8], b: &[u8]) -> bool {
 /// Beklenen özeti (hex, isteğe bağlı `sha256:` öneki ve dosya adı) 32 byte'a
 /// çözer. Geçersizse `None`.
 fn ozet_coz(beklenen: &str) -> Option<[u8; 32]> {
-    let tok = beklenen.trim().split_whitespace().next()?.to_ascii_lowercase();
+    let tok = beklenen
+        .trim()
+        .split_whitespace()
+        .next()?
+        .to_ascii_lowercase();
     let tok = tok.strip_prefix("sha256:").unwrap_or(&tok);
     let bytes = hex::decode(tok).ok()?;
     if bytes.len() != 32 {
@@ -136,6 +148,37 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
         .call()
         .ok()?;
     let json: serde_json::Value = yanit.into_json().ok()?;
+    guncelleme_cikar(&json, surum)
+}
+
+/// Verilen adda TEK bir varlık döndürür. Aynı amaçlı iki varlık varsa `None` —
+/// belirsizlik durumunda sessizce "ilk bulunan"ı seçmek yerine fail-closed.
+fn tek_varlik<'a>(
+    assets: &'a [serde_json::Value],
+    kosul: impl Fn(&str) -> bool,
+) -> Option<&'a serde_json::Value> {
+    let mut eslesenler = assets.iter().filter(|a| {
+        kosul(
+            a.get("name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(""),
+        )
+    });
+    let ilk = eslesenler.next()?;
+    eslesenler.next().is_none().then_some(ilk)
+}
+
+/// API JSON'unu `Guncelleme`'ye çevirir. Ağ çağrısı yapmaz; saf olduğu için
+/// sahte JSON ile tamamen çevrimdışı test edilebilir.
+fn guncelleme_cikar(json: &serde_json::Value, surum: &str) -> Option<Guncelleme> {
+    // Prerelease asla otomatik güncelleme olarak sunulmaz.
+    if json
+        .get("prerelease")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
 
     let tag = json.get("tag_name")?.as_str()?;
     let version = tag.trim_start_matches(|c| c == 'v' || c == 'V').to_string();
@@ -144,38 +187,34 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
     }
 
     let assets = json.get("assets")?.as_array()?;
-    let mut url = String::new();
-    let mut sha = String::new();
-    let mut sha_url = String::new();
+    let zip_varlik = tek_varlik(assets, |ad| ad.ends_with(".zip"))?;
+    let sha_varlik = tek_varlik(assets, |ad| ad.ends_with(".sha256"));
+    let kurulum_varlik = tek_varlik(assets, |ad| ad.ends_with("-kurulum.exe"))?;
 
-    let mut kurulum_url = String::new();
-    let mut kurulum_sha = String::new();
-
-    for asset in assets {
-        let name = asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let download_url = asset
-            .get("browser_download_url")
-            .and_then(|v| v.as_str())
+    let alan = |v: &serde_json::Value, anahtar: &str| -> String {
+        v.get(anahtar)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    let ozet = |v: &serde_json::Value| -> String {
+        let raw = v
+            .get("digest")
+            .and_then(serde_json::Value::as_str)
             .unwrap_or("");
-        let ad = name.to_ascii_lowercase();
-        let ozet = asset.get("digest").and_then(|v| v.as_str()).unwrap_or("");
-        let ozet = ozet
-            .strip_prefix("sha256:")
-            .unwrap_or(ozet)
+        raw.strip_prefix("sha256:")
+            .unwrap_or(raw)
             .trim()
-            .to_ascii_lowercase();
+            .to_ascii_lowercase()
+    };
 
-        if ad.ends_with(".zip") && url.is_empty() {
-            url = download_url.to_string();
-            sha = ozet.clone();
-        } else if ad.ends_with(".sha256") && sha_url.is_empty() {
-            sha_url = download_url.to_string();
-        } else if ad.ends_with("-kurulum.exe") && kurulum_url.is_empty() {
-            // Gerçek güncelleme varlığı: NSIS/Inno kurulumu.
-            kurulum_url = download_url.to_string();
-            kurulum_sha = ozet;
-        }
-    }
+    let url = alan(zip_varlik, "browser_download_url");
+    let sha = ozet(zip_varlik);
+    let sha_url = sha_varlik
+        .map(|v| alan(v, "browser_download_url"))
+        .unwrap_or_default();
+    let kurulum_url = alan(kurulum_varlik, "browser_download_url");
+    let kurulum_sha = ozet(kurulum_varlik);
 
     if url.is_empty() || !host_izinlimi(&url) {
         return None;
@@ -189,10 +228,10 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
     }
     // Kurulum exe'si ve GitHub digest'i zorunlu. Biri eksikse "Güncelle"
     // düğmesi gösterilmez — kullanıcıyı çalışmayacak bir işleme yönlendirme.
-    if kurulum_url.is_empty()
-        || kurulum_sha.is_empty()
-        || !host_izinlimi(&kurulum_url)
-    {
+    if kurulum_url.is_empty() || kurulum_sha.is_empty() || !host_izinlimi(&kurulum_url) {
+        return None;
+    }
+    if ozet_coz(&kurulum_sha).is_none() {
         return None;
     }
 
@@ -203,7 +242,7 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
         sha_url,
         notes: json
             .get("body")
-            .and_then(|v| v.as_str())
+            .and_then(serde_json::Value::as_str)
             .unwrap_or("")
             .to_string(),
         kurulum_url,
@@ -213,7 +252,10 @@ pub fn kontrol(surum: &str) -> Option<Guncelleme> {
 
 /// Çalışan exe'nin dizini: kurulum klasörü veya portable klasörü.
 fn hedef_dizin() -> Option<std::path::PathBuf> {
-    std::env::current_exe().ok()?.parent().map(|p| p.to_path_buf())
+    std::env::current_exe()
+        .ok()?
+        .parent()
+        .map(|p| p.to_path_buf())
 }
 
 /// Köprü batch dosyasının içeriği. Windows'ta çalışan exe'nin üzerine
@@ -226,12 +268,27 @@ fn kopru_icerigi(pid: u32) -> String {
     format!(
         "@echo off\r\n\
          ping -n 3 127.0.0.1 >nul\r\n\
-         taskkill /F /PID {pid} >nul 2>&1\r\n\
+         taskkill /PID {pid} >nul 2>&1\r\n\
          start /wait \"\" \"%~dp0fh-kurulum.exe\" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES\r\n\
          del \"%~dp0fh-kurulum.exe\" >nul 2>&1\r\n\
          start \"\" \"%~dp0Finansal Hesaplayici.exe\"\r\n\
          del \"%~f0\"\r\n"
     )
+}
+
+/// Portable kurulum mu? (exe adı `portable` içeriyorsa)
+///
+/// Portable sürümde köprü kurulu exe adını başlatır ve salt-okunur klasöre
+/// yazma başarısız olabilir; otomatik güncelleme sağlıklı değildir. Bu yüzden
+/// portable modda güncelleme reddedilir, kullanıcıya kurulum indirmesi söylenir.
+pub fn portable_mi() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().to_ascii_lowercase())
+        })
+        .is_some_and(|ad| ad.contains("portable"))
 }
 
 /// Güncellemeyi indirir, SHA-256 ile doğrular ve kurulumu başlatır.
@@ -241,7 +298,8 @@ fn kopru_icerigi(pid: u32) -> String {
 /// Köprü dosyaları çalışan exe'nin dizinine yazılır; başarı `true` döner ve
 /// arayan taraf uygulamayı kapatır (köprü yeniden başlatır).
 pub fn indir_ve_kur(g: &Guncelleme) -> bool {
-    if !host_izinlimi(&g.kurulum_url) {
+    // Portable sürüm otomatik güncellenemez (bkz. portable_mi).
+    if portable_mi() || !host_izinlimi(&g.kurulum_url) {
         return false;
     }
     let beklenen = g.kurulum_sha.trim().to_ascii_lowercase();
@@ -254,8 +312,30 @@ pub fn indir_ve_kur(g: &Guncelleme) -> bool {
         Ok(r) => r,
         Err(_) => return false,
     };
+    // Yönlendirme sonrası GERÇEK URL de allowlist'te olmalı — ilk URL
+    // github.com olsa bile 302 başka bir hosta götürebilir.
+    let son_url = yanit.get_url().to_string();
+    if !host_izinlimi(&son_url) {
+        return false;
+    }
+    // Bildirilen boyut sınırı aşıyorsa hiç okumaya başlama.
+    if let Some(uzunluk) = yanit
+        .header("Content-Length")
+        .and_then(|v| v.parse::<u64>().ok())
+    {
+        if uzunluk > MAX_INDIRME {
+            return false;
+        }
+    }
+
+    // Akış sırasında da sınırla: Content-Length yoksa veya yalan söylüyorsa
+    // belleği doldurmasın. MAX+1 bayt okunduysa fazla var demektir.
     let mut veri = Vec::new();
-    if yanit.into_reader().read_to_end(&mut veri).is_err() {
+    let okunan = yanit
+        .into_reader()
+        .take(MAX_INDIRME + 1)
+        .read_to_end(&mut veri);
+    if okunan.is_err() || veri.len() as u64 > MAX_INDIRME {
         return false;
     }
     if !sha_dogrula(&veri, &beklenen) {
@@ -277,11 +357,18 @@ pub fn indir_ve_kur(g: &Guncelleme) -> bool {
     }
 
     // Görünmez bir cmd penceresinde, ana süreçten bağımsız başlat.
-    std::process::Command::new("cmd")
+    let baslatildi = std::process::Command::new("cmd")
         .args(["/C", "start", "", "/MIN"])
         .arg(&kopru)
         .spawn()
-        .is_ok()
+        .is_ok();
+    if !baslatildi {
+        // Köprü çalışmadıysa iz bırakma: arayan yine kapanacak, dosyalar
+        // kurulum dizininde kalmasın.
+        let _ = std::fs::remove_file(&kurulum);
+        let _ = std::fs::remove_file(&kopru);
+    }
+    baslatildi
 }
 
 #[cfg(test)]
@@ -340,18 +427,24 @@ mod tests {
 
     #[test]
     fn host_github_com_izinli() {
-        assert!(host_izinlimi("https://github.com/ArdaEkiz0/repo/releases/download/v5.0.0/a.zip"));
+        assert!(host_izinlimi(
+            "https://github.com/ArdaEkiz0/repo/releases/download/v5.0.0/a.zip"
+        ));
     }
 
     #[test]
     fn host_objects_izinli() {
-        assert!(host_izinlimi("https://objects.githubusercontent.com/path/update.zip"));
+        assert!(host_izinlimi(
+            "https://objects.githubusercontent.com/path/update.zip"
+        ));
     }
 
     #[test]
     fn host_yabanci_red() {
         assert!(!host_izinlimi("https://evil.example.com/update.zip"));
-        assert!(!host_izinlimi("https://github-releases.githubusercontent.com/a.zip"));
+        assert!(!host_izinlimi(
+            "https://github-releases.githubusercontent.com/a.zip"
+        ));
     }
 
     #[test]
@@ -388,7 +481,8 @@ mod tests {
     #[test]
     fn kopru_pid_ve_kurulumu_icerir() {
         let icerik = kopru_icerigi(4242);
-        assert!(icerik.contains("taskkill /F /PID 4242"));
+        assert!(icerik.contains("taskkill /PID 4242"));
+        assert!(!icerik.contains("/F")); // graceful kapatma, veri kaybı riski yok
         assert!(icerik.contains("fh-kurulum.exe"));
         assert!(icerik.contains("/VERYSILENT"));
         assert!(icerik.contains("/NORESTART"));
@@ -427,5 +521,99 @@ mod tests {
         assert!(ozet_coz(&format!("sha256:{ABC_SHA}")).is_some());
         assert!(ozet_coz(&format!("{ABC_SHA}  update.zip")).is_some());
         assert!(ozet_coz("kisa").is_none());
+    }
+
+    fn sahte_json(surum: &str) -> serde_json::Value {
+        let taban = "https://github.com/ArdaEkiz0/finansal-hesaplayici/releases/download";
+        serde_json::json!({
+            "tag_name": format!("v{surum}"),
+            "prerelease": false,
+            "body": "Türkçe notlar",
+            "assets": [
+                {
+                    "name": format!("Finansal-Hesaplayici-{surum}-kurulum.exe"),
+                    "browser_download_url": format!("{taban}/v{surum}/kurulum.exe"),
+                    "digest": format!("sha256:{ABC_SHA}")
+                },
+                {
+                    "name": "update.zip",
+                    "browser_download_url": format!("{taban}/v{surum}/update.zip"),
+                    "digest": format!("sha256:{ABC_SHA}")
+                },
+                {
+                    "name": "update.zip.sha256",
+                    "browser_download_url": format!("{taban}/v{surum}/update.zip.sha256")
+                }
+            ]
+        })
+    }
+
+    #[test]
+    fn guncelleme_cikar_tam_json() {
+        let g = guncelleme_cikar(&sahte_json("5.7.4"), "5.7.3").expect("güncelleme");
+        assert_eq!(g.version, "5.7.4");
+        assert_eq!(g.kurulum_sha, ABC_SHA);
+        assert!(g.kurulum_url.ends_with("/kurulum.exe"));
+        assert!(g.notes.contains("Türkçe"));
+    }
+
+    #[test]
+    fn guncelleme_cikar_kurulum_varligi_yok() {
+        let mut j = sahte_json("5.7.4");
+        j["assets"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|a| !a["name"].as_str().unwrap().ends_with("-kurulum.exe"));
+        assert!(guncelleme_cikar(&j, "5.7.3").is_none());
+    }
+
+    #[test]
+    fn guncelleme_cikar_digest_yok() {
+        let mut j = sahte_json("5.7.4");
+        j["assets"][0].as_object_mut().unwrap().remove("digest");
+        assert!(guncelleme_cikar(&j, "5.7.3").is_none());
+    }
+
+    #[test]
+    fn guncelleme_cikar_cift_kurulum_red() {
+        let mut j = sahte_json("5.7.4");
+        let ikinci = j["assets"][0].clone();
+        j["assets"].as_array_mut().unwrap().push(ikinci);
+        assert!(guncelleme_cikar(&j, "5.7.3").is_none());
+    }
+
+    #[test]
+    fn guncelleme_cikar_prerelease_red() {
+        let mut j = sahte_json("5.7.4");
+        j["prerelease"] = serde_json::json!(true);
+        assert!(guncelleme_cikar(&j, "5.7.3").is_none());
+    }
+
+    #[test]
+    fn guncelleme_cikar_eski_ve_esit_surum() {
+        assert!(guncelleme_cikar(&sahte_json("5.7.3"), "5.7.3").is_none());
+        assert!(guncelleme_cikar(&sahte_json("5.7.2"), "5.7.3").is_none());
+    }
+
+    #[test]
+    fn guncelleme_cikar_yabanci_host_red() {
+        let mut j = sahte_json("5.7.4");
+        j["assets"][0]["browser_download_url"] =
+            serde_json::json!("https://evil.example.com/kurulum.exe");
+        assert!(guncelleme_cikar(&j, "5.7.3").is_none());
+    }
+
+    #[test]
+    fn boyut_siniri_makul() {
+        assert!(MAX_INDIRME >= 1024 * 1024);
+        assert!(MAX_INDIRME < 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn son_url_allowlist_kurallari() {
+        // Yönlendirme sonrası URL de aynı kurallara tabi.
+        assert!(host_izinlimi("https://objects.githubusercontent.com/a.exe"));
+        assert!(!host_izinlimi("https://evil.example.com/a.exe"));
+        assert!(!host_izinlimi("http://objects.githubusercontent.com/a.exe"));
     }
 }

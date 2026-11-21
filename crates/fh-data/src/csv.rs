@@ -17,7 +17,11 @@ pub fn csv_hucre(v: &str) -> String {
 }
 
 pub fn csv_satir(cells: &[String]) -> String {
-    cells.iter().map(|c| csv_hucre(c)).collect::<Vec<_>>().join(",")
+    cells
+        .iter()
+        .map(|c| csv_hucre(c))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 /// Satırları CSV metnine çevirir; BOM Excel'de Türkçe karakterler için şart.
@@ -73,10 +77,7 @@ mod tests {
         ];
         let s = csv_metin(&rows);
         assert!(s.starts_with('\u{FEFF}'));
-        assert_eq!(
-            s,
-            "\u{FEFF}\"ad\",\"tutar\"\n\"Ayşe\",\"1234.56\""
-        );
+        assert_eq!(s, "\u{FEFF}\"ad\",\"tutar\"\n\"Ayşe\",\"1234.56\"");
     }
 
     #[test]

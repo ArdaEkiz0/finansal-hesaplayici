@@ -68,7 +68,7 @@ pub fn indir_ve_kur(g: &Guncelleme) -> bool;  // allowlist: github.com / objects
 
 ## fh-ui (crate: fh-ui, binary adı `Finansal Hesaplayici`)
 Yukarıdaki API'leri kullanır; doğrudanhesaplama formülü yazmaz.
-eframe/egui, koyu-açık-sistem tema, yazı ölçeği, 15 mod, canlı sonuç, geçmiş,
+eframe/egui, koyu-açık-sistem tema, yazı ölçeği, 20 mod, canlı sonuç, geçmiş,
 dönem arşivi, cari, takvim, CSV/yedek, komut paleti (Ctrl+K), yazdırma, widget.
 Veri yolu: `directories::ProjectDirs` → `%APPDATA%` altı.
 

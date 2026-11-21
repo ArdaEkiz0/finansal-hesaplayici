@@ -15,8 +15,8 @@ pub struct TakvimKayit {
 }
 
 const AY_KISA: [&str; 13] = [
-    "Aralık", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos",
-    "Eylül", "Ekim", "Kasım", "Aralık",
+    "Aralık", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül",
+    "Ekim", "Kasım", "Aralık",
 ];
 
 fn iso(y: i32, m1: u32, gun: u32) -> String {
@@ -201,7 +201,10 @@ mod tests {
     #[test]
     fn gecici_vergi_birinci_ceyrek_mayis_15() {
         let all = kelimeleri_olustur(2026);
-        let g = all.iter().find(|k| k.tip == "gVV" && k.tarih == "2026-05-15").unwrap();
+        let g = all
+            .iter()
+            .find(|k| k.tip == "gVV" && k.tarih == "2026-05-15")
+            .unwrap();
         assert_eq!(g.donemi, "1. çeyrek (Ocak–Mart) 2026");
         assert_eq!(g.id, "gvv-2026-5");
     }
@@ -209,7 +212,10 @@ mod tests {
     #[test]
     fn gecici_vergi_dortuncu_ceyrek_subat_15_hatasi_korunuyor() {
         let all = kelimeleri_olustur(2026);
-        let g = all.iter().find(|k| k.tip == "gVV" && k.tarih == "2026-02-15").unwrap();
+        let g = all
+            .iter()
+            .find(|k| k.tip == "gVV" && k.tarih == "2026-02-15")
+            .unwrap();
         assert_eq!(g.donemi, "4. çeyrek (Ekim–Aralık) 2025");
     }
 

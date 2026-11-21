@@ -219,7 +219,10 @@ fn y15_yeni_modlar_bozuk_girdide_panic_uretmiyor() {
 fn y16_mod_adi_buyuk_kucuk_harf_duyarsiz() {
     let d = girdi("100000", "", "9.48");
     assert_eq!(hesapla("DAMGA", &d), hesapla("damga", &d));
-    assert_eq!(hesapla("  Emlak  ", &girdi("500000", "", "1")), hesapla("emlak", &girdi("500000", "", "1")));
+    assert_eq!(
+        hesapla("  Emlak  ", &girdi("500000", "", "1")),
+        hesapla("emlak", &girdi("500000", "", "1"))
+    );
 
     let k = Girdi {
         ay: 12,

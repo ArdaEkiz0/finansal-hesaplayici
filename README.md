@@ -3,15 +3,15 @@
 ![Finansal Hesaplayıcı logosu](build/logo.png)
 
 Türk mali hesaplamaları için sıfırdan Rust ile yazılmış, çevrimdışı çalışan masaüstü uygulaması.
-Electron sürümünün (v4.8.0) tüm özelliklerini karşılar: 15 hesaplama modu, dönem arşivi, cari kartlar,
-vergi takvimi, e-fatura CSV içe aktarma, güvenli yedek al/yükle, tema ve yazı ölçeği, komut paleti,
-güncelleyici (SHA-256 doğrulamalı) ve tek tık kurulum.
+20 hesaplama modu, dönem arşivi, cari kartlar, vergi takvimi, e-fatura CSV içe aktarma, güvenli yedek
+al/yükle, tema ve yazı ölçeği, komut paleti, daima üstteki widget, SHA-256 doğrulamalı tek tık
+güncelleme ve tek tık kurulum içerir.
 
 ## Yapı
 
 | Crate | İş |
 |---|---|
-| `fh-core` | 15 hesaplama modu, `rust_decimal` para matematiği, Türkçe biçim/para yazısı |
+| `fh-core` | 20 hesaplama modu, `rust_decimal` para matematiği, Türkçe biçim/para yazısı |
 | `fh-data` | Vergi takvimi, dönem arşivi, yedek sanitizasyonu, CSV, e-fatura ayrıştırma |
 | `fh-updater` | GitHub sürüm kontrolü, SHA-256 bütünlük, host allowlist |
 | `fh-ui` | eframe/egui arayüz, tema, klavye, widget, yazdırma |
@@ -29,8 +29,19 @@ cargo build --release
 Kurulum exe'si (Inno Setup 6):
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" "Kurulum\FH_kurulum.iss"
+& "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe" "/DSurum=<Cargo.toml sürümü>" "Kurulum\FH_kurulum.iss"
 ```
+
+## İndirme ve güncelleme
+
+Her sürüm dört varlıkla yayınlanır: `kurulum.exe`, `portable.exe`, `update.zip`, `update.zip.sha256`.
+İndirme: `https://github.com/ArdaEkiz0/finansal-hesaplayici/releases/latest`
+
+Uygulama açılışta arka planda GitHub releases'e bakar. Yeni sürüm varsa üst panelde uyarı ve
+**İndir ve kur** düğmesi çıkar; kurulum exe'si indirilip GitHub API `digest` değeriyle (SHA-256)
+doğrulanır, yalnızca izinli hostlara HTTPS ile bağlanılır, uygulama kapanıp sessiz kurulumu izleyen
+köprü yeniden başlatır. Güncelleme kontrolünü Ayarlar → Hakkında'dan kapatabilirsin; kapalıyken
+hiç ağ isteği yapılmaz. Portable sürüm otomatik güncellenemez — kurulum exe'sini indirmen gerekir.
 
 ## Tasarım kuralları
 

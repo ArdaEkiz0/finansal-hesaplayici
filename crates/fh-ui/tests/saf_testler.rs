@@ -30,10 +30,14 @@ fn ornek() -> AppState {
             show_currency_symbol: false,
             precision: 4,
             currency_symbol: "$".into(),
+            guncelleme_kontrol: true,
         },
         history,
         donemler: Vec::new(),
-        cariler: vec![model::Cari { id: "c1".into(), name: "Müşteri A".into() }],
+        cariler: vec![model::Cari {
+            id: "c1".into(),
+            name: "Müşteri A".into(),
+        }],
         active_cari: "c1".into(),
         inputs: Default::default(),
         widget: model::WidgetAyarlari::default(),
@@ -81,8 +85,7 @@ fn tema_cozumleme_dark_light_system() {
 fn font_scale_sinir_ve_varsayilan() {
     let coz = |fs: Value| {
         AppState::metinden_yukle(
-            &json!({"uygulama": "finansal-hesaplayici", "settings": {"fontScale": fs}})
-                .to_string(),
+            &json!({"uygulama": "finansal-hesaplayici", "settings": {"fontScale": fs}}).to_string(),
         )
         .unwrap()
         .settings
@@ -109,7 +112,10 @@ fn ayar_json_bomsuz_okunur() {
 #[test]
 fn ayar_json_bomlu_okunur() {
     // Windows/editör kaynaklı BOM yüzünden kullanıcı dosyası kaybolmamalı.
-    let metin = format!("\u{feff}{}", serde_json::to_string(&ornek().yedek_degeri()).unwrap());
+    let metin = format!(
+        "\u{feff}{}",
+        serde_json::to_string(&ornek().yedek_degeri()).unwrap()
+    );
     let geri = AppState::metinden_yukle(&metin).expect("BOM'lu JSON okunmalı");
     assert_eq!(geri.settings, ornek().settings);
     assert_eq!(geri.history.len(), 1, "BOM yüzünden geçmiş kaybolmamalı");
@@ -143,8 +149,14 @@ fn bozuk_ayarlar_guvenli_varsayilana_duser() {
 
 #[test]
 fn pencere_ayarlari_acilis_varsayilanlari() {
-    assert!(PENCERE_AYARLARI.maksimum_acilis, "uygulama ekrana sığarak açılmalı");
-    assert!(!PENCERE_AYARLARI.persist_window, "bozuk 14x14 kaydı geri gelmemeli");
+    assert!(
+        PENCERE_AYARLARI.maksimum_acilis,
+        "uygulama ekrana sığarak açılmalı"
+    );
+    assert!(
+        !PENCERE_AYARLARI.persist_window,
+        "bozuk 14x14 kaydı geri gelmemeli"
+    );
     assert!(PENCERE_AYARLARI.inner_size[0] >= PENCERE_AYARLARI.min_inner_size[0]);
     assert!(PENCERE_AYARLARI.inner_size[1] >= PENCERE_AYARLARI.min_inner_size[1]);
     assert!(

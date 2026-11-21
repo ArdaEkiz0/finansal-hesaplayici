@@ -13,10 +13,10 @@ Koyu: derin lacivert (`#0a0f1c`) zemin, `#101827` yüzey, ince ızgara dokusu, m
 ## Yapı
 
 - **Üst:** kimlik bloğu (ad + sürüm + "çevrimdışı finans konsolu") ve araç düğmeleri (⌘K, A+, A−, Widget, Ayarlar, Takvim, Cari, Dönemler, Geçmiş). Güncelleme bildirimi burada.
-- **Sol:** 15 mod, dört grup halinde dikey navigasyon; aktif satırda cyan şerit + mavi zemin; kaydırma belirgin, yatay kırpma yok.
+- **Sol:** 20 mod, beş grup halinde tek sayfada dikey navigasyon; aktif satırda cyan şerit + mavi zemin; tekerlek ve ↑/↓ ile kaydırma, yatay kırpma yok.
 - **Orta:** geniş çalışma alanı; mod başlığı, durum satırı, etiketli 36px alanlar, yedek/CSV eylemleri, "çalışma notu" kartı (alan sayısı, biçim ipucu, kısayol).
 - **Sağ:** sonuç alanı; 48px ana tutar, okunur döküm tablosu, doğrulama/birim şeridi, kopyala/yazdır/kaydet. Boş durum öğretici metinli.
-- **Alt:** tam genişlikte kayıt paneli (Geçmiş / Dönem / Takvim), okunur tablo, bilgilendirici boş durum, CSV/Temizle eylemleri. Kalan yükseklik tamamen bu panele verilir; en altta tema renginde durum şeridi (sürüm + çevrimdışı bilgisi) yer alır; pencere boşlukları tema zemin rengiyle boyanır.
+- **Alt:** yalnızca ince tema renginde durum şeridi (sürüm + çevrimdışı bilgisi); Geçmiş / Dönem / Takvim üst şeritten açılır. Üç ana kolon dikey alanı tamamen doldurur; pencere boşlukları tema zemin rengiyle boyanır.
 - **Dar (<1040px):** üçüncü sütun kapanır, sonuç çalışma alanının altına iner.
 
 ## Durumlar
@@ -25,4 +25,4 @@ Tüm kontrollerde default / hover / focus / seçim / devre dışı ayrımı; 6px
 
 ## Finish review
 
-248 test (15 modun tamamı, yedek/CSV/takvim/ayarlar geri uyumu, `compound` panic düzeltmesi) ve release derlemesi temiz. Koyu + açık ekran görüntüleri okundu: taşma/kırpma yok, paneller ekranı dolduruyor, temalar ayrı kimlik. Bilinen sınırlar: sistem teması koyuya düşer, widget uygulama içi panel, native yazdırma yerine metin önizleme.
+400+ test (20 modun tamamı, yedek/CSV/takvim/ayarlar geri uyumu, güncelleme bütünlüğü) ve release derlemesi temiz. Koyu + açık ekran görüntüleri okundu: taşma/kırpma yok, paneller ekranı dolduruyor, temalar ayrı kimlik. Widget gerçek, daima üstte ayrı bir işletim sistemi penceresidir (sürükleme + kayıtlı konum). Bilinen sınırlar: sistem teması koyuya düşer, native yazdırma yerine metin önizleme, kod imzalama sertifikası yoksa SmartScreen uyarısı görünür.

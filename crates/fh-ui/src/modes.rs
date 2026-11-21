@@ -32,13 +32,27 @@ pub struct ModeDef {
 
 const SEC_DAHIL: &[(&str, &str)] = &[("KDV hariç", "haric"), ("KDV dahil", "dahil")];
 const SEC_STOPAJ: &[(&str, &str)] = &[("Brütten net", "brut"), ("Netten brüt", "netten")];
-const SEC_AMORTISMAN: &[(&str, &str)] =
-    &[("Normal (doğrusal)", "normal"), ("Azalan bakiyeler", "azalan")];
+const SEC_AMORTISMAN: &[(&str, &str)] = &[
+    ("Normal (doğrusal)", "normal"),
+    ("Azalan bakiyeler", "azalan"),
+];
 const SEC_DOVIZ: &[(&str, &str)] = &[("Döviz → TL", "toTL"), ("TL → Döviz", "fromTL")];
-const SEC_BATCH: &[(&str, &str)] = &[("KDV", "kdv"), ("Stopaj", "stopaj"), ("Tevkifat", "tevkifat")];
+const SEC_BATCH: &[(&str, &str)] = &[
+    ("KDV", "kdv"),
+    ("Stopaj", "stopaj"),
+    ("Tevkifat", "tevkifat"),
+];
 pub const SEC_PAY: &[(&str, &str)] = &[
-    ("1/10", "1"), ("2/10", "2"), ("3/10", "3"), ("4/10", "4"), ("5/10", "5"),
-    ("6/10", "6"), ("7/10", "7"), ("8/10", "8"), ("9/10", "9"), ("10/10", "10"),
+    ("1/10", "1"),
+    ("2/10", "2"),
+    ("3/10", "3"),
+    ("4/10", "4"),
+    ("5/10", "5"),
+    ("6/10", "6"),
+    ("7/10", "7"),
+    ("8/10", "8"),
+    ("9/10", "9"),
+    ("10/10", "10"),
 ];
 
 /// Mod navigasyon panelindeki dikey kaydırma alanının asgari görünür yüksekliği (px).
@@ -48,162 +62,550 @@ pub const MOD_NAV_MIN_HEIGHT: f32 = 120.0;
 
 pub const MODLAR: &[ModeDef] = &[
     ModeDef {
-        id: "kdv", etiket: "KDV Hesaplama", grup: "KDV & Stopaj",
+        id: "kdv",
+        etiket: "KDV Hesaplama",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Tutar", ipucu: "Örn. 1.234,56", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "KDV oranı (%)", ipucu: "20", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Secim, etiket: "Hesaplama yönü", ipucu: "", tur: FieldKind::Secim, secenekler: SEC_DAHIL },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Tutar",
+                ipucu: "Örn. 1.234,56",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "KDV oranı (%)",
+                ipucu: "20",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Secim,
+                etiket: "Hesaplama yönü",
+                ipucu: "",
+                tur: FieldKind::Secim,
+                secenekler: SEC_DAHIL,
+            },
         ],
     },
     ModeDef {
-        id: "stopaj", etiket: "Stopaj / Tevkifat", grup: "KDV & Stopaj",
+        id: "stopaj",
+        etiket: "Stopaj / Tevkifat",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Brüt tutar", ipucu: "Örn. 10.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "Stopaj oranı (%)", ipucu: "15", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Secim, etiket: "Hesaplama yönü", ipucu: "", tur: FieldKind::Secim, secenekler: SEC_STOPAJ },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Brüt tutar",
+                ipucu: "Örn. 10.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Stopaj oranı (%)",
+                ipucu: "15",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Secim,
+                etiket: "Hesaplama yönü",
+                ipucu: "",
+                tur: FieldKind::Secim,
+                secenekler: SEC_STOPAJ,
+            },
         ],
     },
     ModeDef {
-        id: "tevkifat", etiket: "KDV Tevkifatı", grup: "KDV & Stopaj",
+        id: "tevkifat",
+        etiket: "KDV Tevkifatı",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Matrah", ipucu: "Örn. 5.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "KDV oranı (%)", ipucu: "20", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::TevkifatPay, etiket: "Tevkifat payı", ipucu: "", tur: FieldKind::PaySecim, secenekler: SEC_PAY },
-            FieldDef { alan: Alan::TevkifatKod, etiket: "İşlem kodu (opsiyonel)", ipucu: "Örn. 4A", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Matrah",
+                ipucu: "Örn. 5.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "KDV oranı (%)",
+                ipucu: "20",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::TevkifatPay,
+                etiket: "Tevkifat payı",
+                ipucu: "",
+                tur: FieldKind::PaySecim,
+                secenekler: SEC_PAY,
+            },
+            FieldDef {
+                alan: Alan::TevkifatKod,
+                etiket: "İşlem kodu (opsiyonel)",
+                ipucu: "Örn. 4A",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "fiyat", etiket: "Fiyat Etiketi", grup: "KDV & Stopaj",
+        id: "fiyat",
+        etiket: "Fiyat Etiketi",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Etiket fiyatı", ipucu: "Örn. 1.200", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "KDV oranı (%)", ipucu: "20", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Secim, etiket: "Etiket KDV dahil mi?", ipucu: "", tur: FieldKind::Secim, secenekler: SEC_DAHIL },
-            FieldDef { alan: Alan::Ek1, etiket: "İndirim oranları (%)", ipucu: "Virgülle: 10, 5", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Etiket fiyatı",
+                ipucu: "Örn. 1.200",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "KDV oranı (%)",
+                ipucu: "20",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Secim,
+                etiket: "Etiket KDV dahil mi?",
+                ipucu: "",
+                tur: FieldKind::Secim,
+                secenekler: SEC_DAHIL,
+            },
+            FieldDef {
+                alan: Alan::Ek1,
+                etiket: "İndirim oranları (%)",
+                ipucu: "Virgülle: 10, 5",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "kdvCompare", etiket: "KDV Karşılaştırma", grup: "KDV & Stopaj",
+        id: "kdvCompare",
+        etiket: "KDV Karşılaştırma",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Tutar", ipucu: "Örn. 1.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "KDV oranı (%)", ipucu: "20", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Tutar",
+                ipucu: "Örn. 1.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "KDV oranı (%)",
+                ipucu: "20",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "discount", etiket: "Zincirleme İndirim", grup: "KDV & Stopaj",
+        id: "discount",
+        etiket: "Zincirleme İndirim",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Orijinal fiyat", ipucu: "Örn. 2.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ek1, etiket: "İndirim oranları (%)", ipucu: "Virgülle: 20, 10, 5", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Orijinal fiyat",
+                ipucu: "Örn. 2.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ek1,
+                etiket: "İndirim oranları (%)",
+                ipucu: "Virgülle: 20, 10, 5",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "margin", etiket: "Marj → Satış Fiyatı", grup: "Kâr & Yüzde",
+        id: "margin",
+        etiket: "Marj → Satış Fiyatı",
+        grup: "Kâr & Yüzde",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Maliyet", ipucu: "Örn. 800", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ikinci, etiket: "Hedef marj (%)", ipucu: "25", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Maliyet",
+                ipucu: "Örn. 800",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ikinci,
+                etiket: "Hedef marj (%)",
+                ipucu: "25",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "markup", etiket: "Kâr Oranı → Fiyat", grup: "Kâr & Yüzde",
+        id: "markup",
+        etiket: "Kâr Oranı → Fiyat",
+        grup: "Kâr & Yüzde",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Maliyet", ipucu: "Örn. 800", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ikinci, etiket: "Kâr oranı (%)", ipucu: "30", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Maliyet",
+                ipucu: "Örn. 800",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ikinci,
+                etiket: "Kâr oranı (%)",
+                ipucu: "30",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "percent", etiket: "Yüzde Hesaplama", grup: "Kâr & Yüzde",
+        id: "percent",
+        etiket: "Yüzde Hesaplama",
+        grup: "Kâr & Yüzde",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Yüzde (%)", ipucu: "Örn. 18", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ikinci, etiket: "Değer", ipucu: "Örn. 4.500", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Yüzde (%)",
+                ipucu: "Örn. 18",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ikinci,
+                etiket: "Değer",
+                ipucu: "Örn. 4.500",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "compound", etiket: "Bileşik Faiz", grup: "Faiz & Zaman",
+        id: "compound",
+        etiket: "Bileşik Faiz",
+        grup: "Faiz & Zaman",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Anapara", ipucu: "Örn. 10.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ikinci, etiket: "Yıllık faiz (%)", ipucu: "45", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ek1, etiket: "Yıl", ipucu: "Örn. 3", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ek2, etiket: "Yılda bileşme", ipucu: "Örn. 12", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Anapara",
+                ipucu: "Örn. 10.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ikinci,
+                etiket: "Yıllık faiz (%)",
+                ipucu: "45",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ek1,
+                etiket: "Yıl",
+                ipucu: "Örn. 3",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ek2,
+                etiket: "Yılda bileşme",
+                ipucu: "Örn. 12",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "gecikme", etiket: "Gecikme Faizi", grup: "Faiz & Zaman",
+        id: "gecikme",
+        etiket: "Gecikme Faizi",
+        grup: "Faiz & Zaman",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Anapara", ipucu: "Örn. 5.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ikinci, etiket: "Aylık faiz (%)", ipucu: "3,5", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Gun, etiket: "Gün sayısı", ipucu: "Örn. 45", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Anapara",
+                ipucu: "Örn. 5.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ikinci,
+                etiket: "Aylık faiz (%)",
+                ipucu: "3,5",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Gun,
+                etiket: "Gün sayısı",
+                ipucu: "Örn. 45",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "amortisman", etiket: "Amortisman", grup: "Faiz & Zaman",
+        id: "amortisman",
+        etiket: "Amortisman",
+        grup: "Faiz & Zaman",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Maliyet", ipucu: "Örn. 100.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "Yıllık oran (%)", ipucu: "Boş bırakırsan otomatik", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Yil, etiket: "Yıl", ipucu: "Örn. 5", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Secim, etiket: "Yöntem", ipucu: "", tur: FieldKind::Secim, secenekler: SEC_AMORTISMAN },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Maliyet",
+                ipucu: "Örn. 100.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Yıllık oran (%)",
+                ipucu: "Boş bırakırsan otomatik",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Yil,
+                etiket: "Yıl",
+                ipucu: "Örn. 5",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Secim,
+                etiket: "Yöntem",
+                ipucu: "",
+                tur: FieldKind::Secim,
+                secenekler: SEC_AMORTISMAN,
+            },
         ],
     },
     ModeDef {
-        id: "doviz", etiket: "Döviz Çevirme", grup: "Diğer",
+        id: "doviz",
+        etiket: "Döviz Çevirme",
+        grup: "Diğer",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Tutar", ipucu: "Örn. 1.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ikinci, etiket: "Kur", ipucu: "Örn. 34,50", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Secim, etiket: "Yön", ipucu: "", tur: FieldKind::Secim, secenekler: SEC_DOVIZ },
-            FieldDef { alan: Alan::TevkifatKod, etiket: "Para birimi", ipucu: "USD, EUR, GBP...", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Tutar",
+                ipucu: "Örn. 1.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ikinci,
+                etiket: "Kur",
+                ipucu: "Örn. 34,50",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Secim,
+                etiket: "Yön",
+                ipucu: "",
+                tur: FieldKind::Secim,
+                secenekler: SEC_DOVIZ,
+            },
+            FieldDef {
+                alan: Alan::TevkifatKod,
+                etiket: "Para birimi",
+                ipucu: "USD, EUR, GBP...",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "batch", etiket: "Toplu Hesaplama", grup: "Diğer",
+        id: "batch",
+        etiket: "Toplu Hesaplama",
+        grup: "Diğer",
         alanlar: &[
-            FieldDef { alan: Alan::Secim, etiket: "Alt mod", ipucu: "", tur: FieldKind::Secim, secenekler: SEC_BATCH },
-            FieldDef { alan: Alan::Oran, etiket: "Varsayılan oran (%)", ipucu: "20", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ek1, etiket: "Satırlar", ipucu: "Her satır: tutar;oran", tur: FieldKind::CokSatir, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Secim,
+                etiket: "Alt mod",
+                ipucu: "",
+                tur: FieldKind::Secim,
+                secenekler: SEC_BATCH,
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Varsayılan oran (%)",
+                ipucu: "20",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ek1,
+                etiket: "Satırlar",
+                ipucu: "Her satır: tutar;oran",
+                tur: FieldKind::CokSatir,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "donem", etiket: "Dönem KDV", grup: "Diğer",
+        id: "donem",
+        etiket: "Dönem KDV",
+        grup: "Diğer",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Satış matrahı", ipucu: "Örn. 100.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ikinci, etiket: "Alış matrahı", ipucu: "Örn. 40.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "KDV oranı (%)", ipucu: "20", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ek1, etiket: "Önceki devreden", ipucu: "Örn. 1.500", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Satış matrahı",
+                ipucu: "Örn. 100.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ikinci,
+                etiket: "Alış matrahı",
+                ipucu: "Örn. 40.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "KDV oranı (%)",
+                ipucu: "20",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ek1,
+                etiket: "Önceki devreden",
+                ipucu: "Örn. 1.500",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     // --- v5.6: 5 yeni mod (fh-core formülleriyle eşleşir) ---
     ModeDef {
-        id: "damga", etiket: "Damga Vergisi", grup: "KDV & Stopaj",
+        id: "damga",
+        etiket: "Damga Vergisi",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Matrah", ipucu: "Örn. 10.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "Oran (‰)", ipucu: "Örn. 0,948", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Matrah",
+                ipucu: "Örn. 10.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Oran (‰)",
+                ipucu: "Örn. 0,948",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "emlak", etiket: "Emlak Vergisi", grup: "KDV & Stopaj",
+        id: "emlak",
+        etiket: "Emlak Vergisi",
+        grup: "KDV & Stopaj",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Matrah", ipucu: "Örn. 100.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "Oran (‰)", ipucu: "Örn. 1", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Matrah",
+                ipucu: "Örn. 100.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Oran (‰)",
+                ipucu: "Örn. 1",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "kredi", etiket: "Kredi Taksiti", grup: "Faiz & Kredi",
+        id: "kredi",
+        etiket: "Kredi Taksiti",
+        grup: "Faiz & Kredi",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Anapara", ipucu: "Örn. 100.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "Aylık faiz (%)", ipucu: "Örn. 3,5", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Ay, etiket: "Vade (ay)", ipucu: "1–360", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Anapara",
+                ipucu: "Örn. 100.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Aylık faiz (%)",
+                ipucu: "Örn. 3,5",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Ay,
+                etiket: "Vade (ay)",
+                ipucu: "1–360",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "basitFaiz", etiket: "Basit Faiz", grup: "Faiz & Kredi",
+        id: "basitFaiz",
+        etiket: "Basit Faiz",
+        grup: "Faiz & Kredi",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Anapara", ipucu: "Örn. 10.000", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "Yıllık faiz (%)", ipucu: "Örn. 45", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Gun, etiket: "Gün sayısı", ipucu: "1–3650", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Anapara",
+                ipucu: "Örn. 10.000",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Yıllık faiz (%)",
+                ipucu: "Örn. 45",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Gun,
+                etiket: "Gün sayısı",
+                ipucu: "1–3650",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
     ModeDef {
-        id: "netBrut", etiket: "Net → Brüt", grup: "Kâr & Yüzde",
+        id: "netBrut",
+        etiket: "Net → Brüt",
+        grup: "Kâr & Yüzde",
         alanlar: &[
-            FieldDef { alan: Alan::Birinci, etiket: "Net tutar", ipucu: "Örn. 8.500", tur: FieldKind::Metin, secenekler: &[] },
-            FieldDef { alan: Alan::Oran, etiket: "Stopaj oranı (%)", ipucu: "Örn. 15", tur: FieldKind::Metin, secenekler: &[] },
+            FieldDef {
+                alan: Alan::Birinci,
+                etiket: "Net tutar",
+                ipucu: "Örn. 8.500",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
+            FieldDef {
+                alan: Alan::Oran,
+                etiket: "Stopaj oranı (%)",
+                ipucu: "Örn. 15",
+                tur: FieldKind::Metin,
+                secenekler: &[],
+            },
         ],
     },
 ];
@@ -255,6 +657,26 @@ fn tamsayi(s: &str) -> i32 {
     s.trim().parse::<i32>().unwrap_or(0)
 }
 
+/// Tamsayı bekleyen alanların doğrulanması (saf). `tamsayi()` geçersiz metni
+/// sessizce 0'a çevirdiği için yanlış sonuç "doğrulanmış" görünüyordu. Boş
+/// alanlar isteğe bağlıdır; yalnızca dolu ama sayı olmayan alan hata üretir.
+pub fn parse_hatalari(inp: &InputState) -> Vec<(Alan, String)> {
+    let kontrol: [(Alan, &str); 4] = [
+        (Alan::TevkifatPay, "Tevkifat payı"),
+        (Alan::Yil, "Yıl"),
+        (Alan::Ay, "Ay"),
+        (Alan::Gun, "Gün sayısı"),
+    ];
+    kontrol
+        .iter()
+        .filter(|(alan, _)| {
+            let v = inp.get(*alan);
+            !v.trim().is_empty() && v.trim().parse::<i32>().is_err()
+        })
+        .map(|(alan, ad)| (*alan, format!("{ad}: geçerli bir tam sayı girin")))
+        .collect()
+}
+
 /// UI alanlarından `fh_core::Girdi` üretir — formül yok, yalnızca eşleme.
 pub fn build_girdi(mod_id: &str, inp: &InputState) -> Girdi {
     let mut g = Girdi {
@@ -293,11 +715,24 @@ pub fn build_girdi(mod_id: &str, inp: &InputState) -> Girdi {
             }
         }
         "doviz" => {
-            g.ek = vec![if inp.secim == "fromTL" { "fromTL" } else { "toTL" }.to_string()];
+            g.ek = vec![
+                if inp.secim == "fromTL" {
+                    "fromTL"
+                } else {
+                    "toTL"
+                }
+                .to_string(),
+            ];
         }
         "batch" => {
             g.tevkifat_kod = inp.secim.clone();
-            g.ek = inp.ek1.lines().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect();
+            g.ek = inp
+                .ek1
+                .lines()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
         }
         "donem" => g.ek = vec![inp.ek1.clone()],
         _ => {}
@@ -318,9 +753,28 @@ mod tests {
     #[test]
     fn yirmi_mod_tanli() {
         assert_eq!(MODLAR.len(), 20);
-        for id in ["kdv", "stopaj", "tevkifat", "fiyat", "kdvCompare", "margin", "markup",
-                   "discount", "percent", "compound", "gecikme", "amortisman", "doviz", "batch", "donem",
-                   "damga", "emlak", "kredi", "basitFaiz", "netBrut"] {
+        for id in [
+            "kdv",
+            "stopaj",
+            "tevkifat",
+            "fiyat",
+            "kdvCompare",
+            "margin",
+            "markup",
+            "discount",
+            "percent",
+            "compound",
+            "gecikme",
+            "amortisman",
+            "doviz",
+            "batch",
+            "donem",
+            "damga",
+            "emlak",
+            "kredi",
+            "basitFaiz",
+            "netBrut",
+        ] {
             assert!(mod_def(id).is_some(), "{id}");
         }
     }
@@ -349,6 +803,43 @@ mod tests {
         assert_eq!(build_girdi("tevkifat", &i).tevkifat_pay, 7);
         i.tevkifat_pay = "bozuk".into();
         assert_eq!(build_girdi("tevkifat", &i).tevkifat_pay, 0);
+    }
+
+    #[test]
+    fn parse_hatalari_bos_ve_gecerli_alanlarda_yok() {
+        let i = inp();
+        assert!(parse_hatalari(&i).is_empty());
+        let mut i = inp();
+        i.tevkifat_pay = "7".into();
+        i.yil = "5".into();
+        i.ay = "12".into();
+        i.gun = "30".into();
+        assert!(parse_hatalari(&i).is_empty());
+    }
+
+    #[test]
+    fn parse_hatalari_gecersiz_tamsayilari_yakalar() {
+        let mut i = inp();
+        i.tevkifat_pay = "bozuk".into();
+        i.yil = "5,5".into();
+        i.ay.clear();
+        i.gun = "  ".into();
+        let h = parse_hatalari(&i);
+        assert_eq!(h.len(), 2);
+        assert_eq!(h[0].0, Alan::TevkifatPay);
+        assert_eq!(h[1].0, Alan::Yil);
+        assert!(h[0].1.contains("Tevkifat payı"));
+        // Boş/boşluklu isteğe bağlı alanlar hata değil.
+        assert!(!h.iter().any(|(a, _)| *a == Alan::Ay || *a == Alan::Gun));
+    }
+
+    #[test]
+    fn parse_hatalari_build_girdi_hatasiz_kalir() {
+        // Doğrulama ayrı bir katman; build_girdi eski davranışını korur.
+        let mut i = inp();
+        i.tevkifat_pay = "bozuk".into();
+        assert_eq!(build_girdi("tevkifat", &i).tevkifat_pay, 0);
+        assert!(!parse_hatalari(&i).is_empty());
     }
 
     #[test]

@@ -81,6 +81,10 @@ fn binlik_nokta_mi(s: &str) -> bool {
         && !parcalar[0].is_empty()
         && parcalar[0].len() <= 3
         && parcalar[0].bytes().all(|b| b.is_ascii_digit())
+        // 4-hane precision sözleşmesi: "0.001" / "0.0001" gibi 1–4 ondalıklı
+        // değerler binlik değil ONDALIKTIR. Binlik gösterimde tam kısım asla
+        // "0" ile başlamaz; bu kontrol olmadan "0.001" → "0001" → 1 oluyordu.
+        && !parcalar[0].starts_with('0')
         && parcalar[1..]
             .iter()
             .all(|p| p.len() == 3 && p.bytes().all(|b| b.is_ascii_digit()))
@@ -325,22 +329,39 @@ mod tests {
         assert_eq!(parse_tr("-30"), Some(Decimal::from(-30)));
         assert_eq!(parse_tr("-(20+10)"), Some(Decimal::from(-30)));
         assert_eq!(parse_tr("50%"), Some(Decimal::from_str("0.5").unwrap()));
-        assert_eq!(parse_tr("200+10%"), Some(Decimal::from_str("200.1").unwrap()));
+        assert_eq!(
+            parse_tr("200+10%"),
+            Some(Decimal::from_str("200.1").unwrap())
+        );
     }
 
     #[test]
     fn parse_ifade_girdi_bicimleri() {
         // Virgül ondalık; ifade içinde de Türk biçimi korunur.
-        assert_eq!(parse_tr("1.234,56+2"), Some(Decimal::from_str("1236.56").unwrap()));
+        assert_eq!(
+            parse_tr("1.234,56+2"),
+            Some(Decimal::from_str("1236.56").unwrap())
+        );
         assert_eq!(parse_tr("10,5*2"), Some(Decimal::from(21)));
-        assert_eq!(parse_tr("-1.234,56"), Some(Decimal::from_str("-1234.56").unwrap()));
+        assert_eq!(
+            parse_tr("-1.234,56"),
+            Some(Decimal::from_str("-1234.56").unwrap())
+        );
     }
 
     #[test]
     fn parse_ifade_güvenli_red() {
         let uzun = "1+".repeat(200); // uzunluk sınırı (256) aşımı
         for s in [
-            "1/0", "1+", "(1+2", "2(3)", "1;2", "alert(1)", "1<2", "1**2", uzun.as_str(),
+            "1/0",
+            "1+",
+            "(1+2",
+            "2(3)",
+            "1;2",
+            "alert(1)",
+            "1<2",
+            "1**2",
+            uzun.as_str(),
         ] {
             assert_eq!(parse_tr(s), None, "ifade reddedilmeli: {s}");
         }
@@ -358,8 +379,42 @@ mod tests {
     #[test]
     fn parse_binlik_olmayan_ondegerler() {
         assert_eq!(parse_tr("10,5"), Some(Decimal::from_str("10.5").unwrap()));
-        assert_eq!(parse_tr("10.5,50"), Some(Decimal::from_str("105.50").unwrap()));
-        assert_eq!(parse_tr("1234.56"), Some(Decimal::from_str("1234.56").unwrap()));
-        assert_eq!(parse_tr("12345.678"), Some(Decimal::from_str("12345.678").unwrap()));
+        assert_eq!(
+            parse_tr("10.5,50"),
+            Some(Decimal::from_str("105.50").unwrap())
+        );
+        assert_eq!(
+            parse_tr("1234.56"),
+            Some(Decimal::from_str("1234.56").unwrap())
+        );
+        assert_eq!(
+            parse_tr("12345.678"),
+            Some(Decimal::from_str("12345.678").unwrap())
+        );
+    }
+
+    // --- P0 regresyon: 0 ile başlayan ondalıklar binlik sanılmasın ---
+
+    #[test]
+    fn parse_ondalik_basli_sifir() {
+        assert_eq!(parse_tr("0.001"), Some(Decimal::from_str("0.001").unwrap()));
+        assert_eq!(parse_tr("0.01"), Some(Decimal::from_str("0.01").unwrap()));
+        assert_eq!(
+            parse_tr("0.0001"),
+            Some(Decimal::from_str("0.0001").unwrap())
+        );
+        assert_eq!(parse_tr("0.5"), Some(Decimal::from_str("0.5").unwrap()));
+    }
+
+    #[test]
+    fn parse_binlik_ve_ondalik_ayrimi_korunur() {
+        // Mevcut sözleşme bozulmasın: 1.234 binlik, 1234.56 ondalık.
+        assert_eq!(parse_tr("1.234"), Some(Decimal::from(1234)));
+        assert_eq!(parse_tr("10.000"), Some(Decimal::from(10000)));
+        assert_eq!(parse_tr("1.234.567"), Some(Decimal::from(1234567)));
+        assert_eq!(
+            parse_tr("1234.56"),
+            Some(Decimal::from_str("1234.56").unwrap())
+        );
     }
 }

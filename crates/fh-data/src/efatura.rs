@@ -147,11 +147,7 @@ fn sayi_temizle(raw: &str) -> Option<String> {
     if !t.contains(',') {
         t = binlik_noktalari_sil(&t);
     }
-    if sayi_gecerli(&t) {
-        Some(t)
-    } else {
-        None
-    }
+    if sayi_gecerli(&t) { Some(t) } else { None }
 }
 
 fn sayi_degeri(s: &str) -> f64 {
@@ -166,27 +162,39 @@ fn rakam_sayisi(s: &str) -> usize {
 pub fn efatura_matrahlar(icerik: &str) -> Vec<String> {
     let temiz = icerik.strip_prefix('\u{FEFF}').unwrap_or(icerik);
     let ayrac = ayirac_sec(temiz);
-    let satirlar: Vec<&str> = temiz
-        .lines()
-        .filter(|l| !l.trim().is_empty())
-        .collect();
+    let satirlar: Vec<&str> = temiz.lines().filter(|l| !l.trim().is_empty()).collect();
     if satirlar.is_empty() {
         return Vec::new();
     }
 
-    let hucre0 = hucreleri_bol(satirlar[0], ayrac);
-    let matrah_idx = hucre0
-        .iter()
-        .position(|h| matrah_ipucu(h) && !kdv_ipucu(h));
+    // GİB dışa aktarımlarında üst başlıklar (şirket adı, "E-Fatura Listesi")
+    // ilk satırı işgal eder. Başlığı ilk 5 satırda ara; bulunduğu satıra kadar
+    // olan tüm satırları veri sanıp atlamadan atla.
+    let mut matrah_idx = None;
+    let mut ilk = 0usize;
+    for (i, satir) in satirlar.iter().take(5).enumerate() {
+        let hucreler = hucreleri_bol(satir, ayrac);
+        if let Some(idx) = hucreler
+            .iter()
+            .position(|h| matrah_ipucu(h) && !kdv_ipucu(h))
+        {
+            matrah_idx = Some(idx);
+            ilk = i + 1;
+            break;
+        }
+    }
     let header_var = matrah_idx.is_some();
-    let ilk = if header_var { 1 } else { 0 };
     let mut rows = Vec::new();
 
     for line in satirlar.iter().skip(ilk) {
         let hucreler = hucreleri_bol(line, ayrac);
         if hucreler.len() == 1 && !header_var {
             if let Some(n) = sayi_temizle(&hucreler[0]) {
-                rows.push(n);
+                // Sıfır matrah satırları diğer yollarda da atlanır; burada da
+                // aynı sözleşme uygulanır.
+                if sayi_degeri(&n) != 0.0 {
+                    rows.push(n);
+                }
             }
             continue;
         }
@@ -195,23 +203,34 @@ pub fn efatura_matrahlar(icerik: &str) -> Vec<String> {
             let aday = hucreler.get(idx).map(String::as_str).unwrap_or("");
             sayi_temizle(aday)
         } else {
-            let sayisal: Vec<String> = hucreler
-                .iter()
-                .filter_map(|c| sayi_temizle(c))
-                .filter(|n| sayi_degeri(n) != 0.0)
-                .collect();
+            // Sıfır değerleri aday listesinde BIRAK: aksi halde "0" matrahlı
+            // bir satırda KDV oranı (örn. 20) tek sayısal aday sanılıp matrah
+            // yerine geçiyordu. Sıfırın atlanması aşağıdaki son kontrolde yapılır.
+            let sayisal: Vec<String> = hucreler.iter().filter_map(|c| sayi_temizle(c)).collect();
             if sayisal.is_empty() {
                 None
             } else if sayisal.len() == 1 {
                 sayisal.first().cloned()
             } else {
-                let mut best = sayisal[0].clone();
-                for n in sayisal.iter().skip(1) {
-                    if rakam_sayisi(n) > rakam_sayisi(&best) {
-                        best = n.clone();
+                // Tüm adaylar sıfır veya KDV oranı gibi küçük değerler ise
+                // sıfır adayı tercih et: satır son kontrolde atlanır, %20 ise
+                // yanlışlıkla matrah olarak döndürülmez.
+                let sifir = sayisal.iter().find(|n| sayi_degeri(n) == 0.0);
+                let sadece_kucuk = sayisal.iter().all(|n| {
+                    let v = sayi_degeri(n);
+                    v == 0.0 || (v.abs() > 0.0 && v.abs() <= 100.0)
+                });
+                if sifir.is_some() && sadece_kucuk {
+                    sifir.cloned()
+                } else {
+                    let mut best = sayisal[0].clone();
+                    for n in sayisal.iter().skip(1) {
+                        if rakam_sayisi(n) > rakam_sayisi(&best) {
+                            best = n.clone();
+                        }
                     }
+                    Some(best)
                 }
-                Some(best)
             }
         };
 
@@ -230,7 +249,8 @@ mod tests {
 
     #[test]
     fn noktali_virgul_baslikli() {
-        let s = "Tarih;Mal/Hizmet;KDV;Matrah\n2026-01-01;100,00;20;100,00\n2026-02-01;250,50;20;250,50";
+        let s =
+            "Tarih;Mal/Hizmet;KDV;Matrah\n2026-01-01;100,00;20;100,00\n2026-02-01;250,50;20;250,50";
         assert_eq!(efatura_matrahlar(s), vec!["100.00", "250.50"]);
     }
 
@@ -300,5 +320,21 @@ mod tests {
     fn baslikli_tek_sutun_virgullu() {
         let s = "Matrah\n1.234,56\n2.500,00";
         assert_eq!(efatura_matrahlar(s), vec!["1234.56", "2500.00"]);
+    }
+
+    #[test]
+    fn ust_baslikli_gib_dosyasinda_baslik_bulunur() {
+        let s = "ŞİRKET ADI A.Ş.\nE-FATURA / E-ARŞİV LİSTESİ\n\
+                 Tarih;Açıklama;KDV;Matrah\n\
+                 2026-01-01;Hizmet;%20;100,00\n\
+                 2026-01-02;Hizmet;%20;250,50";
+        assert_eq!(efatura_matrahlar(s), vec!["100.00", "250.50"]);
+    }
+
+    #[test]
+    fn basliksiz_sifir_matrah_kdv_orani_sanilmasin() {
+        // Başlıksız satırda matrah 0, KDV %20: 20 matrah olarak döndürülmemeli.
+        let s = "A\t0\t20\nB\t500\tKDV";
+        assert_eq!(efatura_matrahlar(s), vec!["500"]);
     }
 }

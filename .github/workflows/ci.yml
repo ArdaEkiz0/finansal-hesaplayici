@@ -120,8 +120,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Surumun TEK kaynagi Cargo.toml; etiket ona gore dogrulanir.
+          # (build isinde de ayni kontrol var — burada tekrar, savunma icin.)
+          $ver = (Select-String -Path Cargo.toml -Pattern '(?m)^[ \t]*version[ \t]*=[ \t]*"([^"]+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          if (-not $ver) { throw "Cargo.toml icinde surum okunamadi" }
+          if ("v$ver" -ne "$env:GITHUB_REF_NAME") { throw "Etiket $env:GITHUB_REF_NAME, Cargo.toml v$ver ile uyumsuz" }
           $tag = $env:GITHUB_REF_NAME
-          $ver = $tag.TrimStart('v')
           $files = @(
             "dist-rel\Finansal-Hesaplayici-$ver-kurulum.exe",
             "dist-rel\Finansal-Hesaplayici-$ver-portable.exe",

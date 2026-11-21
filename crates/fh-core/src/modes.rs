@@ -38,6 +38,12 @@ fn rate(g: &Girdi) -> Option<Decimal> {
     parse_tr(&g.oran).or_else(|| parse_tr(&g.ikinci))
 }
 
+/// Yüzde bazlı oranların (KDV, stopaj, indirim, amortisman…) makul aralığı.
+/// Aralık dışı değer sessizce 0 üretmemeli; mod `None` döndürmeli.
+fn yuzde_gecerli(r: Decimal) -> bool {
+    r >= Decimal::ZERO && r <= dec(100)
+}
+
 fn flag(s: &str) -> bool {
     matches!(
         s.trim().to_lowercase().as_str(),
@@ -88,7 +94,12 @@ fn row_raw(label: String, value: String) -> (String, String) {
 fn chained(
     original: Decimal,
     discounts: &[Decimal],
-) -> (Decimal, Decimal, Vec<(Decimal, Decimal)>) {
+) -> Option<(Decimal, Decimal, Vec<(Decimal, Decimal)>)> {
+    // Her indirim 0..=100 aralığında olmalı; aksi halde zincir geçersiz.
+    // Örn. %150 indirim negatif fiyat, %-10 indirim ise zam üretiyordu.
+    if !discounts.iter().all(|&d| yuzde_gecerli(d)) {
+        return None;
+    }
     let mut price = original;
     let mut steps = Vec::with_capacity(discounts.len());
     for &d in discounts {
@@ -97,19 +108,17 @@ fn chained(
         steps.push((d, price));
     }
     let price = dp2(price);
-    (price, dp2(original - price), steps)
+    Some((price, dp2(original - price), steps))
 }
 
 /// Üs alma. `rust_decimal`ın `powd`/`exp` metotları taşmada **panic** atar;
 /// `checked_*` karşılıkları `None` döner. Ayrıca negatif taban ve tam sayı
 /// üs için `powd` doğru işaretli sonucu verir (eski kod burada 0 döndürüyordu).
 fn power(base: Decimal, exponent: Decimal) -> Option<Decimal> {
-    // Çok büyük tam üsler.checked_powu içinde uzun döngüye/taşmaya yol açar.
-    if exponent.abs() > dec(1000) {
-        return None;
-    }
-    if exponent.fract() != Decimal::ZERO {
-        // Kesirli üs yalnızca pozitif taban için tanımlıdır.
+    if exponent.fract() != Decimal::ZERO || exponent.abs() > dec(1000) {
+        // Kesirli üs VEYA büyük üs (örn. compound'ta freq*years > 1000):
+        // pozitif taban için ln/exp ile hesapla. checked_* taşmada None döner;
+        // eski kod gibi sessizce None/"0" üretip hesabı kaybetmeyelim.
         if base <= Decimal::ZERO {
             return None;
         }
@@ -152,10 +161,7 @@ fn damga(g: &Girdi) -> Option<HesapSonucu> {
     Some(out(
         vergi,
         None,
-        vec![
-            row("Damga vergisi", vergi),
-            row("Matrah", matrah),
-        ],
+        vec![row("Damga vergisi", vergi), row("Matrah", matrah)],
         format!(
             "Damga vergisi — {}‰ × {} • Vergi {}",
             machine(oran),
@@ -173,10 +179,7 @@ fn emlak(g: &Girdi) -> Option<HesapSonucu> {
     Some(out(
         vergi,
         None,
-        vec![
-            row("Emlak vergisi", vergi),
-            row("Matrah", matrah),
-        ],
+        vec![row("Emlak vergisi", vergi), row("Matrah", matrah)],
         format!(
             "Emlak vergisi — {}‰ × {} • Vergi {}",
             machine(oran),
@@ -245,13 +248,11 @@ fn basit_faiz(g: &Girdi) -> Option<HesapSonucu> {
         return None;
     }
     let gun_dec = dec(gun as i64);
-    let faiz = dp2(
-        principal
-            .checked_mul(oran)?
-            .checked_div(dec(100))?
-            .checked_mul(gun_dec)?
-            .checked_div(dec(365))?,
-    );
+    let faiz = dp2(principal
+        .checked_mul(oran)?
+        .checked_div(dec(100))?
+        .checked_mul(gun_dec)?
+        .checked_div(dec(365))?);
     let toplam = dp2(principal.checked_add(faiz)?);
     Some(out(
         faiz,
@@ -303,6 +304,9 @@ fn net_brut(g: &Girdi) -> Option<HesapSonucu> {
 fn kdv(g: &Girdi) -> Option<HesapSonucu> {
     let a = amount(&g.birinci)?;
     let r = rate(g)?;
+    if !yuzde_gecerli(r) {
+        return None;
+    }
     let extract = any_flag(g);
     let divisor = Decimal::ONE + r / dec(100);
     if divisor <= Decimal::ZERO {
@@ -350,6 +354,9 @@ fn kdv(g: &Girdi) -> Option<HesapSonucu> {
 fn stopaj(g: &Girdi) -> Option<HesapSonucu> {
     let gross = amount(&g.birinci)?;
     let r = rate(g)?;
+    if !yuzde_gecerli(r) {
+        return None;
+    }
     let reverse = flag(&g.tevkifat_kod)
         || g.ek
             .iter()
@@ -399,6 +406,9 @@ fn stopaj(g: &Girdi) -> Option<HesapSonucu> {
 fn tevkifat(g: &Girdi) -> Option<HesapSonucu> {
     let matrah = amount(&g.birinci)?;
     let oran = rate(g)?;
+    if !yuzde_gecerli(oran) {
+        return None;
+    }
     let pay = g.tevkifat_pay;
     if !(1..=10).contains(&pay) {
         return None;
@@ -437,9 +447,12 @@ fn tevkifat(g: &Girdi) -> Option<HesapSonucu> {
 fn fiyat(g: &Girdi) -> Option<HesapSonucu> {
     let etiket = amount(&g.birinci)?;
     let oran = rate(g)?;
+    if !yuzde_gecerli(oran) {
+        return None;
+    }
     let extract = flag(&g.ikinci) || flag(&g.tevkifat_kod);
     let discounts: Vec<Decimal> = g.ek.iter().filter_map(|s| parse_tr(s)).collect();
-    let (matrah, saved, steps) = chained(etiket, &discounts);
+    let (matrah, saved, steps) = chained(etiket, &discounts)?;
     let divisor = Decimal::ONE + oran / dec(100);
     if divisor <= Decimal::ZERO {
         return None;
@@ -483,6 +496,9 @@ fn fiyat(g: &Girdi) -> Option<HesapSonucu> {
 fn kdv_compare(g: &Girdi) -> Option<HesapSonucu> {
     let a = amount(&g.birinci)?;
     let oran = rate(g)?;
+    if !yuzde_gecerli(oran) {
+        return None;
+    }
     let divisor = Decimal::ONE + oran / dec(100);
     if divisor <= Decimal::ZERO {
         return None;
@@ -592,7 +608,7 @@ fn discount(g: &Girdi) -> Option<HesapSonucu> {
     if rates.is_empty() {
         return None;
     }
-    let (final_price, saved, steps) = chained(original, &rates);
+    let (final_price, saved, steps) = chained(original, &rates)?;
     let effective = if original.is_zero() {
         Decimal::ZERO
     } else {
@@ -758,6 +774,9 @@ fn amortisman(g: &Girdi) -> Option<HesapSonucu> {
     let oran = parse_tr(&g.oran)
         .or_else(|| parse_tr(&g.ikinci))
         .unwrap_or(dec(100) / years_dec);
+    if !yuzde_gecerli(oran) {
+        return None;
+    }
     let declining =
         g.ek.get(1)
             .map(|s| s.trim().eq_ignore_ascii_case("azalan"))
@@ -895,6 +914,9 @@ fn batch(g: &Girdi) -> Option<HesapSonucu> {
             Some(r) => r,
             None => continue,
         };
+        if !yuzde_gecerli(r) {
+            continue; // aralık dışı oran: satır yok sayılır, 0 üretilmez
+        }
         valid += 1;
         base_sum += value;
         let (main, tax) = match mode.as_str() {
@@ -938,6 +960,9 @@ fn donem(g: &Girdi) -> Option<HesapSonucu> {
     let satis = amount(&g.birinci)?;
     let alis = amount(&g.ikinci).unwrap_or(Decimal::ZERO);
     let oran = parse_tr(&g.oran)?;
+    if !yuzde_gecerli(oran) {
+        return None;
+    }
     let devreden = ek(g, 0)
         .or_else(|| parse_tr(&g.tevkifat_kod))
         .unwrap_or(Decimal::ZERO);
@@ -980,6 +1005,81 @@ fn donem(g: &Girdi) -> Option<HesapSonucu> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn g(birinci: &str, ikinci: &str, oran: &str) -> Girdi {
+        Girdi {
+            birinci: birinci.into(),
+            ikinci: ikinci.into(),
+            oran: oran.into(),
+            ..Girdi::default()
+        }
+    }
+
+    #[test]
+    fn oran_araligi_disindaki_modlar_none() {
+        // KDV: 0..=100 dışı
+        assert_eq!(run("kdv", &g("1000", "", "-1")), None);
+        assert_eq!(run("kdv", &g("1000", "", "101")), None);
+        assert_eq!(run("kdvCompare", &g("1000", "", "150")), None);
+        // Stopaj
+        assert_eq!(run("stopaj", &g("1000", "", "-5")), None);
+        assert_eq!(run("stopaj", &g("1000", "", "150")), None);
+        // Tevkifat (KDV oranı)
+        let mut tv = g("1000", "", "150");
+        tv.tevkifat_pay = 5;
+        assert_eq!(run("tevkifat", &tv), None);
+        // Amortisman
+        assert_eq!(run("amortisman", &g("1000", "", "-20")), None);
+        assert_eq!(run("amortisman", &g("1000", "", "250")), None);
+        // Dönem
+        assert_eq!(run("donem", &g("1000", "500", "150")), None);
+    }
+
+    #[test]
+    fn zincirleme_indirim_oran_araligi() {
+        let mut d = g("1000", "", "");
+        d.ek = vec!["-10".into()];
+        assert_eq!(run("discount", &d), None);
+        d.ek = vec!["120".into()];
+        assert_eq!(run("discount", &d), None);
+        let mut f = g("1000", "", "20");
+        f.ek = vec!["101".into()];
+        assert_eq!(run("fiyat", &f), None);
+        f.ek = vec!["10".into()];
+        f.oran = "150".into();
+        assert_eq!(run("fiyat", &f), None);
+        // Sınır değer (%100) geçerli olmalı.
+        let mut ok = g("1000", "", "");
+        ok.ek = vec!["100".into()];
+        assert_eq!(run("discount", &ok).unwrap().ana, "0");
+    }
+
+    #[test]
+    fn compound_buyuk_us_ln_exp_ile_hesaplanir() {
+        // freq*years = 12*100 = 1200 > 1000: eski power() None döndürüyordu.
+        let mut girdi = g("1000", "12", "");
+        girdi.ek = vec!["100".into(), "12".into()];
+        let r = run("compound", &girdi).expect("büyük üs sessizce kaybedilmemeli");
+        assert_ne!(r.ana, "0");
+        assert!(parse_tr(&r.ana).unwrap() > Decimal::ZERO);
+    }
+
+    #[test]
+    fn batch_aralik_disi_oran_satiri_atlanir() {
+        let mut girdi = g("", "", "150");
+        girdi.ek = vec!["1000".into()];
+        assert_eq!(run("batch", &girdi), None);
+        girdi.ek = vec!["1000".into(), "1000;20".into()];
+        let r = run("batch", &girdi).unwrap();
+        assert_eq!(
+            r.satirlar
+                .iter()
+                .find(|(k, _)| k == "Geçerli satır")
+                .unwrap()
+                .1,
+            "1"
+        );
+    }
 
     fn degisim(birinci: &str, ikinci: &str) -> String {
         let g = Girdi {
