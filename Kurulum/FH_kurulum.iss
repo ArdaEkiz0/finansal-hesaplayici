@@ -48,6 +48,9 @@ OutputDir=..\target\installer
 OutputBaseFilename=Finansal-Hesaplayici-{#MyAppVersion}-setup
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
+; Üzerine kurarken çalışan eski exe dosyaları kilitlemesin.
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
@@ -58,6 +61,15 @@ Name: "desktopicon"; Description: "Masaüstü kısayolu oluştur"; GroupDescript
 [Files]
 ; Tek dosya: release derlemesi. ignoreversion ile üzerine güvenle yazılır.
 Source: "..\target\release\Finansal_Hesaplayici.exe"; DestDir: "{app}"; DestName: "{#MyAppExe}"; Flags: ignoreversion
+
+[InstallDelete]
+; Electron 4.8.0 (18 Kas 2026 öncesi) AYNI klasöre kurulmuştu; Inno eski
+; dosyaları silmediğinden orada eski NSIS kaldırıcısı ve Electron çalışma
+; zamanı kalıyordu. Kullanıcı "Uygulamalar"dan eski kaydı kaldırınca ortak
+; klasör silinip yeni kurulumun kayıt anahtarı öksüz kaldı (23 Kas 2026
+; gözlemi). Bu ürünün kullanıcı verisi %APPDATA%'da; {app} altı tamamıyla
+; program dosyasıdır, kurulum başında süpürmek güvenlidir.
+Type: filesandordirs; Name: "{app}"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\{#MyAppExe}"
