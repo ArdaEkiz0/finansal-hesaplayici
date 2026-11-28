@@ -1016,6 +1016,17 @@ mod tests {
     }
 
     #[test]
+    fn marj_gecersiz_hedef_aciklayici_mesaj_verir() {
+        // Bilinçli davranış: marj (ve markup) sessiz None yerine açıklayıcı sonuç döner.
+        for hedef in ["100", "120", "-5"] {
+            let r = run("margin", &g("1000", hedef, "")).expect("sonuç beklenir");
+            assert_eq!(r.detay, "Geçersiz hedef marj");
+        }
+        let r = run("markup", &g("1000", "-5", "")).expect("sonuç beklenir");
+        assert_eq!(r.detay, "Negatif kâr oranı");
+    }
+
+    #[test]
     fn oran_araligi_disindaki_modlar_none() {
         // KDV: 0..=100 dışı
         assert_eq!(run("kdv", &g("1000", "", "-1")), None);
