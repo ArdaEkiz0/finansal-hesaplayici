@@ -372,6 +372,10 @@ impl FhApp {
         let Some(g) = self.guncelleme.lock().ok().and_then(|k| k.clone()) else {
             return;
         };
+        // Güncellemeden önce veriyi yanına kopyala; başarısızlık güncellemeyi engellemez.
+        if let Err(e) = AppState::guncelleme_oncesi_yedek(&AppState::dosya_yolu()) {
+            self.bildir(format!("Güncelleme öncesi yedek alınamadı: {e}"));
+        }
         self.indirme_bildirildi = false;
         self.indiriliyor = true;
         if let Ok(mut kilit) = self.indirme_durumu.lock() {

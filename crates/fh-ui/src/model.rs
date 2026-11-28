@@ -472,6 +472,18 @@ impl AppState {
         base.join("FinansalHesaplayici").join("veri.json")
     }
 
+    /// Güncelleme başlamadan önce `veri.json`'un yanına `veri-guncelleme-oncesi.json`
+    /// kopyası bırakır (her seferinde üzerine yazılır). Kaynak yoksa sessizce
+    /// `Ok(None)` döner: yedeklenecek bir şey yok.
+    pub fn guncelleme_oncesi_yedek(kaynak: &Path) -> std::io::Result<Option<PathBuf>> {
+        if !kaynak.is_file() {
+            return Ok(None);
+        }
+        let hedef = kaynak.with_file_name("veri-guncelleme-oncesi.json");
+        std::fs::copy(kaynak, &hedef)?;
+        Ok(Some(hedef))
+    }
+
     /// BOM'lu (`U+FEFF`) veya BOM'suz JSON metninden state üretir.
     /// Saf fonksiyondur: dosya erişimi yoktur; `yukle()` bunu kullanır.
     /// Bazı editörler/Windows araçları JSON'a BOM ekler; serde_json BOM'u
@@ -665,6 +677,18 @@ pub fn satir_bicimi(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn guncelleme_oncesi_yedek_kopyalar_ve_kaynak_yoksa_none() {
+        let dir = std::env::temp_dir().join(format!("fh-yedek-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let kaynak = dir.join("veri.json");
+        assert_eq!(AppState::guncelleme_oncesi_yedek(&kaynak).unwrap(), None);
+        std::fs::write(&kaynak, "{\"a\":1}").unwrap();
+        let hedef = AppState::guncelleme_oncesi_yedek(&kaynak).unwrap().unwrap();
+        assert_eq!(std::fs::read_to_string(hedef).unwrap(), "{\"a\":1}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
