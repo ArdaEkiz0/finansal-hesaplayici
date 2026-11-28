@@ -4,7 +4,7 @@
 use std::os::windows::process::CommandExt;
 
 fn main() {
-    let dir = std::path::PathBuf::from(r"C:\Users\ozel\AppData\Local\Temp\opencode\kopru-prova");
+    let dir = std::env::temp_dir().join("kopru-prova");
     std::fs::create_dir_all(&dir).unwrap();
     let eski = dir.join("eski.exe");
     let yeni = dir.join("fh-yeni.exe");

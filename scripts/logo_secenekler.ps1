@@ -1,6 +1,6 @@
 # Uc logo taslagi uretir (ASCII-only, System.Drawing).
 Add-Type -AssemblyName System.Drawing
-$cikti = 'C:\Users\ozel\AppData\Local\Temp\opencode'
+$cikti = (Join-Path $env:TEMP "logo-secenekler")
 New-Item -ItemType Directory -Force $cikti | Out-Null
 $lira = [string][char]0x20BA
 $N = 512

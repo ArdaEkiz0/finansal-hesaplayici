@@ -4,7 +4,7 @@ Operate yüzeyi. Kullanıcı "bilet + kapı paneli" düzenini reddetti; yerine *
 
 ## Yön
 
-Koyu: derin lacivert (`#0a0f1c`) zemin, `#101827` yüzey, ince ızgara dokusu, mavi eylem + cyan seçim şeridi, amber uyarı, yeşil doğrulama. Açık: sıcak kâğıt (`#faf8f4`) zemin, koyu mürekkep (`#18202f`), aynı mavi/cyan vurgu — yalnız renk terslemesi değil, ayrı yüzey/gölge/kenar dili. İki tema da gerçek ekranda doğrulandı: `C:\Users\ozel\AppData\Local\Temp\opencode\v52-real-dark.png` ve `v52-real-light.png`.
+Koyu: derin lacivert (`#0a0f1c`) zemin, `#101827` yüzey, ince ızgara dokusu, mavi eylem + cyan seçim şeridi, amber uyarı, yeşil doğrulama. Açık: sıcak kâğıt (`#faf8f4`) zemin, koyu mürekkep (`#18202f`), aynı mavi/cyan vurgu — yalnız renk terslemesi değil, ayrı yüzey/gölge/kenar dili. İki tema da gerçek ekranda doğrulandı: `v52-real-dark.png` ve `v52-real-light.png` ekran görüntüleriyle (depoya dahil değil).
 
 ## Tipografi
 

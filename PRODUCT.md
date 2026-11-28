@@ -32,7 +32,7 @@ Windows 10/11, kullanıcı bazlı kurulum (`%LOCALAPPDATA%\Programs`), veri `%AP
 
 ## Evidence on Hand
 
-Çalışan Rust uygulaması (v5.7.x), 400+ test, CI/release (4 varlık: kurulum.exe, portable.exe, update.zip, update.zip.sha256), koyu/açık tema ekran görüntüleri `C:\Users\ozel\AppData\Local\Temp\opencode\` altında. Eski Electron arayüzü git geçmişinde.
+Çalışan Rust uygulaması (v5.7.x), 400+ test, CI/release (4 varlık: kurulum.exe, portable.exe, update.zip, update.zip.sha256), koyu/açık tema ekran görüntüleri geçici klasörde (depoya dahil değil). Eski Electron arayüzü git geçmişinde.
 
 ## Product Principles
 
