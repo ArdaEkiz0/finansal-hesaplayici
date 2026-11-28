@@ -1225,6 +1225,11 @@ impl FhApp {
                             });
                     }
                 }
+                // Alan altı uyarı: hata mesajı hatalı alanın hemen altında görünür.
+                if let Some((_, mesaj)) = hatalar.iter().find(|(alan, _)| *alan == f.alan) {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(format!("⚠ {mesaj}")).size(T_SMALL).color(p.hata));
+                }
             }
 
             ui.add_space(16.0);
