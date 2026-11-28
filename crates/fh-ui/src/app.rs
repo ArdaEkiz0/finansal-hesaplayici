@@ -527,6 +527,17 @@ impl FhApp {
             self.state.widget.aktif = !self.state.widget.aktif;
             self.kaydet();
         }
+        // Ctrl+Shift+C: sonucu panoya kopyala ("Panoya kopyala" düğmesiyle aynı yol).
+        // Ctrl+C metin kopyalamaya ait kalır; yalnız sonuç varken çalışır.
+        let kopya_kisayolu = ctx.input(|i| {
+            i.key_pressed(egui::Key::C) && i.modifiers.ctrl && i.modifiers.shift
+        });
+        if kopya_kisayolu && self.result.is_some() {
+            if let Ok(mut cb) = arboard::Clipboard::new() {
+                let _ = cb.set_text(self.sonuc_metni());
+            }
+            self.kopyalandi = Some(Instant::now());
+        }
         if karar.pencereleri_kapat {
             self.p.gecmis = false;
             self.p.ayarlar = false;
